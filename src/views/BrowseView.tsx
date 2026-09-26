@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Grid, List, Music, SlidersHorizontal, Sparkles, Filter, X, ChevronRight, Volume2 } from 'lucide-react';
+import { Search, Grid, List, Music, SlidersHorizontal, Sparkles, Filter, X, ChevronRight, Volume2, Heart } from 'lucide-react';
 import { Beat } from '../types';
 import { BeatCard } from '../components/BeatCard';
 import { BeatRow } from '../components/BeatRow';
@@ -17,6 +17,8 @@ interface BrowseViewProps {
   currencySymbol: string;
   initialQuery?: string;
   initialGenreFilter?: string;
+  favoriteIds?: string[];
+  onToggleFavorite?: (beat: Beat) => void;
 }
 
 export const BrowseView: React.FC<BrowseViewProps> = ({
@@ -31,6 +33,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   currencySymbol,
   initialQuery = '',
   initialGenreFilter = 'ALL',
+  favoriteIds = [],
+  onToggleFavorite,
 }) => {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedGenre, setSelectedGenre] = useState<string>(initialGenreFilter || 'ALL');
@@ -39,6 +43,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const [maxBpm, setMaxBpm] = useState<number>(200);
   const [freeDownloadOnly, setFreeDownloadOnly] = useState(false);
   const [featuredOnly, setFeaturedOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'price-asc' | 'price-desc' | 'bpm' | 'featured'>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -62,8 +67,9 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       const matchesBpm = beat.bpm >= minBpm && beat.bpm <= maxBpm;
       const matchesFree = !freeDownloadOnly || beat.freeDownload;
       const matchesFeatured = !featuredOnly || beat.featured;
+      const matchesFavorite = !favoritesOnly || favoriteIds.includes(beat.id);
 
-      return matchesSearch && matchesGenre && matchesKey && matchesBpm && matchesFree && matchesFeatured;
+      return matchesSearch && matchesGenre && matchesKey && matchesBpm && matchesFree && matchesFeatured && matchesFavorite;
     })
     .sort((a, b) => {
       if (sortBy === 'oldest') return new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime();
@@ -77,7 +83,6 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Separate catalog sections
   const featuredBeats = beats.filter((b) => b.featured);
-  const latestReleases = [...beats].sort((a, b) => new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime()).slice(0, 3);
 
   const isFilteringActive =
     searchQuery !== '' ||
@@ -85,6 +90,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     selectedKey !== 'ALL' ||
     freeDownloadOnly ||
     featuredOnly ||
+    favoritesOnly ||
     minBpm > 0 ||
     maxBpm < 200;
 
@@ -96,6 +102,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     setMaxBpm(200);
     setFreeDownloadOnly(false);
     setFeaturedOnly(false);
+    setFavoritesOnly(false);
     setSortBy('newest');
   };
 
@@ -143,6 +150,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                 onShareClick={onShareClick}
                 onViewDetail={onViewDetail}
                 currencySymbol={currencySymbol}
+                isFavorite={favoriteIds.includes(beat.id)}
+                onToggleFavorite={onToggleFavorite}
               />
             ))}
           </div>
@@ -157,7 +166,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             <button
               key={g}
               onClick={() => setSelectedGenre(g)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                 selectedGenre === g
                   ? 'bg-purple-600 text-white shadow-lg shadow-purple-950 ring-1 ring-purple-400/40'
                   : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -173,7 +182,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           {/* Mobile Filter Sheet Trigger Button */}
           <button
             onClick={() => setMobileFilterOpen(true)}
-            className="md:hidden px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-extrabold text-zinc-300 flex items-center gap-1.5"
+            className="md:hidden px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-extrabold text-zinc-300 flex items-center gap-1.5 cursor-pointer"
           >
             <SlidersHorizontal className="w-4 h-4 text-purple-400" />
             <span>Filters</span>
@@ -183,7 +192,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           <select
             value={selectedKey}
             onChange={(e) => setSelectedKey(e.target.value)}
-            className="hidden md:block bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500"
+            className="hidden md:block bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
           >
             {musicalKeys.map((k) => (
               <option key={k} value={k}>
@@ -196,7 +205,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
           >
             <option value="newest">Sort: Newest</option>
             <option value="oldest">Sort: Oldest</option>
@@ -206,10 +215,25 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             <option value="featured">Sort: Featured</option>
           </select>
 
+          {/* Saved Vault / Favorites Toggle */}
+          {favoriteIds.length > 0 && (
+            <button
+              onClick={() => setFavoritesOnly(!favoritesOnly)}
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                favoritesOnly
+                  ? 'bg-rose-950 border-rose-500 text-rose-300'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Heart className={`w-3.5 h-3.5 ${favoritesOnly ? 'fill-current' : ''}`} />
+              <span>Saved ({favoriteIds.length})</span>
+            </button>
+          )}
+
           {/* Free Download Toggle */}
           <button
             onClick={() => setFreeDownloadOnly(!freeDownloadOnly)}
-            className={`hidden sm:block px-3 py-2 rounded-xl text-xs font-extrabold border transition-all ${
+            className={`hidden sm:block px-3 py-2 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
               freeDownloadOnly
                 ? 'bg-purple-950 border-purple-500 text-purple-300'
                 : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
@@ -222,7 +246,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 viewMode === 'grid' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
               }`}
               title="Grid View"
@@ -231,7 +255,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 viewMode === 'list' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
               }`}
               title="List View"
@@ -316,7 +340,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
               onClick={resetFilters}
               className="flex-1 py-3 rounded-xl bg-zinc-900 text-zinc-300 font-extrabold text-xs"
             >
-              Reset All
+              Clear Filters
             </button>
             <button
               onClick={() => setMobileFilterOpen(false)}
@@ -342,9 +366,9 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
         {filteredBeats.length === 0 ? (
           <EmptyState
             icon={Music}
-            title="NO BEATS FOUND"
-            description="No published productions match your search query or filter options. Try adjusting your parameters or uploading new beats."
-            actionLabel="Reset Search & Filters"
+            title="NO MATCHING BEATS"
+            description="No beats match your current filters."
+            actionLabel="Clear Filters"
             onAction={resetFilters}
           />
         ) : viewMode === 'grid' ? (
@@ -361,6 +385,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                 onShareClick={onShareClick}
                 onViewDetail={onViewDetail}
                 currencySymbol={currencySymbol}
+                isFavorite={favoriteIds.includes(beat.id)}
+                onToggleFavorite={onToggleFavorite}
               />
             ))}
           </div>
@@ -379,6 +405,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                 onShareClick={onShareClick}
                 onViewDetail={onViewDetail}
                 currencySymbol={currencySymbol}
+                isFavorite={favoriteIds.includes(beat.id)}
+                onToggleFavorite={onToggleFavorite}
               />
             ))}
           </div>

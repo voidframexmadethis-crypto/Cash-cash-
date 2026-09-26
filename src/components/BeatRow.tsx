@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Volume2 } from 'lucide-react';
+import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Volume2, Heart } from 'lucide-react';
 import { Beat } from '../types';
 
 interface BeatRowProps {
@@ -13,6 +13,8 @@ interface BeatRowProps {
   onShareClick: (beat: Beat) => void;
   onViewDetail?: (beat: Beat) => void;
   currencySymbol: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: (beat: Beat) => void;
 }
 
 export const BeatRow: React.FC<BeatRowProps> = ({
@@ -26,6 +28,8 @@ export const BeatRow: React.FC<BeatRowProps> = ({
   onShareClick,
   onViewDetail,
   currencySymbol,
+  isFavorite = false,
+  onToggleFavorite,
 }) => {
   const isThisPlaying = isCurrent && isPlaying;
 
@@ -39,7 +43,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
     >
       {/* Index, Artwork & Play Button */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        <span className="w-5 text-center text-xs font-mono font-extrabold text-zinc-500 group-hover:text-purple-400">
+        <span className="w-5 text-center text-xs font-mono font-extrabold text-zinc-500 group-hover:text-purple-400 shrink-0">
           {index + 1}
         </span>
 
@@ -63,7 +67,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
               e.stopPropagation();
               onPlayToggle(beat);
             }}
-            className={`absolute inset-0 bg-black/60 flex items-center justify-center transition-opacity ${
+            className={`absolute inset-0 bg-black/60 flex items-center justify-center transition-opacity cursor-pointer ${
               isCurrent ? 'opacity-100' : 'opacity-0 group-hover/thumb:opacity-100'
             }`}
           >
@@ -92,7 +96,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
               {beat.title}
             </h4>
             {beat.featured && (
-              <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-purple-900/80 text-purple-200 rounded border border-purple-400/30">
+              <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-purple-900/80 text-purple-200 rounded border border-purple-400/30 shrink-0">
                 Featured
               </span>
             )}
@@ -125,6 +129,20 @@ export const BeatRow: React.FC<BeatRowProps> = ({
           <span className="text-[10px] text-zinc-500 font-medium">MP3 Lease</span>
         </div>
 
+        {onToggleFavorite && (
+          <button
+            onClick={() => onToggleFavorite(beat)}
+            className={`p-2.5 rounded-xl border transition-colors ${
+              isFavorite
+                ? 'bg-rose-950/80 border-rose-500 text-rose-400'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'
+            }`}
+            title={isFavorite ? 'Remove from Saved Vault' : 'Save Beat to Favorites'}
+          >
+            <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+          </button>
+        )}
+
         {beat.freeDownload && (
           <button
             onClick={() => onFreeDownloadClick(beat)}
@@ -145,7 +163,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
 
         <button
           onClick={() => onBuyClick(beat)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
         >
           <ShoppingBag className="w-3.5 h-3.5" />
           <span>Buy {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}</span>

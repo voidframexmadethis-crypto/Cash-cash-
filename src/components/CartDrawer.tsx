@@ -452,20 +452,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* Cart Footer */}
           {checkoutStatus === 'idle' && cart.length > 0 && (
             <div className="p-5 border-t border-zinc-800 bg-zinc-950 space-y-3">
-              <div className="space-y-1.5 text-xs text-zinc-400">
+              <div className="space-y-2 text-xs text-zinc-400 bg-zinc-900/60 p-3 rounded-xl border border-zinc-800/80">
                 <div className="flex justify-between">
-                  <span>Subtotal:</span>
+                  <span>License Base Subtotal:</span>
                   <span className="font-mono text-zinc-200">{currencySymbol}{subtotal.toFixed(2)}</span>
                 </div>
                 {appliedDiscount > 0 && (
                   <div className="flex justify-between text-purple-300 font-medium">
-                    <span>VIP Discount ({appliedDiscount * 100}%):</span>
+                    <span>VIP Promo Discount ({appliedDiscount * 100}%):</span>
                     <span className="font-mono">-{currencySymbol}{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-zinc-800">
+                <div className="flex justify-between text-zinc-500 text-[11px]">
+                  <span>Processing & Escrow Fee:</span>
+                  <span className="font-mono text-emerald-400 font-bold">$0.00 (NO HIDDEN FEES)</span>
+                </div>
+                <div className="flex justify-between text-zinc-500 text-[11px]">
+                  <span>Estimated Tax:</span>
+                  <span className="font-mono text-zinc-400">$0.00 (INCLUDED)</span>
+                </div>
+                <div className="flex justify-between text-sm font-extrabold text-white pt-2 border-t border-zinc-800">
                   <span>Total Due:</span>
-                  <span className="font-mono text-purple-300">{currencySymbol}{total.toFixed(2)}</span>
+                  <span className="font-mono text-purple-300 text-base">{currencySymbol}{total.toFixed(2)}</span>
                 </div>
               </div>
 

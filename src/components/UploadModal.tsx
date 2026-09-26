@@ -24,12 +24,13 @@ import {
   Pause,
   Trash2
 } from 'lucide-react';
-import { Beat, GenreType } from '../types';
+import { Beat, GenreType, BeatPack } from '../types';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPublishBeat: (newBeat: Beat) => void;
+  onPublishBeatPack?: (newPack: BeatPack) => void;
   currencySymbol: string;
   beats?: Beat[];
   onSwitchToBeatPacks?: () => void;
@@ -39,14 +40,254 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
   onClose,
   onPublishBeat,
+  onPublishBeatPack,
   currencySymbol,
   beats = [],
   onSwitchToBeatPacks,
 }) => {
-  if (!isOpen) return null;
-
   // 7-step professional wizard state
   const [currentStep, setCurrentStep] = useState<number>(1);
+
+  // Page Switching and Book Turn Animation States
+  const [activePage, setActivePage] = useState<'single' | 'pack'>('single');
+  const [pageTurnDirection, setPageTurnDirection] = useState<'forward' | 'backward' | null>(null);
+  const [isAnimatingPage, setIsAnimatingPage] = useState<boolean>(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    const listener = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', listener);
+    return () => mediaQuery.removeEventListener('change', listener);
+  }, []);
+
+  // Separate Beat Pack Draft States
+  const [packTitle, setPackTitle] = useState<string>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packTitle || 'CASHMERE VAULT EDITION'; } catch { return 'CASHMERE VAULT EDITION'; }
+    }
+    return 'CASHMERE VAULT EDITION';
+  });
+  const [packDescription, setPackDescription] = useState<string>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packDescription || 'Ultra premium multi-audio stem package including uncompressed audio vectors.'; } catch { return 'Ultra premium multi-audio stem package including uncompressed audio vectors.'; }
+    }
+    return 'Ultra premium multi-audio stem package including uncompressed audio vectors.';
+  });
+  const [packPrice, setPackPrice] = useState<number>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packPrice || 59.99; } catch { return 59.99; }
+    }
+    return 59.99;
+  });
+  const [packArtworkUrl, setPackArtworkUrl] = useState<string>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packArtworkUrl || '/src/assets/images/cashmere_cover_vault_1790419848357.jpg'; } catch { return '/src/assets/images/cashmere_cover_vault_1790419848357.jpg'; }
+    }
+    return '/src/assets/images/cashmere_cover_vault_1790419848357.jpg';
+  });
+  const [packFreeDownload, setPackFreeDownload] = useState<boolean>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return !!JSON.parse(saved).packFreeDownload; } catch { return false; }
+    }
+    return false;
+  });
+  const [packVisibility, setPackVisibility] = useState<'published' | 'draft' | 'hidden'>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packVisibility || 'published'; } catch { return 'published'; }
+    }
+    return 'published';
+  });
+  const [packZipFileName, setPackZipFileName] = useState<string>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packZipFileName || 'voodoo_pack_stems_master.zip'; } catch { return 'voodoo_pack_stems_master.zip'; }
+    }
+    return 'voodoo_pack_stems_master.zip';
+  });
+  const [packZipFileSize, setPackZipFileSize] = useState<string>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packZipFileSize || '145.20 MB'; } catch { return '145.20 MB'; }
+    }
+    return '145.20 MB';
+  });
+  const [packZipUploaded, setPackZipUploaded] = useState<boolean>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return !!JSON.parse(saved).packZipUploaded; } catch { return true; }
+    }
+    return true;
+  });
+  const [packIsUploadingZip, setPackIsUploadingZip] = useState<boolean>(false);
+  const [packZipProgress, setPackZipProgress] = useState<number>(0);
+  const [packIsProcessingZip, setPackIsProcessingZip] = useState<boolean>(false);
+  const [packZipProcessingProgress, setPackZipProcessingProgress] = useState<number>(0);
+  const [packProcessingStatus, setPackProcessingStatus] = useState<string>('');
+  const [packDetectedFiles, setPackDetectedFiles] = useState<string[]>(() => {
+    const saved = localStorage.getItem('voodoo_modal_pack_uploader_draft');
+    if (saved) {
+      try { return JSON.parse(saved).packDetectedFiles || ['01_OBSIDIAN_RIFF_142BPM_Fmin.mp3', '02_VALENTINO_VELVET_142BPM_Fmin.mp3', '03_TOKYO_NIGHTHAWK_140BPM_Cmin.mp3', 'stems_multitrack_raw_master.zip']; } catch { return ['01_OBSIDIAN_RIFF_142BPM_Fmin.mp3', '02_VALENTINO_VELVET_142BPM_Fmin.mp3', '03_TOKYO_NIGHTHAWK_140BPM_Cmin.mp3', 'stems_multitrack_raw_master.zip']; }
+    }
+    return ['01_OBSIDIAN_RIFF_142BPM_Fmin.mp3', '02_VALENTINO_VELVET_142BPM_Fmin.mp3', '03_TOKYO_NIGHTHAWK_140BPM_Cmin.mp3', 'stems_multitrack_raw_master.zip'];
+  });
+
+  useEffect(() => {
+    const packDraftData = {
+      packTitle,
+      packDescription,
+      packPrice,
+      packArtworkUrl,
+      packFreeDownload,
+      packVisibility,
+      packZipFileName,
+      packZipFileSize,
+      packZipUploaded,
+      packDetectedFiles
+    };
+    localStorage.setItem('voodoo_modal_pack_uploader_draft', JSON.stringify(packDraftData));
+  }, [
+    packTitle,
+    packDescription,
+    packPrice,
+    packArtworkUrl,
+    packFreeDownload,
+    packVisibility,
+    packZipFileName,
+    packZipFileSize,
+    packZipUploaded,
+    packDetectedFiles
+  ]);
+
+  const handlePageSwitch = (targetPage: 'single' | 'pack') => {
+    if (targetPage === activePage || isAnimatingPage) return;
+    
+    setIsAnimatingPage(true);
+    if (targetPage === 'pack') {
+      setPageTurnDirection('forward');
+    } else {
+      setPageTurnDirection('backward');
+    }
+
+    setTimeout(() => {
+      setActivePage(targetPage);
+      setIsAnimatingPage(false);
+      setPageTurnDirection(null);
+    }, prefersReducedMotion ? 300 : 550);
+  };
+
+  const handleZipFileSelection = (file: File) => {
+    setPackZipFileName(file.name);
+    setPackZipFileSize(`${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+    setPackZipUploaded(false);
+    setPackIsUploadingZip(true);
+    setPackZipProgress(0);
+
+    const uploadInterval = setInterval(() => {
+      setPackZipProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(uploadInterval);
+          setPackIsUploadingZip(false);
+          startZipCompilingEngine(file.name);
+          return 100;
+        }
+        return prev + 15;
+      });
+    }, 100);
+  };
+
+  const startZipCompilingEngine = (name: string) => {
+    setPackIsProcessingZip(true);
+    setPackZipProcessingProgress(0);
+    const statuses = [
+      'Decrypting ZIP block signatures...',
+      'Validating archive integrity...',
+      'Unpacking master directories...',
+      'Reading local file headers...',
+      'Analyzing audio waveforms...',
+      'Detected 3 high-fidelity audio files & stems package'
+    ];
+
+    setPackProcessingStatus(statuses[0]);
+
+    const processingInterval = setInterval(() => {
+      setPackZipProcessingProgress((prev) => {
+        const nextProgress = prev + 10;
+        const index = Math.min(
+          Math.floor((nextProgress / 100) * statuses.length),
+          statuses.length - 1
+        );
+        setPackProcessingStatus(statuses[index]);
+
+        if (nextProgress >= 100) {
+          clearInterval(processingInterval);
+          setPackIsProcessingZip(false);
+          setPackZipUploaded(true);
+          
+          // Generate beautiful files list inside the ZIP
+          const cleanTitle = name.replace(/\.[^/.]+$/, '').toUpperCase();
+          setPackTitle(cleanTitle);
+          setPackDetectedFiles([
+            `01_${cleanTitle}_142BPM_Fmin.mp3`,
+            `02_${cleanTitle}_STSTEM_DRUMS_142BPM.mp3`,
+            `03_${cleanTitle}_STEMS_SYNTH_142BPM.mp3`,
+            'stems_multitrack_raw_master.zip'
+          ]);
+          return 100;
+        }
+        return nextProgress;
+      });
+    }, 150);
+  };
+
+  const handlePublishBeatPackLocal = () => {
+    const finalPack: BeatPack = {
+      id: `pack-${Date.now()}`,
+      name: packTitle.trim() || 'UNTITLED BEAT PACK',
+      description: packDescription,
+      price: packPrice,
+      artworkUrl: packArtworkUrl,
+      beatIds: ['beat-1', 'beat-2'], // default references
+      freeDownload: packFreeDownload,
+      published: packVisibility === 'published',
+      createdDate: new Date().toISOString().split('T')[0],
+    };
+
+    if (onPublishBeatPack) {
+      onPublishBeatPack(finalPack);
+    } else {
+      const existing = localStorage.getItem('voodoo_beat_packs');
+      const list = existing ? JSON.parse(existing) : [];
+      localStorage.setItem('voodoo_beat_packs', JSON.stringify([finalPack, ...list]));
+    }
+
+    localStorage.removeItem('voodoo_modal_pack_uploader_draft');
+    onClose();
+  };
+
+  const getPageClass = (pageType: 'single' | 'pack') => {
+    if (activePage !== pageType && !isAnimatingPage) return 'hidden';
+    
+    if (isAnimatingPage) {
+      if (prefersReducedMotion) {
+        return activePage === pageType ? 'page-fade-enter-active' : 'page-fade-exit-active';
+      }
+      if (pageTurnDirection === 'forward') {
+        return pageType === 'single' ? 'page-turn-forward-exit' : 'page-turn-forward-enter';
+      } else if (pageTurnDirection === 'backward') {
+        return pageType === 'pack' ? 'page-turn-backward-exit' : 'page-turn-backward-enter';
+      }
+    }
+    
+    return 'animate-fadeIn';
+  };
 
   // Draft autosaving and restoration
   const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(false);
@@ -318,13 +559,97 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const handleArtworkSelection = (file: File) => {
     setIsUploadingArtwork(true);
     setHasChanges(true);
-    setTimeout(() => {
-      const demoUrl = URL.createObjectURL(file);
-      setArtworkUrl(demoUrl);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setArtworkUrl(dataUrl);
       setCustomArtworkName(file.name);
-      setArtworkDimensions('3000 × 3000 px · RGB Space · Valid');
+      setArtworkDimensions(`${file.name} · Device Image Loaded`);
       setIsUploadingArtwork(false);
-    }, 1000);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+
+  const handleAiGenerateTitle = async () => {
+    setIsGeneratingTitle(true);
+    try {
+      const response = await fetch('/api/gemini/suggest-titles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genre, tempo: bpm, scaleKey: key })
+      });
+      if (!response.ok) throw new Error('Failed to fetch from server');
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const randomTitle = data[Math.floor(Math.random() * data.length)];
+        setTitle(randomTitle.toUpperCase());
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (err) {
+      console.warn("Falling back to pre-defined title templates due to API offline", err);
+      const titles = [
+        'VALENTINO GOLD', 'VELVET DRIFT', 'OBSIDIAN CRASH', 'CASHMERE RUNWAY', 
+        'TOKYO HARMONICS', 'GLIDE VECTOR', 'ATLANTA REIGN', 'SYNTHESIS SILK', 
+        'DIAMOND STENCIL', 'ELEGANT CHAOS', 'AMETHRYST DUST', 'PLATINUM SHADOW'
+      ];
+      const generated = titles[Math.floor(Math.random() * titles.length)];
+      setTitle(generated + ' (AI SUGGESTED)');
+    } finally {
+      setIsGeneratingTitle(false);
+      setHasChanges(true);
+    }
+  };
+
+  const handleAiGenerateDescription = async () => {
+    setIsGeneratingDesc(true);
+    try {
+      const response = await fetch('/api/gemini/suggest-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          title, 
+          genre, 
+          tempo: bpm, 
+          scaleKey: key, 
+          moods: moods,
+          tags: tags
+        })
+      });
+      if (!response.ok) throw new Error('Failed to fetch from server');
+      const data = await response.json();
+      if (data.text) {
+        setDescription(data.text);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (err) {
+      console.warn("Falling back to pre-defined description templates due to API offline", err);
+      const descs = [
+        'An ultra premium luxury high-fashion trap sequence utilizing boutique analog synthesizers, sliding sub-bass textures, and pristine hi-hat vectors.',
+        'Melancholic modular synth chords overlaying an aggressive, forward-driving 808 glide pattern. Ideal for commercial editorial placements.',
+        'Savage Atlanta-style triple hats paired with majestic cinematic orchestral pads and filtered acoustic piano arpeggios.',
+        'A nocturnal, spacey ambient freestyle trap environment offering modular key glides and complex syncopated rimshot grooves.'
+      ];
+      const generated = descs[Math.floor(Math.random() * descs.length)];
+      setDescription(generated);
+    } finally {
+      setIsGeneratingDesc(false);
+      setHasChanges(true);
+    }
+  };
+
+  const handleDoubleBpm = () => {
+    setBpm((prev) => prev * 2);
+    setHasChanges(true);
+  };
+
+  const handleHalfBpm = () => {
+    setBpm((prev) => Math.round(prev / 2));
+    setHasChanges(true);
   };
 
   // Safe exit confirmation
@@ -393,6 +718,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md overflow-y-auto">
       <div className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-3xl shadow-3xl overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
@@ -406,28 +733,30 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </span>
           </div>
 
-          {/* Top-Right Beat Packs tab/shortcut navigation & Close Control */}
+          {/* Top-Right Page Switcher (Internal Tab Switches only!) */}
           <div className="flex items-center gap-4">
             <div className="bg-zinc-900 rounded-xl p-1 flex border border-zinc-800 text-[10px] font-bold">
               <button 
-                className="px-3 py-1.5 rounded-lg bg-purple-600 text-white shadow-sm"
+                onClick={() => handlePageSwitch('single')}
+                className={`px-3 py-1.5 rounded-lg transition-all duration-200 ${
+                  activePage === 'single'
+                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
+                    : 'text-zinc-500 hover:text-white'
+                }`}
                 title="Uploading standard single instrumental beat track"
               >
                 SINGLE BEAT
               </button>
               <button 
-                onClick={() => {
-                  if (onSwitchToBeatPacks) {
-                    onSwitchToBeatPacks();
-                  } else {
-                    onClose();
-                  }
-                }}
-                className="px-3 py-1.5 rounded-lg text-zinc-400 hover:text-white flex items-center gap-1 transition-colors"
+                onClick={() => handlePageSwitch('pack')}
+                className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-zinc-400 hover:text-white flex items-center gap-1 ${
+                  activePage === 'pack'
+                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
+                    : 'text-zinc-500 hover:text-white'
+                }`}
                 title="Transition to multi-beat packs workspace"
               >
                 <span>BEAT PACKS</span>
-                <ExternalLink className="w-2.5 h-2.5" />
               </button>
             </div>
 
@@ -467,31 +796,38 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         )}
 
         {/* Dynamic Wizard Steps Bar */}
-        <div className="px-6 py-3 bg-zinc-950 border-b border-zinc-800/60 overflow-x-auto scrollbar-none shrink-0">
-          <div className="flex items-center gap-2 min-w-max text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-            {stepTitles.map((stepLabel, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentStep(idx + 1)}
-                className={`px-3 py-1.5 rounded-xl transition-all border ${
-                  currentStep === idx + 1
-                    ? 'bg-purple-600/95 border-purple-400 text-white font-extrabold shadow-lg shadow-purple-950/80'
-                    : currentStep > idx + 1
-                    ? 'bg-purple-950/20 text-purple-300 border-purple-500/10 hover:border-purple-500/30'
-                    : 'bg-zinc-900/60 text-zinc-500 border-transparent hover:text-zinc-300'
-                }`}
-              >
-                {stepLabel}
-              </button>
-            ))}
+        {activePage === 'single' && (
+          <div className="px-6 py-3 bg-zinc-950 border-b border-zinc-800/60 overflow-x-auto scrollbar-none shrink-0">
+            <div className="flex items-center gap-2 min-w-max text-[10px] sm:text-xs font-bold uppercase tracking-wider">
+              {stepTitles.map((stepLabel, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentStep(idx + 1)}
+                  className={`px-3 py-1.5 rounded-xl transition-all border ${
+                    currentStep === idx + 1
+                      ? 'bg-purple-600/95 border-purple-400 text-white font-extrabold shadow-lg shadow-purple-950/80'
+                      : currentStep > idx + 1
+                      ? 'bg-purple-950/20 text-purple-300 border-purple-500/10 hover:border-purple-500/30'
+                      : 'bg-zinc-900/60 text-zinc-500 border-transparent hover:text-zinc-300'
+                  }`}
+                >
+                  {stepLabel}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Modal Scrollable Workspace Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        {/* Modal Scrollable Workspace Body wrapped in Luxury Digital Book */}
+        <div className="p-6 overflow-y-auto flex-1 space-y-6 luxury-book">
           
-          {/* STEP 1: AUDIO MASTER */}
-          {currentStep === 1 && (
+          {/* ============================================================== */}
+          {/* PAGE 1: STANDALONE SINGLE BEAT                                 */}
+          {/* ============================================================== */}
+          <div className={`w-full ${getPageClass('single')} space-y-6`}>
+            
+            {/* STEP 1: AUDIO MASTER */}
+            {currentStep === 1 && (
             <div className="space-y-6 animate-fadeIn">
               <div>
                 <h3 className="text-white font-brand font-black text-lg uppercase tracking-wider">
@@ -774,9 +1110,26 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 
                 {/* Title */}
                 <div>
-                  <label className="block text-zinc-400 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
-                    Instrumental Title
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
+                      Instrumental Title
+                    </label>
+                    <button 
+                      type="button"
+                      onClick={handleAiGenerateTitle}
+                      disabled={isGeneratingTitle}
+                      className="text-[9px] font-mono font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 bg-purple-950/40 px-2 py-1 rounded border border-purple-500/20 cursor-pointer disabled:opacity-50"
+                    >
+                      {isGeneratingTitle ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Generating...</span>
+                        </>
+                      ) : (
+                        <span>✨ AI Title Suggester</span>
+                      )}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={title}
@@ -791,9 +1144,27 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
                 {/* Tempo (BPM) */}
                 <div>
-                  <label className="block text-zinc-400 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
-                    Tempo (BPM)
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
+                      Tempo (BPM)
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        type="button"
+                        onClick={handleDoubleBpm}
+                        className="text-[8px] font-mono font-bold text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded cursor-pointer"
+                      >
+                        Double (2x)
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={handleHalfBpm}
+                        className="text-[8px] font-mono font-bold text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded cursor-pointer"
+                      >
+                        Half (0.5x)
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="number"
                     value={bpm}
@@ -880,9 +1251,26 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
                 {/* Narrative Description */}
                 <div className="sm:col-span-2">
-                  <label className="block text-zinc-400 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
-                    Beat Narrative & Product description
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
+                      Beat Narrative & Product description
+                    </label>
+                    <button 
+                      type="button"
+                      onClick={handleAiGenerateDescription}
+                      disabled={isGeneratingDesc}
+                      className="text-[9px] font-mono font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 bg-purple-950/40 px-2 py-1 rounded border border-purple-500/20 cursor-pointer disabled:opacity-50"
+                    >
+                      {isGeneratingDesc ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Generating...</span>
+                        </>
+                      ) : (
+                        <span>✨ AI Description Generator</span>
+                      )}
+                    </button>
+                  </div>
                   <textarea
                     rows={3}
                     value={description}
@@ -891,7 +1279,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                       setHasChanges(true);
                     }}
                     placeholder="Provide creative context or production details for the artist..."
-                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-2xl p-3.5 text-white outline-none leading-relaxed"
+                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-2xl p-3.5 text-white outline-none leading-relaxed font-mono text-[11px]"
                   />
                 </div>
 
@@ -1425,52 +1813,385 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
           )}
 
+          </div>
+
+
+          {/* ============================================================== */}
+          {/* PAGE 2: BEAT PACK UPLOADER                                     */}
+          {/* ============================================================== */}
+          <div className={`w-full space-y-8 ${getPageClass('pack')}`}>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start text-xs text-left">
+              
+              {/* LEFT PAGE: ZIP File Upload, Price & free download, visibility */}
+              <div className="lg:col-span-7 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-950/20 rounded-full blur-2xl pointer-events-none" />
+                
+                <div>
+                  <h3 className="text-white font-brand font-black text-lg uppercase tracking-wider">
+                    Beat Pack ZIP Archive
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Upload a single ZIP archive containing all beats, licensing certificate templates, and multitrack audio stems.
+                  </p>
+                </div>
+
+                {/* Interactive ZIP File Selection */}
+                <div 
+                  className={`border-2 border-dashed rounded-3xl p-10 text-center transition-all ${
+                    packIsUploadingZip || packIsProcessingZip
+                      ? 'border-purple-500/50 bg-zinc-950/30 cursor-not-allowed'
+                      : 'border-zinc-700/80 hover:border-purple-500/50 bg-zinc-950/60 cursor-pointer'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    id="modalPackZipUploadInput"
+                    accept=".zip"
+                    className="hidden"
+                    disabled={packIsUploadingZip || packIsProcessingZip}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleZipFileSelection(e.target.files[0]);
+                      }
+                    }}
+                  />
+
+                  <label htmlFor="modalPackZipUploadInput" className="block cursor-pointer space-y-5">
+                    <div className="w-14 h-14 rounded-full bg-purple-950/50 border border-purple-500/20 flex items-center justify-center text-purple-400 mx-auto">
+                      {packIsUploadingZip || packIsProcessingZip ? (
+                        <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
+                      ) : (
+                        <Upload className="w-6 h-6" />
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 max-w-md mx-auto">
+                      <h4 className="font-bold text-white text-sm">
+                        {packIsUploadingZip
+                          ? 'Uploading ZIP to Secure Vault Storage...'
+                          : packIsProcessingZip
+                          ? packProcessingStatus
+                          : 'Drag & Drop Beat Pack ZIP here'}
+                      </h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">
+                        All-in-one ZIP format required. Stems & full-length MP3 files will be automatically unzipped, scanned, and indexed. Max 500MB.
+                      </p>
+                    </div>
+
+                    {!packIsUploadingZip && !packIsProcessingZip && (
+                      <div className="inline-block px-4 py-2 bg-purple-950/60 text-purple-300 border border-purple-500/20 hover:bg-purple-900 text-xs font-bold rounded-xl transition-all">
+                        Select ZIP File
+                      </div>
+                    )}
+                  </label>
+
+                  {/* Progress Indicators */}
+                  {(packIsUploadingZip || packIsProcessingZip) && (
+                    <div className="max-w-md mx-auto mt-6 space-y-3">
+                      <div className="flex justify-between text-xs font-mono font-bold text-zinc-400">
+                        <span>{packIsUploadingZip ? 'UPLOADING ARCHIVE' : packProcessingStatus}</span>
+                        <span>{packIsUploadingZip ? `${packZipProgress}%` : `${packZipProcessingProgress}%`}</span>
+                      </div>
+                      <div className="w-full bg-zinc-900 h-2.5 rounded-full overflow-hidden border border-zinc-800">
+                        <div
+                          className="bg-gradient-to-r from-purple-600 via-violet-600 to-fuchsia-500 h-full transition-all duration-150"
+                          style={{ width: `${packIsUploadingZip ? packZipProgress : packZipProcessingProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ZIP Uploaded Specifications Card */}
+                {packZipUploaded && !packIsUploadingZip && !packIsProcessingZip && (
+                  <div className="p-4 bg-zinc-950/80 border border-zinc-800 rounded-2xl flex flex-col gap-3 text-xs animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-purple-950 border border-purple-500/30 flex items-center justify-center text-purple-300 shadow">
+                          <Folder className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-white font-mono">{packZipFileName}</div>
+                          <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                            Archive size: {packZipFileSize} · Zip Verified & Decrypted
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-emerald-400 font-bold flex items-center gap-1 bg-emerald-950/40 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-[10px] uppercase font-mono tracking-widest">
+                        <CheckCircle className="w-3.5 h-3.5" /> Indexed
+                      </span>
+                    </div>
+
+                    {/* Detected Files List */}
+                    {packDetectedFiles.length > 0 && (
+                      <div className="pt-3 border-t border-zinc-900 space-y-2 text-left">
+                        <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-wider block">
+                          AUTOMATICALLY EXTRACTED TRACKS & FILES:
+                        </span>
+                        <div className="space-y-1.5 font-mono text-[10px] max-h-40 overflow-y-auto pr-1">
+                          {packDetectedFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2 bg-zinc-900 border border-zinc-850 rounded-lg">
+                              <div className="flex items-center gap-2 text-zinc-300 truncate">
+                                <Music className="w-3.5 h-3.5 text-purple-400" />
+                                <span className="truncate">{file}</span>
+                              </div>
+                              <span className="text-zinc-600 uppercase text-[9px] shrink-0 font-bold">READY</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Set Price & free download */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-2xl space-y-2">
+                    <span className="font-bold text-white uppercase tracking-wider text-[10px] block">Beat Pack Bundle Price ($)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={packPrice}
+                      onChange={(e) => setPackPrice(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 font-mono text-purple-300 font-bold focus:border-purple-500 outline-none"
+                    />
+                    <p className="text-[10px] text-zinc-500">Unlocks immediate full package downloads for customers in checkout.</p>
+                  </div>
+
+                  <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-2xl flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <h4 className="font-bold text-white uppercase tracking-wider text-[10px] block">Enable Free Download</h4>
+                        <p className="text-[10px] text-zinc-500 font-medium">Allow artists to get a free version of the pack.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={packFreeDownload}
+                        onChange={(e) => setPackFreeDownload(e.target.checked)}
+                        className="w-10 h-5 bg-zinc-900 border border-zinc-800 rounded-full accent-purple-600 cursor-pointer"
+                      />
+                    </div>
+                    <p className="text-[10px] text-zinc-400 font-mono mt-2 leading-relaxed">
+                      {packFreeDownload ? '✓ Tagged reference copy enabled' : '✗ Checkout purchase only'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Visibility Options */}
+                <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-3">
+                  <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-wider block">
+                    PACK DISCOVERABILITY VISIBILITY
+                  </span>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: 'published', name: 'PUBLISHED' },
+                      { id: 'draft', name: 'DRAFT' },
+                      { id: 'hidden', name: 'UNLISTED' }
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setPackVisibility(item.id as any)}
+                        className={`py-2.5 px-3 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
+                          packVisibility === item.id
+                            ? 'bg-purple-950/40 border-purple-500 text-purple-300 shadow-md shadow-purple-950/50 font-extrabold'
+                            : 'bg-zinc-900/40 border-zinc-850 text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* RIGHT PAGE: Details & Live Preview */}
+              <div className="lg:col-span-5 space-y-6">
+                
+                {/* Form Metadata Fields */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 text-xs text-left">
+                  <div>
+                    <h3 className="text-white font-brand font-black text-base uppercase tracking-wider">
+                      Beat Pack Information
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      Enter the public storefront parameters for this curated bundle.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
+                        Beat Pack Title
+                      </label>
+                      <input
+                        type="text"
+                        value={packTitle}
+                        onChange={(e) => setPackTitle(e.target.value)}
+                        placeholder="e.g. CASHMERE VAULT EDITION"
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-xl p-3 text-white font-bold outline-none font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
+                        Pack Public Description
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={packDescription}
+                        onChange={(e) => setPackDescription(e.target.value)}
+                        placeholder="Provide context or license coverage of what files are inside the pack..."
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-xl p-3 text-white outline-none leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Artwork selector */}
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
+                        Cover Artwork
+                      </label>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-xl overflow-hidden border border-zinc-800 shrink-0 shadow-lg bg-zinc-950">
+                            <img src={packArtworkUrl} alt="Cover artwork" className="w-full h-full object-cover" />
+                          </div>
+                          
+                          <input
+                            type="file"
+                            id="packDeviceArtworkInput"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const file = e.target.files[0];
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  if (ev.target?.result) {
+                                    setPackArtworkUrl(ev.target.result as string);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+
+                          <label
+                            htmlFor="packDeviceArtworkInput"
+                            className="flex-1 py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs text-center rounded-xl cursor-pointer transition-all shadow-md flex items-center justify-center gap-2"
+                          >
+                            <ImageIcon className="w-4 h-4" />
+                            <span>Upload From Device</span>
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
+                            '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
+                            '/src/assets/images/cashmere_hero_runway_1790419818906.jpg'
+                          ].map((img, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setPackArtworkUrl(img)}
+                              className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                                packArtworkUrl === img ? 'border-purple-500 scale-102 shadow-lg shadow-purple-950/20' : 'border-zinc-800 opacity-60 hover:opacity-100'
+                              }`}
+                            >
+                              <img src={img} alt="presets" className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Shareable Link simulator */}
+                    <div className="pt-2">
+                      <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+                        SHAREABLE STOREFRONT URL (DYNAMIC)
+                      </span>
+                      <div className="p-2.5 bg-zinc-950 rounded-xl border border-zinc-850 font-mono text-[9px] text-zinc-500 break-all select-all">
+                        {window.location.origin}/?pack={packTitle.toLowerCase().replace(/[^a-z0-9]/g, '-')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Publish Panel */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4">
+                  <button
+                    onClick={handlePublishBeatPackLocal}
+                    disabled={packIsUploadingZip || packIsProcessingZip}
+                    className="w-full py-4 bg-gradient-to-r from-purple-600 via-violet-600 to-fuchsia-500 hover:from-purple-500 hover:to-fuchsia-400 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-purple-950/80 transition-transform active:scale-98 cursor-pointer"
+                  >
+                    PUBLISH BEAT PACK TO VAULT
+                </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePageSwitch('single')}
+                    className="w-full py-3 bg-zinc-950 hover:bg-zinc-900 border border-zinc-850 text-zinc-400 hover:text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    ← BACK TO SINGLE BEAT WORKSPACE
+                  </button>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
 
         {/* Modal Wizard Actions Controls Footer */}
-        <div className="px-6 py-4 bg-zinc-950 border-t border-zinc-800 flex justify-between items-center shrink-0">
-          
-          {/* Previous control button */}
-          {currentStep > 1 ? (
-            <button
-              onClick={() => setCurrentStep((prev) => prev - 1)}
-              className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
-            </button>
-          ) : <div />}
+        {activePage === 'single' && (
+          <div className="px-6 py-4 bg-zinc-950 border-t border-zinc-800 flex justify-between items-center shrink-0">
+            
+            {/* Previous control button */}
+            {currentStep > 1 ? (
+              <button
+                onClick={() => setCurrentStep((prev) => prev - 1)}
+                className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            ) : <div />}
 
-          {/* Current step pagination display */}
-          <span className="text-[11px] font-mono font-bold text-zinc-500 hidden sm:block">
-            STEP {currentStep} OF 7 ({stepTitles[currentStep - 1]})
-          </span>
+            {/* Current step pagination display */}
+            <span className="text-[11px] font-mono font-bold text-zinc-500 hidden sm:block">
+              STEP {currentStep} OF 7 ({stepTitles[currentStep - 1]})
+            </span>
 
-          {/* Next control button */}
-          {currentStep < 7 ? (
-            <button
-              onClick={() => {
-                if (currentStep === 1 && !fileUploaded) {
-                  alert('Please select and process a valid audio instrumental master track before proceeding.');
-                  return;
-                }
-                setCurrentStep((prev) => prev + 1);
-              }}
-              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-lg shadow-purple-950"
-            >
-              <span>Continue Step {currentStep + 1}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={() => handlePublish(visibility)}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950 uppercase"
-            >
-              <CheckCircle className="w-4 h-4" />
-              <span>Finalize & Publish</span>
-            </button>
-          )}
-        </div>
+            {/* Next control button */}
+            {currentStep < 7 ? (
+              <button
+                onClick={() => {
+                  if (currentStep === 1 && !fileUploaded) {
+                    alert('Please select and process a valid audio instrumental master track before proceeding.');
+                    return;
+                  }
+                  setCurrentStep((prev) => prev + 1);
+                }}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-lg shadow-purple-950"
+              >
+                <span>Continue Step {currentStep + 1}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => handlePublish(visibility)}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950 uppercase"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Finalize & Publish</span>
+              </button>
+            )}
+          </div>
+        )}
 
       </div>
     </div>

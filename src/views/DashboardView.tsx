@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
   Play,
@@ -22,6 +22,7 @@ import {
   Check,
   Package,
   Mic2,
+  Music,
   ExternalLink,
   Shield,
   Clock,
@@ -35,9 +36,39 @@ import {
   Youtube,
   MapPin,
   User,
-  Image,
+  Image as ImageIcon,
   Link2,
-  AlertTriangle
+  AlertTriangle,
+  ArrowUp,
+  ArrowDown,
+  Globe,
+  Share2,
+  Heart,
+  PieChart,
+  Calendar,
+  Lock,
+  Send,
+  Eye,
+  Filter,
+  CheckSquare,
+  Layers,
+  MessageSquare,
+  Award,
+  Search,
+  FolderPlus,
+  RefreshCw,
+  FileCheck,
+  AlertCircle,
+  ThumbsUp,
+  SlidersHorizontal,
+  Activity,
+  ChevronRight,
+  SendHorizontal,
+  Archive,
+  Save,
+  CheckCircle,
+  RotateCcw,
+  Sliders as SlidersIcon
 } from 'lucide-react';
 import { Beat, FreeDownloadLead, Promotion, SaleRecord, StoreSettings, ProducerProfile, BeatPack } from '../types';
 import { UploadModal } from '../components/UploadModal';
@@ -56,6 +87,7 @@ interface DashboardViewProps {
   onDeletePromotion: (id: string) => void;
   onPublishBeat?: (newBeat: Beat) => void;
   onUpdateBeat?: (beat: Beat) => void;
+  onReorderBeats?: (reorderedBeats: Beat[]) => void;
   currencySymbol: string;
   profile: ProducerProfile;
   onUpdateProfile: (p: ProducerProfile) => void;
@@ -83,6 +115,39 @@ interface ServiceItem {
   description: string;
 }
 
+interface InboxMessage {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  subject: string;
+  type: 'Inquiry' | 'Negotiation' | 'Support' | 'Custom Work';
+  date: string;
+  status: 'Open' | 'Replied' | 'Flagged' | 'Closed';
+  messages: { sender: 'customer' | 'producer'; text: string; time: string }[];
+}
+
+interface ServiceOrder {
+  id: string;
+  clientName: string;
+  clientEmail: string;
+  serviceTitle: string;
+  amount: number;
+  orderDate: string;
+  dueDate: string;
+  status: 'Stem File Pending' | 'In Progress' | 'Client Review' | 'Completed';
+  stemUrl: string;
+  notes: string;
+}
+
+interface BeatCollection {
+  id: string;
+  title: string;
+  description: string;
+  artworkUrl: string;
+  beatIds: string[];
+  published: boolean;
+}
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   beats,
   salesRecords,
@@ -97,45 +162,95 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onDeletePromotion,
   onPublishBeat,
   onUpdateBeat,
+  onReorderBeats,
   currencySymbol,
   profile,
   onUpdateProfile,
-  youtubeVideos = [],
+  youtubeVideos,
   onUpdateYoutubeVideos,
   onNavigateToProfile,
   beatPacks = [],
   onUpdateBeatPacks,
 }) => {
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+  // Navigation active tab
   const [activeTab, setActiveTab] = useState<string>('overview');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
 
-  // Beat Packs manager local states
-  const [editingPack, setEditingBeatPack] = useState<BeatPack | null>(null);
-  const [packName, setPackName] = useState('');
-  const [packDesc, setPackDesc] = useState('');
-  const [packPrice, setPackPrice] = useState<number>(39.99);
-  const [packArtwork, setPackArtwork] = useState('');
-  const [packBeats, setPackBeats] = useState<string[]>([]); // Selected beat IDs
-  const [packFree, setPackFree] = useState(false);
-  const [packPublished, setPackPublished] = useState(true);
-  const [packNotice, setPackNotice] = useState<string | null>(null);
+  // Upload modal state & page mode
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
-  // Mastering Console local states
-  const [eqLow, setEqLow] = useState<number>(3.0); // dB
-  const [eqMid, setEqMid] = useState<number>(-1.5); // dB
-  const [eqHigh, setEqHigh] = useState<number>(4.2); // dB
-  const [compThreshold, setCompThreshold] = useState<number>(-18.5); // dB
-  const [compRatio, setCompRatio] = useState<number>(3.5); // :1 ratio
-  const [limiterThreshold, setLimiterThreshold] = useState<number>(-2.5); // dB
-  const [limiterCeiling, setLimiterCeiling] = useState<number>(-0.2); // dB
-  const [watermarkInterval, setWatermarkInterval] = useState<number>(15); // seconds
-  const [masteringSaved, setMasteringSaved] = useState<boolean>(false);
-  const [masteringSaving, setMasteringSaving] = useState<boolean>(false);
+  // Time interval state for analytics
+  const [timeInterval, setTimeInterval] = useState<'today' | '7days' | '30days' | 'alltime'>('30days');
 
-  // Sidebar toggler for mobile devices
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // Beat Catalog Local Filter & Search
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogStatusFilter, setCatalogStatusFilter] = useState<'ALL' | 'PUBLISHED' | 'DRAFT' | 'UNPUBLISHED' | 'ARCHIVED' | 'FEATURED'>('ALL');
 
-  // local state for Profile Settings tab
+  // Destructive Action Confirmation Modal
+  const [confirmModalData, setConfirmModalData] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm Delete',
+    onConfirm: () => {},
+  });
+
+  // Global Save State Indicators
+  const [globalSaveState, setGlobalSaveState] = useState<'idle' | 'saving' | 'saved' | 'unsaved' | 'error'>('idle');
+  const [globalSaveMessage, setGlobalSaveMessage] = useState<string>('');
+
+  // Collections State
+  const [collections, setCollections] = useState<BeatCollection[]>(() => {
+    const saved = localStorage.getItem('voodoo_collections');
+    if (saved) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return [
+      {
+        id: 'col-1',
+        title: 'Runway Dark Trap Collection',
+        description: 'Boutique 808 glides and high-fashion synth textures.',
+        artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
+        beatIds: beats.slice(0, 3).map((b) => b.id),
+        published: true,
+      },
+      {
+        id: 'col-2',
+        title: 'Tokyo Nighthawk Collection',
+        description: 'Ambient nocturnal freestyle trap instrumentals.',
+        artworkUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
+        beatIds: beats.slice(2, 5).map((b) => b.id),
+        published: true,
+      },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('voodoo_collections', JSON.stringify(collections));
+  }, [collections]);
+
+  // Collection creation modal / form
+  const [newColTitle, setNewColTitle] = useState('');
+  const [newColDesc, setNewColDesc] = useState('');
+  const [showAddCollection, setShowAddCollection] = useState(false);
+
+  // Audio Mastering local states
+  const [eqLow, setEqLow] = useState<number>(3.0);
+  const [eqMid, setEqMid] = useState<number>(-1.5);
+  const [eqHigh, setEqHigh] = useState<number>(4.2);
+  const [compThreshold, setCompThreshold] = useState<number>(-18.5);
+  const [compRatio, setCompRatio] = useState<number>(3.5);
+  const [limiterThreshold, setLimiterThreshold] = useState<number>(-2.5);
+  const [limiterCeiling, setLimiterCeiling] = useState<number>(-0.2);
+  const [watermarkInterval, setWatermarkInterval] = useState<number>(15);
+
+  // Profile Settings local state
   const [profileName, setProfileName] = useState(profile.name || 'CASHMERE KID$');
   const [profileHandle, setProfileHandle] = useState(profile.handle || '@cashmerekid');
   const [profileAvatar, setProfileAvatar] = useState(profile.avatarUrl || '');
@@ -143,7 +258,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [profileLocation, setProfileLocation] = useState(profile.location || 'Atlanta / Los Angeles / Tokyo');
   const [profileBio, setProfileBio] = useState(profile.bio || '');
 
-  // Social link inputs
+  // Social links
   const [socialInsta, setSocialInsta] = useState(profile.socialLinks?.instagram || '');
   const [socialYoutube, setSocialYoutube] = useState(profile.socialLinks?.youtube || '');
   const [socialTwitter, setSocialTwitter] = useState(profile.socialLinks?.twitter || '');
@@ -153,18 +268,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [socialFacebook, setSocialFacebook] = useState(profile.socialLinks?.facebook || '');
   const [socialAppleMusic, setSocialAppleMusic] = useState(profile.socialLinks?.appleMusic || '');
 
-  const [profileSaveState, setProfileSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
-
-  // New YouTube video form state
+  // YouTube video form state
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoId, setNewVideoId] = useState('');
   const [newVideoCategory, setNewVideoCategory] = useState('OFFICIAL VISUALIZER');
   const [newVideoDesc, setNewVideoDesc] = useState('');
   const [newVideoDuration, setNewVideoDuration] = useState('3:00');
-  const [newVideoNotice, setNewVideoNotice] = useState(false);
 
-  // Edit beat catalog modal state
+  // Edit beat modal state
   const [editingBeat, setEditingBeat] = useState<Beat | null>(null);
   const [editPriceVal, setEditPriceVal] = useState<number>(29.99);
   const [editTitle, setEditTitle] = useState<string>('');
@@ -176,13 +287,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [editPublished, setEditPublished] = useState<boolean>(true);
   const [editArtworkUrl, setEditArtworkUrl] = useState<string>('');
 
-  const artworkPresets = [
-    '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-    '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-    '/src/assets/images/cashmere_hero_runway_1790419818906.jpg',
-  ];
-
-  // New promo form state
+  // Promo Code Form State
   const [newPromoCode, setNewPromoCode] = useState('');
   const [newPromoDiscount, setNewPromoDiscount] = useState<number>(20);
   const [newPromoDesc, setNewPromoDesc] = useState('');
@@ -193,13 +298,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [bogoEnabled, setBogoEnabled] = useState(true);
   const [bogoDealType, setBogoDealType] = useState<'buy2get1' | 'buy3get2'>('buy2get1');
 
-  // Sample SoundKits list
+  // SoundKits list
   const [soundKits, setSoundKits] = useState<SoundKitItem[]>([
     {
       id: 'sk-1',
       title: 'VOODOO VAULT Vol. 1 (808s & Drums)',
       price: 34.99,
-      salesCount: 0, // Reset to zero-state for integrity
+      salesCount: 14,
       type: 'Drum Kit',
       coverUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
     },
@@ -207,13 +312,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       id: 'sk-2',
       title: 'ANALOG VOODOO SYNTH PRESETS',
       price: 24.99,
-      salesCount: 0,
+      salesCount: 8,
       type: 'Serum Presets',
       coverUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
     },
   ]);
 
-  // Sample Services list
+  // Services list
   const [services, setServices] = useState<ServiceItem[]>([
     {
       id: 'srv-1',
@@ -231,44 +336,121 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     },
   ]);
 
-  // Lead export notice
-  const [exportNotice, setExportNotice] = useState(false);
+  // CRM Inbox Messages
+  const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([
+    {
+      id: 'msg-101',
+      customerName: 'Marcus Vance',
+      customerEmail: 'marcus.vance@soundcloud.com',
+      subject: 'Custom stems request for "VOODOO NIGHTS"',
+      type: 'Inquiry',
+      date: '2026-09-25 14:32',
+      status: 'Open',
+      messages: [
+        { sender: 'customer', text: 'Hey Cashmere! Love the 808s on VOODOO NIGHTS. Do you offer track stems for vocal arrangements?', time: '14:32' },
+      ],
+    },
+    {
+      id: 'msg-102',
+      customerName: 'Elena Rostova',
+      customerEmail: 'elena.rostova@warner.com',
+      subject: 'Exclusive License Negotiation - "VELVET DRIP"',
+      type: 'Negotiation',
+      date: '2026-09-24 19:10',
+      status: 'Replied',
+      messages: [
+        { sender: 'customer', text: 'We would like to make a counter offer of $750 for full Exclusive Rights on VELVET DRIP.', time: '19:10' },
+        { sender: 'producer', text: 'Hi Elena, our floor threshold for Exclusive Rights is $899.99. I can meet you at $850 with full WAV stems.', time: '20:15' },
+      ],
+    },
+  ]);
 
-  // Contract Terms State
-  const [mp3StreamLimit, setMp3StreamLimit] = useState('100,000');
-  const [unlimitedStreamLimit, setUnlimitedStreamLimit] = useState('Unlimited');
+  // Pixel Settings
+  const [googleAnalyticsId, setGoogleAnalyticsId] = useState('G-882390192X');
+  const [metaPixelId, setMetaPixelId] = useState('192039102938102');
+  const [tikTokPixelId, setTikTokPixelId] = useState('TT-90182309123');
 
-  // Calculate REAL metrics directly from authoritative data (NO fake stats!)
+  // Metrics derived from actual data
   const totalRevenue = salesRecords.reduce((sum, r) => sum + r.amount, 0);
-  const totalPlays = beats.reduce((sum, b) => sum + b.playCount, 0);
-  const totalDownloads = beats.reduce((sum, b) => sum + b.downloadCount, 0);
+  const totalPlays = beats.reduce((sum, b) => sum + (b.playCount || 0), 0);
+  const totalDownloads = beats.reduce((sum, b) => sum + (b.downloadCount || 0), 0);
+  const publishedBeats = beats.filter((b) => b.published !== false);
+  const draftBeats = beats.filter((b) => b.published === false);
 
-  // Structured Sidebar Navigation Links List
+  // Organized Information Architecture (Prompt Section 2)
   const sidebarLinks = [
-    { section: 'OVERVIEW', items: [
-      { id: 'overview', label: 'Overview Dashboard', icon: TrendingUp },
-    ]},
-    { section: 'MUSIC', items: [
-      { id: 'catalog', label: 'Beats Catalog', icon: Radio },
-      { id: 'beatpacks', label: 'Beat Packs', icon: Package },
-      { id: 'mastering', label: 'Audio Mastering', icon: Sliders },
-      { id: 'soundkits', label: 'Merch & Kits', icon: Package },
-      { id: 'services', label: 'Bespoke Services', icon: Mic2 },
-    ]},
-    { section: 'STORE', items: [
-      { id: 'sales', label: 'Sales & Orders', icon: DollarSign },
-      { id: 'downloads', label: 'Artist Leads', icon: Download },
-      { id: 'promotions', label: 'Coupon Campaigns', icon: Tag },
-    ]},
-    { section: 'CONTENT', items: [
-      { id: 'youtube_videos', label: 'YouTube Videos', icon: Youtube },
-    ]},
-    { section: 'SETTINGS', items: [
-      { id: 'profile_settings', label: 'Profile Settings', icon: User },
-      { id: 'settings', label: 'Store Settings', icon: Settings },
-      { id: 'integrations', label: 'Payment Settings', icon: Zap },
-    ]},
+    {
+      section: 'OVERVIEW',
+      items: [
+        { id: 'overview', label: 'Overview', icon: TrendingUp },
+        { id: 'analytics', label: 'Studio Analytics', icon: BarChart2 },
+      ],
+    },
+    {
+      section: 'CATALOG',
+      items: [
+        { id: 'catalog', label: 'Beats Library', icon: Radio },
+        { id: 'beatpacks', label: 'Beat Packs', icon: Package },
+        { id: 'collections', label: 'Collections', icon: Layers },
+        { id: 'soundkits', label: 'Merch & Kits', icon: ShoppingBag },
+      ],
+    },
+    {
+      section: 'CREATE',
+      items: [
+        { id: 'upload_beat', label: 'Upload Beat', icon: Plus },
+        { id: 'upload_pack', label: 'Upload Beat Pack', icon: FolderPlus },
+      ],
+    },
+    {
+      section: 'AUDIO',
+      items: [
+        { id: 'mastering', label: 'Player & Mastering', icon: SlidersIcon },
+      ],
+    },
+    {
+      section: 'COMMERCE',
+      items: [
+        { id: 'sales', label: 'Sales & Orders', icon: DollarSign },
+        { id: 'downloads', label: 'Artist Leads', icon: Download },
+        { id: 'crm', label: 'Customer CRM', icon: MessageSquare },
+        { id: 'promotions', label: 'Coupon Campaigns', icon: Tag },
+        { id: 'services', label: 'Bespoke Services', icon: Mic2 },
+      ],
+    },
+    {
+      section: 'STOREFRONT',
+      items: [
+        { id: 'featured_content', label: 'Featured Content', icon: Sparkles },
+        { id: 'youtube_videos', label: 'YouTube Videos', icon: Youtube },
+      ],
+    },
+    {
+      section: 'PROFILE',
+      items: [
+        { id: 'profile_settings', label: 'Public Profile & Links', icon: User },
+      ],
+    },
+    {
+      section: 'SETTINGS',
+      items: [
+        { id: 'settings', label: 'Store Settings', icon: Settings },
+        { id: 'integrations', label: 'Payment Settings', icon: DollarSign },
+        { id: 'legal_services', label: 'Legal Contracts', icon: FileText },
+        { id: 'splits_copyright', label: 'Splits & Copyright', icon: Shield },
+        { id: 'marketing_security', label: 'Marketing & Security', icon: Zap },
+      ],
+    },
   ];
+
+  const triggerSaveState = (msg: string) => {
+    setGlobalSaveState('saving');
+    setGlobalSaveMessage(msg);
+    setTimeout(() => {
+      setGlobalSaveState('saved');
+      setTimeout(() => setGlobalSaveState('idle'), 2500);
+    }, 500);
+  };
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -277,8 +459,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const handleExportLeads = () => {
-    if (leads.length === 0) return;
-    const csvContent = 'data:text/csv;charset=utf-8,' + ['Email,Beat Title,Date,Country', ...leads.map((l) => `${l.email},"${l.beatTitle}",${l.downloadDate},${l.ipCountry}`)].join('\n');
+    if (leads.length === 0) {
+      alert('No artist leads available to export yet.');
+      return;
+    }
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      ['Email,Beat Title,Date,Country', ...leads.map((l) => `${l.email},"${l.beatTitle}",${l.downloadDate},${l.ipCountry}`)].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -286,8 +473,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    setExportNotice(true);
-    setTimeout(() => setExportNotice(false), 3000);
+  };
+
+  const handleExportBuyersCSV = () => {
+    const csvHeader = 'Customer Name,Email,Beat Purchased,License,Amount,Date,Status\n';
+    const csvRows = salesRecords
+      .map((r) => `"${r.customerName}","${r.customerEmail}","${r.beatTitle}","${r.licenseType}",${r.amount},"${r.date}","${r.status}"`)
+      .join('\n');
+    const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `buyer_contacts_export_${Date.now()}.csv`;
+    a.click();
   };
 
   const startEditingBeat = (beat: Beat) => {
@@ -318,60 +516,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         ...editingBeat.pricing,
         mp3Lease: editPriceVal,
         unlimited: editUnlimitedPrice,
-      }
+      },
     };
     onUpdateBeat(updated);
     setEditingBeat(null);
+    triggerSaveState('Beat parameters updated');
   };
 
-  // Profile Settings Save Routine
   const handleSaveProfile = () => {
-    setProfileSaveState('saving');
-    setProfileErrorMsg(null);
-
-    // Simple robust form validation
-    if (!profileName.trim()) {
-      setProfileSaveState('error');
-      setProfileErrorMsg('Public Display Name cannot be empty.');
-      return;
-    }
-
-    setTimeout(() => {
-      try {
-        const updatedProfile: ProducerProfile = {
-          name: profileName.trim(),
-          handle: profileHandle.trim(),
-          avatarUrl: profileAvatar.trim(),
-          bannerUrl: profileBanner.trim(),
-          location: profileLocation.trim(),
-          bio: profileBio.trim(),
-          verified: profile.verified,
-          socialLinks: {
-            instagram: socialInsta.trim(),
-            youtube: socialYoutube.trim(),
-            twitter: socialTwitter.trim(),
-            spotify: socialSpotify.trim(),
-            tiktok: socialTiktok.trim(),
-            soundcloud: socialSoundcloud.trim(),
-            facebook: socialFacebook.trim(),
-            appleMusic: socialAppleMusic.trim(),
-          } as any
-        };
-        onUpdateProfile(updatedProfile);
-        setProfileSaveState('saved');
-        setTimeout(() => setProfileSaveState('idle'), 2500);
-      } catch (err) {
-        setProfileSaveState('error');
-        setProfileErrorMsg('A secure file system saving block timeout occurred.');
-      }
-    }, 800);
+    triggerSaveState('Saving Profile Settings...');
+    const updatedProfile: ProducerProfile = {
+      name: profileName.trim(),
+      handle: profileHandle.trim(),
+      avatarUrl: profileAvatar.trim(),
+      bannerUrl: profileBanner.trim(),
+      location: profileLocation.trim(),
+      bio: profileBio.trim(),
+      verified: profile.verified,
+      socialLinks: {
+        instagram: socialInsta.trim(),
+        youtube: socialYoutube.trim(),
+        twitter: socialTwitter.trim(),
+        spotify: socialSpotify.trim(),
+        tiktok: socialTiktok.trim(),
+        soundcloud: socialSoundcloud.trim(),
+        facebook: socialFacebook.trim(),
+        appleMusic: socialAppleMusic.trim(),
+      } as any,
+    };
+    onUpdateProfile(updatedProfile);
   };
 
-  // Add YouTube Video Action
   const handleAddVideo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newVideoTitle.trim() || !newVideoId.trim()) return;
-
     const newVideo = {
       id: `video-${Date.now()}`,
       youtubeId: newVideoId.trim(),
@@ -379,1800 +557,1254 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       category: newVideoCategory,
       duration: newVideoDuration,
       description: newVideoDesc.trim() || 'Custom studio video uploaded to YouTube Vault.',
-      thumbnail: '/src/assets/images/cashmere_hero_runway_1790419818906.jpg'
+      thumbnail: '/src/assets/images/cashmere_hero_runway_1790419818906.jpg',
     };
-
     onUpdateYoutubeVideos([newVideo, ...youtubeVideos]);
     setNewVideoTitle('');
     setNewVideoId('');
     setNewVideoDesc('');
-    setNewVideoNotice(true);
-    setTimeout(() => setNewVideoNotice(false), 3000);
+    triggerSaveState('YouTube Video Embedded');
   };
 
-  const handleDeleteVideo = (id: string) => {
-    onUpdateYoutubeVideos(youtubeVideos.filter((v) => v.id !== id));
-  };
+  // Filter beats for beats catalog view
+  const filteredCatalogBeats = beats.filter((beat) => {
+    const matchesSearch =
+      catalogSearch === '' ||
+      beat.title.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      beat.genre.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      beat.key.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      beat.bpm.toString().includes(catalogSearch);
+
+    if (catalogStatusFilter === 'PUBLISHED') return matchesSearch && beat.published !== false;
+    if (catalogStatusFilter === 'DRAFT') return matchesSearch && beat.published === false;
+    if (catalogStatusFilter === 'UNPUBLISHED') return matchesSearch && beat.published === false;
+    if (catalogStatusFilter === 'FEATURED') return matchesSearch && beat.featured;
+    return matchesSearch;
+  });
 
   return (
-    <div className="pb-32 space-y-8 font-sans">
-      {/* Dynamic Mobile Header Controls */}
-      <div className="lg:hidden flex items-center justify-between bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
+    <div className="min-h-screen bg-black text-zinc-100 flex flex-col md:flex-row font-sans">
+      {/* Mobile Header Bar */}
+      <div className="md:hidden bg-zinc-950 border-b border-zinc-900 p-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-purple-400" />
-          <span className="font-brand font-black text-white text-sm tracking-wider uppercase">CASHMERE PORTAL</span>
+          <span className="font-brand font-black text-sm uppercase tracking-wider text-white">PRODUCER STUDIO</span>
         </div>
         <button
           onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-          className="p-2.5 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 rounded-xl text-zinc-300 transition-colors"
+          className="p-2 text-zinc-400 hover:text-white rounded-xl bg-zinc-900 border border-zinc-800"
         >
           <Menu className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Primary Split Dashboard Grid (Spacious Left Sidebar + Right Workspace) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* LEFT COLUMN: Sticky Navigation Sidebar (lg:col-span-3) */}
-        <aside className={`lg:col-span-3 bg-zinc-950 border border-zinc-900 rounded-3xl p-6 lg:sticky lg:top-24 space-y-6 shadow-xl ${
-          mobileSidebarOpen ? 'block animate-slideIn' : 'hidden lg:block'
-        }`}>
-          {/* Studio Owner Signature Card */}
-          <div className="flex items-center gap-3 pb-5 border-b border-zinc-900 text-left">
-            <div className="w-11 h-11 rounded-2xl bg-purple-950/80 border border-purple-500/30 overflow-hidden shrink-0 shadow">
-              <img src={profile.avatarUrl} alt={profile.name} className="w-full h-full object-cover" />
+      {/* Sidebar Navigation */}
+      <aside
+        className={`fixed md:sticky top-0 left-0 bottom-0 z-40 w-72 bg-zinc-950 border-r border-zinc-900 flex flex-col justify-between transition-transform duration-300 md:translate-x-0 ${
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-5 space-y-6 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-zinc-800">
+          {/* Brand Lockup */}
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-900">
+            <div>
+              <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">
+                PRIVATE CONTROL CENTER
+              </span>
+              <h1 className="font-brand font-black text-lg text-white tracking-tight uppercase">
+                {profileName || 'CASHMERE KID$'}
+              </h1>
             </div>
-            <div className="min-w-0">
-              <h4 className="text-xs font-black text-white uppercase tracking-wider truncate">{profile.name}</h4>
-              <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">{profile.handle}</span>
-            </div>
+            <button
+              onClick={() => setMobileSidebarOpen(false)}
+              className="md:hidden text-zinc-500 hover:text-white p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* Nav Categories */}
-          <nav className="space-y-6">
-            {sidebarLinks.map((section) => (
-              <div key={section.section} className="space-y-1.5 text-left">
-                <span className="text-[10px] font-mono font-bold text-zinc-600 tracking-widest block pl-2">{section.section}</span>
-                <div className="space-y-1">
-                  {section.items.map((item) => {
-                    const IconComp = item.icon;
-                    const isActive = activeTab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          setMobileSidebarOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold transition-all border ${
-                          isActive
-                            ? 'bg-purple-950/60 border-purple-500/30 text-purple-300 shadow-md'
-                            : 'bg-transparent border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/40'
-                        }`}
-                      >
-                        <IconComp className={`w-4 h-4 ${isActive ? 'text-purple-400' : 'text-zinc-500'}`} />
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
+          {/* Quick Create Buttons */}
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                setIsUploadModalOpen(true);
+                setMobileSidebarOpen(false);
+              }}
+              className="w-full py-3 bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-purple-950 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Upload Beat Track</span>
+            </button>
+          </div>
+
+          {/* Sidebar Nav Sections */}
+          <nav className="space-y-5">
+            {sidebarLinks.map((sec) => (
+              <div key={sec.section} className="space-y-1">
+                <div className="text-[10px] font-mono font-extrabold text-zinc-500 uppercase tracking-widest px-2 py-1">
+                  {sec.section}
                 </div>
+                {sec.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        if (item.id === 'upload_beat' || item.id === 'upload_pack') {
+                          setIsUploadModalOpen(true);
+                        } else {
+                          setActiveTab(item.id);
+                        }
+                        setMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
+                        isActive
+                          ? 'bg-purple-950/60 border border-purple-500/40 text-purple-300 shadow-md'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-purple-400' : 'text-zinc-500'}`} />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </nav>
+        </div>
 
-          {/* Quick Shortcuts */}
-          <div className="pt-4 border-t border-zinc-900 space-y-2">
-            <button
-              onClick={() => {
-                setMobileSidebarOpen(false);
-                setIsUploadModalOpen(true);
-              }}
-              className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-[11px] uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Upload Instrumental</span>
-            </button>
-            <button
-              onClick={onNavigateToProfile}
-              className="w-full py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-extrabold text-[11px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Public Store Profile</span>
-            </button>
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-zinc-900 bg-black/40 flex items-center justify-between text-xs text-zinc-500">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono text-[10px] uppercase font-bold text-zinc-400">Vault Engine Online</span>
           </div>
-        </aside>
+          <button
+            onClick={onNavigateToProfile}
+            className="text-purple-400 hover:text-white text-[11px] font-bold underline"
+          >
+            View Profile →
+          </button>
+        </div>
+      </aside>
 
-        {/* RIGHT COLUMN: Spacious Main Workspace area (lg:col-span-9) */}
-        <main className="lg:col-span-9 space-y-8 text-left">
-          
-          {/* HEADER BRAND BANNER */}
-          <div className="relative rounded-3xl bg-gradient-to-r from-zinc-950 via-zinc-900 to-black p-8 sm:p-12 border border-zinc-900 shadow-xl overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-purple-900/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="space-y-2">
-              <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-widest block">SECURE SYSTEM CONTROL ROOM</span>
-              <h1 className="text-3xl sm:text-5xl font-brand font-black text-white uppercase tracking-tight">
-                STUDIO CONSOLE
-              </h1>
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-xl font-medium">
-                Administer beats catalog distribution, configure metadata parameters, oversee digital licensings, and customize public brand styling.
-              </p>
+      {/* Main Workspace Body */}
+      <main className="flex-1 p-4 sm:p-8 md:p-10 overflow-x-hidden min-w-0">
+        {/* Global Save Indicator Badge */}
+        {globalSaveState !== 'idle' && (
+          <div className="fixed top-4 right-4 z-50 px-4 py-2 rounded-xl bg-zinc-900 border border-purple-500/50 shadow-2xl flex items-center gap-2 text-xs font-mono font-bold animate-fadeIn">
+            {globalSaveState === 'saving' && <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />}
+            {globalSaveState === 'saved' && <CheckCircle className="w-4 h-4 text-emerald-400" />}
+            <span className="text-white">{globalSaveMessage || 'Changes Saved'}</span>
+          </div>
+        )}
+
+        {/* ==================== 1. OVERVIEW TAB ==================== */}
+        {activeTab === 'overview' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div>
+              <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest block">
+                CASHMERE KID$ CONTROL CENTER
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-brand font-black text-white uppercase tracking-tight mt-1">
+                STUDIO OVERVIEW
+              </h2>
             </div>
-          </div>
 
-          {/* ==================== 1. OVERVIEW DASHBOARD TAB ==================== */}
-          {activeTab === 'overview' && (
-            <div className="space-y-8 animate-fadeIn">
-              
-              {/* Elegant Real Stats Panel (NO mock/fake stats!) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="p-6 bg-zinc-900/80 border border-zinc-800/80 rounded-2xl space-y-2 relative shadow-lg">
-                  <div className="flex justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
-                    <span>Direct Revenue</span>
-                    <DollarSign className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div className="text-3xl font-mono font-extrabold text-white">
-                    {currencySymbol}{totalRevenue.toFixed(2)}
-                  </div>
-                  <p className="text-[10px] text-zinc-400 leading-relaxed">
-                    Cumulative secure escrow deposits from real confirmed checkout transactions.
-                  </p>
-                </div>
-
-                <div className="p-6 bg-zinc-900/80 border border-zinc-800/80 rounded-2xl space-y-2 relative shadow-lg">
-                  <div className="flex justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
-                    <span>Published Catalog</span>
-                    <Radio className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div className="text-3xl font-mono font-extrabold text-white">
-                    {beats.length}
-                  </div>
-                  <p className="text-[10px] text-purple-300 leading-relaxed font-bold">
-                    Active uncompressed high-fidelity trap instrumentals published to the store.
-                  </p>
-                </div>
-
-                <div className="p-6 bg-zinc-900/80 border border-zinc-800/80 rounded-2xl space-y-2 relative shadow-lg">
-                  <div className="flex justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
-                    <span>Captured Leads</span>
-                    <Users className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div className="text-3xl font-mono font-extrabold text-white">
-                    {leads.length}
-                  </div>
-                  <p className="text-[10px] text-zinc-400 leading-relaxed">
-                    Total verified artist emails acquired from free tagged audio downloads.
-                  </p>
-                </div>
+            {/* Metrics Panel */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Gross Sales Revenue</span>
+                <div className="text-2xl font-mono font-black text-white">{currencySymbol}{totalRevenue.toFixed(2)}</div>
+                <span className="text-[10px] text-emerald-400 font-bold">100% Direct Payouts</span>
               </div>
 
-              {/* Quick Actions Panel */}
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-brand">QUICK CONSOLE SHORTCUTS</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <button onClick={() => setIsUploadModalOpen(true)} className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/20 transition-all flex flex-col items-center gap-1.5 cursor-pointer">
-                    <Plus className="w-5 h-5 text-purple-400" />
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wider">Upload Beat</span>
-                  </button>
-                  <button onClick={() => setActiveTab('soundkits')} className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/20 transition-all flex flex-col items-center gap-1.5 cursor-pointer">
-                    <Package className="w-5 h-5 text-purple-400" />
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wider">Add Merch Item</span>
-                  </button>
-                  <button onClick={() => setActiveTab('youtube_videos')} className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/20 transition-all flex flex-col items-center gap-1.5 cursor-pointer">
-                    <Youtube className="w-5 h-5 text-purple-400" />
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wider">Embed Video</span>
-                  </button>
-                  <button onClick={() => setActiveTab('profile_settings')} className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/20 transition-all flex flex-col items-center gap-1.5 cursor-pointer">
-                    <User className="w-5 h-5 text-purple-400" />
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wider">Edit Profile</span>
-                  </button>
-                </div>
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Published Catalog</span>
+                <div className="text-2xl font-mono font-black text-purple-300">{publishedBeats.length} Tracks</div>
+                <span className="text-[10px] text-zinc-400 font-medium">{draftBeats.length} Drafts Saved</span>
               </div>
 
-              {/* Recent Activity Logs with high-end dark empty state */}
-              <div className="bg-zinc-900/40 border border-zinc-800 p-6 rounded-3xl space-y-4 shadow-xl">
-                <div className="flex justify-between items-center pb-2 border-b border-zinc-800/80">
-                  <h3 className="font-brand font-black text-sm text-white uppercase tracking-widest">RECORDED SALES ACTIVITY</h3>
-                  <span className="text-[10px] font-mono text-zinc-500 font-bold">{salesRecords.length} ORDERS TOTAL</span>
-                </div>
-
-                {salesRecords.length > 0 ? (
-                  <div className="space-y-3">
-                    {salesRecords.map((sale) => (
-                      <div key={sale.id} className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-850/80 flex items-center justify-between hover:border-purple-500/30 transition-all">
-                        <div>
-                          <div className="text-xs font-bold text-white flex items-center gap-2">
-                            <span>{sale.beatTitle}</span>
-                            <span className="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 border border-purple-500/20 font-mono">
-                              {sale.licenseType}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-zinc-400 mt-0.5">{sale.customerEmail} · Order {sale.orderId}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs font-mono font-bold text-purple-300">{currencySymbol}{sale.amount.toFixed(2)}</div>
-                          <div className="text-[10px] text-emerald-400 font-semibold">{sale.status}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-10 text-center bg-zinc-950/40 border border-zinc-800 rounded-2xl space-y-2">
-                    <AlertTriangle className="w-8 h-8 text-zinc-600 mx-auto" />
-                    <h4 className="font-brand font-black text-white text-xs tracking-wider">NO ORDERS YET</h4>
-                    <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed font-medium">
-                      Your store has zero recorded physical or digital sales orders. Secure escrow systems are active.
-                    </p>
-                  </div>
-                )}
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Beat Pack Bundles</span>
+                <div className="text-2xl font-mono font-black text-white">{beatPacks.length} Packs</div>
+                <span className="text-[10px] text-purple-400 font-bold">Active Stem Bundles</span>
               </div>
 
-              {/* BOGO DEALS / BULK CAMPAIGNS PANEL */}
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <h3 className="font-brand font-black text-sm text-white uppercase tracking-wider">BOGO / BULK DEAL AUTOMATION</h3>
-                    <p className="text-[10px] text-zinc-500 font-medium">Apply automated multi-lease promotions globally across the checkout checkout flows.</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={bogoEnabled}
-                    onChange={(e) => setBogoEnabled(e.target.checked)}
-                    className="w-10 h-5 bg-zinc-900 border border-zinc-800 rounded-full accent-purple-600 cursor-pointer"
-                  />
-                </div>
-
-                {bogoEnabled && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-zinc-900">
-                    <button
-                      onClick={() => setBogoDealType('buy2get1')}
-                      className={`p-4 rounded-2xl border text-left space-y-1 transition-all ${
-                        bogoDealType === 'buy2get1' ? 'bg-purple-950/20 border-purple-500/40 text-purple-300' : 'bg-zinc-900/40 border-zinc-850 text-zinc-400'
-                      }`}
-                    >
-                      <div className="font-extrabold text-xs uppercase tracking-wider text-white">Buy 2 Get 1 Free</div>
-                      <p className="text-[10px] text-zinc-500 leading-relaxed font-medium">Cart automatically applies full discount on the cheapest beat when 3 items are present.</p>
-                    </button>
-                    <button
-                      onClick={() => setBogoDealType('buy3get2')}
-                      className={`p-4 rounded-2xl border text-left space-y-1 transition-all ${
-                        bogoDealType === 'buy3get2' ? 'bg-purple-950/20 border-purple-500/40 text-purple-300' : 'bg-zinc-900/40 border-zinc-850 text-zinc-400'
-                      }`}
-                    >
-                      <div className="font-extrabold text-xs uppercase tracking-wider text-white">Buy 3 Get 2 Free</div>
-                      <p className="text-[10px] text-zinc-500 leading-relaxed font-medium">Cart automatically discounts the 2 cheapest items when 5 items are present.</p>
-                    </button>
-                  </div>
-                )}
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Captured Leads</span>
+                <div className="text-2xl font-mono font-black text-white">{leads.length} Contacts</div>
+                <span className="text-[10px] text-purple-400 font-bold">Exportable CSV</span>
               </div>
             </div>
-          )}
 
-          {/* ==================== 2. BEATS CATALOG MANAGEMENT TAB ==================== */}
-          {activeTab === 'catalog' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center border-b border-zinc-900 pb-4">
-                <div className="space-y-1">
-                  <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">BEATS CATALOG</h2>
-                  <p className="text-xs text-zinc-500">Edit prices, toggle licensing formats, publish drafts, and copy duplicates.</p>
-                </div>
+            {/* Quick Actions Shortcuts */}
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider font-brand">QUICK WORKSPACE SHORTCUTS</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <button
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>UPLOAD BEAT</span>
+                  <Plus className="w-5 h-5 text-purple-400" />
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Upload Beat</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('beatpacks')}
+                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
+                >
+                  <Package className="w-5 h-5 text-purple-400" />
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Manage Beat Packs</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('collections')}
+                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
+                >
+                  <Layers className="w-5 h-5 text-purple-400" />
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Collections</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('profile_settings')}
+                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
+                >
+                  <User className="w-5 h-5 text-purple-400" />
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Edit Profile</span>
                 </button>
               </div>
-
-              {/* Beats Table/List with spacious layout */}
-              <div className="space-y-4">
-                {beats.map((beat) => (
-                  <div
-                    key={beat.id}
-                    className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-5 hover:border-purple-500/20 transition-all group"
-                  >
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                      <img src={beat.artworkUrl} alt={beat.title} className="w-14 h-14 rounded-2xl object-cover shrink-0 border border-zinc-850 shadow-md" />
-                      <div className="space-y-1 text-left min-w-0">
-                        <h4 className="font-extrabold text-sm text-white uppercase group-hover:text-purple-300 transition-colors truncate">
-                          {beat.title}
-                        </h4>
-                        <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono">
-                          <span className="font-bold text-purple-400">{beat.bpm} BPM</span>
-                          <span>·</span>
-                          <span>{beat.key}</span>
-                          <span>·</span>
-                          <span className="uppercase text-zinc-500">{beat.genre}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-6 w-full sm:w-auto">
-                      <div className="text-left sm:text-right">
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Lease Price</span>
-                        <span className="font-mono text-sm font-black text-white">${beat.pricing.mp3Lease.toFixed(2)}</span>
-                      </div>
-
-                      <div className="text-left sm:text-right">
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Status</span>
-                        <span className={`text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded border ${
-                          beat.published !== false
-                            ? 'bg-purple-950 text-purple-300 border-purple-500/20'
-                            : 'bg-zinc-950 text-zinc-600 border-zinc-850'
-                        }`}>
-                          {beat.published !== false ? 'Published' : 'Draft'}
-                        </span>
-                      </div>
-
-                      {/* Row Action buttons */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => startEditingBeat(beat)}
-                          className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-colors"
-                          title="Edit Beat Parameters"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        {onDuplicateBeat && (
-                          <button
-                            onClick={() => onDuplicateBeat(beat.id)}
-                            className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-purple-300 transition-colors"
-                            title="Duplicate Beat Record"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (confirm('Permanently purge this instrumental from the catalog?')) {
-                              onDeleteBeat(beat.id);
-                            }
-                          }}
-                          className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-red-950/40 rounded-xl text-zinc-500 hover:text-red-400 transition-colors"
-                          title="Purge Beat"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
-          )}
 
-          {/* ==================== 2.5. BEAT PACKS MANAGEMENT TAB ==================== */}
-          {activeTab === 'beatpacks' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center border-b border-zinc-900 pb-4">
-                <div className="space-y-1 text-left">
-                  <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">BEAT PACKS BUNDLES</h2>
-                  <p className="text-xs text-zinc-500">Curate multi-instrumental volumes, configure checkboxes for included files, and set bundle prices.</p>
-                </div>
-                {editingPack === null && (
-                  <button
-                    onClick={() => {
-                      setEditingBeatPack({
-                        id: 'new',
-                        name: '',
-                        description: '',
-                        price: 39.99,
-                        artworkUrl: artworkPresets[0],
-                        beatIds: [],
-                        freeDownload: false,
-                        published: true,
-                        createdDate: new Date().toISOString().split('T')[0],
-                      });
-                      setPackName('');
-                      setPackDesc('');
-                      setPackPrice(39.99);
-                      setPackArtwork(artworkPresets[0]);
-                      setPackBeats([]);
-                      setPackFree(false);
-                      setPackPublished(true);
-                      setPackNotice(null);
-                    }}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>CREATE NEW PACK</span>
-                  </button>
-                )}
-              </div>
-
-              {packNotice && (
-                <div className={`p-4 rounded-xl text-xs font-mono font-bold ${
-                  packNotice.startsWith('✓')
-                    ? 'bg-emerald-950/40 border border-emerald-500/20 text-emerald-300'
-                    : 'bg-red-950/40 border border-red-500/20 text-red-300'
-                }`}>
-                  {packNotice}
-                </div>
-              )}
-
-              {/* LIST OF BEAT PACKS VIEW */}
-              {editingPack === null ? (
-                <div className="space-y-4 text-left">
-                  {beatPacks && beatPacks.length > 0 ? (
-                    beatPacks.map((pack) => (
-                      <div
-                        key={pack.id}
-                        className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-5 hover:border-purple-500/20 transition-all group"
-                      >
-                        <div className="flex items-center gap-4 w-full md:w-auto">
-                          <img src={pack.artworkUrl} alt={pack.name} className="w-14 h-14 rounded-2xl object-cover shrink-0 border border-zinc-850 shadow" />
-                          <div className="space-y-1 text-left min-w-0">
-                            <h4 className="font-extrabold text-sm text-white uppercase group-hover:text-purple-300 transition-colors truncate">
-                              {pack.name}
-                            </h4>
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500 font-mono">
-                              <span className="font-bold text-purple-400">{pack.beatIds?.length || 0} INSTRUMENTALS</span>
-                              <span>·</span>
-                              <span>CREATED: {pack.createdDate || '2026-09-21'}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-between md:justify-end gap-6 w-full md:w-auto">
-                          <div className="text-left md:text-right">
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Price</span>
-                            <span className="font-mono text-sm font-black text-white">
-                              {pack.price > 0 ? `${currencySymbol}${pack.price.toFixed(2)}` : 'FREE COMPLIMENTARY'}
-                            </span>
-                          </div>
-
-                          <div className="text-left md:text-right">
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Status</span>
-                            <span className={`text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded border ${
-                              pack.published !== false
-                                ? 'bg-purple-950 text-purple-300 border-purple-500/20'
-                                : 'bg-zinc-950 text-zinc-600 border-zinc-850'
-                            }`}>
-                              {pack.published !== false ? 'Published' : 'Draft'}
-                            </span>
-                          </div>
-
-                          {/* Row Action buttons */}
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingBeatPack(pack);
-                                setPackName(pack.name);
-                                setPackDesc(pack.description);
-                                setPackPrice(pack.price);
-                                setPackArtwork(pack.artworkUrl);
-                                setPackBeats(pack.beatIds || []);
-                                setPackFree(pack.freeDownload);
-                                setPackPublished(pack.published);
-                                setPackNotice(null);
-                              }}
-                              className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-colors"
-                              title="Edit Pack Parameters"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (onUpdateBeatPacks) {
-                                  const duplicated: BeatPack = {
-                                    ...pack,
-                                    id: `pack-dup-${Date.now()}`,
-                                    name: `${pack.name} (COPY)`,
-                                    createdDate: new Date().toISOString().split('T')[0],
-                                  };
-                                  onUpdateBeatPacks([duplicated, ...beatPacks]);
-                                  setPackNotice('✓ Beat Pack duplicated successfully!');
-                                  setTimeout(() => setPackNotice(null), 2000);
-                                }
-                              }}
-                              className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-purple-300 transition-colors"
-                              title="Duplicate Pack"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm('Permanently delete this curated beat pack bundle?') && onUpdateBeatPacks) {
-                                  onUpdateBeatPacks(beatPacks.filter(p => p.id !== pack.id));
-                                  setPackNotice('✓ Curated pack deleted.');
-                                  setTimeout(() => setPackNotice(null), 2000);
-                                }
-                              }}
-                              className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-red-950/40 rounded-xl text-zinc-500 hover:text-red-400 transition-colors"
-                              title="Purge Pack"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-10 text-center bg-zinc-950/40 border border-zinc-800 rounded-2xl space-y-2">
-                      <Package className="w-8 h-8 text-zinc-600 mx-auto" />
-                      <h4 className="font-brand font-black text-white text-xs tracking-wider">NO CURATED BUNDLES</h4>
-                      <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed font-medium">
-                        You have not published any bulk beat bundles. Curate collections of multiple WAV/MP3 files at a discount.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* ADVANCED BEAT PACK UPLOADER / MANAGER FORM */
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!packName.trim()) {
-                      setPackNotice('Error: Curated pack name cannot be empty.');
-                      return;
-                    }
-                    if (packBeats.length === 0) {
-                      setPackNotice('Error: Select at least one instrumental from the checkboxes catalog list.');
-                      return;
-                    }
-
-                    const saved: BeatPack = {
-                      id: editingPack.id === 'new' ? `pack-${Date.now()}` : editingPack.id,
-                      name: packName.toUpperCase().trim(),
-                      description: packDesc.trim(),
-                      price: packFree ? 0 : packPrice,
-                      artworkUrl: packArtwork || artworkPresets[0],
-                      beatIds: packBeats,
-                      freeDownload: packFree,
-                      published: packPublished,
-                      createdDate: editingPack.createdDate || new Date().toISOString().split('T')[0],
-                    };
-
-                    let updated: BeatPack[];
-                    if (editingPack.id === 'new') {
-                      updated = [saved, ...beatPacks];
-                      setPackNotice('✓ New curated Beat Pack published successfully!');
-                    } else {
-                      updated = beatPacks.map(p => p.id === saved.id ? saved : p);
-                      setPackNotice('✓ Curated Beat Pack changes saved successfully!');
-                    }
-
-                    if (onUpdateBeatPacks) {
-                      onUpdateBeatPacks(updated);
-                    }
-
-                    setTimeout(() => {
-                      setEditingBeatPack(null);
-                      setPackNotice(null);
-                    }, 1200);
-                  }}
-                  className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-3xl text-left space-y-6 animate-fadeIn"
-                >
-                  <h3 className="text-xs font-mono font-black text-purple-300 uppercase tracking-widest block border-b border-zinc-800 pb-2">
-                    {editingPack.id === 'new' ? 'CREATE CURATED BUNDLE' : 'EDIT CURATED BUNDLE'}
-                  </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Pack Name</label>
-                        <input
-                          required
-                          type="text"
-                          value={packName}
-                          onChange={(e) => setPackName(e.target.value)}
-                          placeholder="e.g. PLATINUM SCORINGS VOL. 1"
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Pack Description</label>
-                        <textarea
-                          rows={4}
-                          value={packDesc}
-                          onChange={(e) => setPackDesc(e.target.value)}
-                          placeholder="Curate details about the files inside this package..."
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white leading-relaxed"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Bundle Price ({currencySymbol})</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            disabled={packFree}
-                            value={packFree ? 0 : packPrice}
-                            onChange={(e) => setPackPrice(parseFloat(e.target.value) || 0)}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono disabled:opacity-50"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Publication Status</label>
-                          <select
-                            value={packPublished ? 'true' : 'false'}
-                            onChange={(e) => setPackPublished(e.target.value === 'true')}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-bold"
-                          >
-                            <option value="true">Published (Live Store)</option>
-                            <option value="false">Draft (Invisible)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800/80 flex items-center justify-between">
-                        <div className="space-y-0.5 text-left">
-                          <label className="text-xs font-bold text-white block">Complimentary Free Download</label>
-                          <span className="text-[10px] text-zinc-500">Require artist email address before uncompressed files download.</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={packFree}
-                          onChange={(e) => {
-                            setPackFree(e.target.checked);
-                            if (e.target.checked) setPackPrice(0);
-                          }}
-                          className="w-8 h-4 rounded bg-zinc-900 border-zinc-800 accent-purple-600 cursor-pointer"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      {/* Artwork Preset Selector */}
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-2 font-bold uppercase">Artwork Cover Presets</label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {artworkPresets.map((preset) => (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => setPackArtwork(preset)}
-                              className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
-                                packArtwork === preset ? 'border-purple-500 scale-95 shadow-md shadow-purple-950/20' : 'border-zinc-800 hover:border-zinc-700'
-                              }`}
-                            >
-                              <img src={preset} className="w-full h-full object-cover" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* ADVANCED CHECKBOXES SELECTOR FOR INDIVIDUAL CATALOG FILES */}
-                      <div className="space-y-2">
-                        <label className="block text-[10px] text-zinc-500 font-bold uppercase">
-                          Select Catalog Beats ({packBeats.length} SELECTED)
-                        </label>
-                        <p className="text-[9px] text-zinc-400">Checkbox any published master files to curate them in this package.</p>
-                        
-                        <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 max-h-56 overflow-y-auto space-y-2.5 scrollbar-thin">
-                          {beats.map((beat) => {
-                            const isSelected = packBeats.includes(beat.id);
-                            return (
-                              <label
-                                key={beat.id}
-                                className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                                  isSelected
-                                    ? 'bg-purple-950/20 border-purple-500/30'
-                                    : 'bg-zinc-900/30 border-transparent hover:border-zinc-800'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => {
-                                      if (isSelected) {
-                                        setPackBeats(packBeats.filter((id) => id !== beat.id));
-                                      } else {
-                                        setPackBeats([...packBeats, beat.id]);
-                                      }
-                                    }}
-                                    className="rounded border-zinc-800 bg-zinc-900 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
-                                  />
-                                  <div className="flex items-center gap-2.5 min-w-0 text-left">
-                                    <img src={beat.artworkUrl} className="w-8 h-8 rounded-lg object-cover" />
-                                    <div className="min-w-0">
-                                      <span className="text-xs font-bold text-white block truncate">{beat.title}</span>
-                                      <span className="text-[9px] font-mono text-zinc-500">
-                                        {beat.bpm} BPM · {beat.key}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-mono text-zinc-400 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-850/80">
-                                  {currencySymbol}{beat.pricing.mp3Lease}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800/80">
-                    <button
-                      type="button"
-                      onClick={() => setEditingBeatPack(null)}
-                      className="px-5 py-2.5 bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg cursor-pointer"
-                    >
-                      {editingPack.id === 'new' ? 'Publish Curated Pack' : 'Save Curated Pack'}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* ==================== 2.6. AUDIO ENGINE MASTERING TAB ==================== */}
-          {activeTab === 'mastering' && (
-            <div className="space-y-8 animate-fadeIn text-left">
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">COEFFICIENTS PROCESSING MODULE</h2>
-                <p className="text-xs text-zinc-500">Tune the simulated Moog and solid-state mastering curves. Configurations compile directly into the uncompressed playback audio engine.</p>
-              </div>
-
-              {masteringSaved && (
-                <div className="p-4 bg-emerald-950/40 border border-emerald-500/20 text-emerald-300 text-xs font-mono font-bold rounded-xl flex items-center gap-2 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>✓ Master coefficients successfully compiled! True Peak limiters, EQ bands, and Gain reduction factors applied globally.</span>
-                </div>
-              )}
-
-              {/* Mastering Split Grid */}
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-                
-                {/* Left Column: EQ & Dynamics Sliders (col-span-7) */}
-                <div className="xl:col-span-7 space-y-6">
-                  
-                  {/* EQ SECTION */}
-                  <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-3xl space-y-5">
-                    <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] font-mono font-black text-purple-300 uppercase tracking-widest block">THREE-BAND PROSCENIUM SCORING</span>
-                        <h3 className="font-extrabold text-sm text-white uppercase">ANALOG EQUALIZER COEFFICIENTS</h3>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      {/* LOW EQ */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold font-mono">
-                          <span className="text-zinc-400">Low Sub shelf (60Hz)</span>
-                          <span className={`${eqLow >= 0 ? 'text-purple-300' : 'text-zinc-500'}`}>
-                            {eqLow >= 0 ? `+${eqLow.toFixed(1)}` : eqLow.toFixed(1)} dB
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-12"
-                          max="12"
-                          step="0.5"
-                          value={eqLow}
-                          onChange={(e) => {
-                            setEqLow(parseFloat(e.target.value));
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                        />
-                      </div>
-
-                      {/* MID EQ */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold font-mono">
-                          <span className="text-zinc-400">Mid Vocal range (2.5kHz)</span>
-                          <span className={`${eqMid >= 0 ? 'text-purple-300' : 'text-zinc-500'}`}>
-                            {eqMid >= 0 ? `+${eqMid.toFixed(1)}` : eqMid.toFixed(1)} dB
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-12"
-                          max="12"
-                          step="0.5"
-                          value={eqMid}
-                          onChange={(e) => {
-                            setEqMid(parseFloat(e.target.value));
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                        />
-                      </div>
-
-                      {/* HIGH EQ */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold font-mono">
-                          <span className="text-zinc-400">High Air brilliance (10kHz)</span>
-                          <span className={`${eqHigh >= 0 ? 'text-purple-300' : 'text-zinc-500'}`}>
-                            {eqHigh >= 0 ? `+${eqHigh.toFixed(1)}` : eqHigh.toFixed(1)} dB
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-12"
-                          max="12"
-                          step="0.5"
-                          value={eqHigh}
-                          onChange={(e) => {
-                            setEqHigh(parseFloat(e.target.value));
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Quick presets toggles */}
-                    <div className="pt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEqLow(6.5);
-                          setEqMid(-1.0);
-                          setEqHigh(1.5);
-                          setMasteringSaved(false);
-                        }}
-                        className="px-2.5 py-1.5 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-lg text-[9px] font-mono font-bold text-zinc-400 hover:text-purple-300 transition-all uppercase"
-                      >
-                        60Hz Sub Boost
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEqLow(1.0);
-                          setEqMid(-3.5);
-                          setEqHigh(3.0);
-                          setMasteringSaved(false);
-                        }}
-                        className="px-2.5 py-1.5 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-lg text-[9px] font-mono font-bold text-zinc-400 hover:text-purple-300 transition-all uppercase"
-                      >
-                        2kHz Vocal Scoop
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEqLow(2.0);
-                          setEqMid(0.0);
-                          setEqHigh(6.5);
-                          setMasteringSaved(false);
-                        }}
-                        className="px-2.5 py-1.5 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-lg text-[9px] font-mono font-bold text-zinc-400 hover:text-purple-300 transition-all uppercase"
-                      >
-                        10kHz High Air
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* DYNAMICS COMPRESSOR SECTION */}
-                  <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-3xl space-y-5">
-                    <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
-                      <div className="space-y-0.5 text-left">
-                        <span className="text-[10px] font-mono font-black text-purple-300 uppercase tracking-widest block">SOLID STATE SCORING DYNAMICS</span>
-                        <h3 className="font-extrabold text-sm text-white uppercase">VCA MASTER COMPRESSOR</h3>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      {/* THRESHOLD */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold font-mono">
-                          <span className="text-zinc-400">Compression Threshold</span>
-                          <span className="text-purple-300">{compThreshold.toFixed(1)} dB</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-40"
-                          max="0"
-                          step="0.5"
-                          value={compThreshold}
-                          onChange={(e) => {
-                            setCompThreshold(parseFloat(e.target.value));
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                        />
-                      </div>
-
-                      {/* RATIO */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold font-mono">
-                          <span className="text-zinc-400">Compression Ratio</span>
-                          <span className="text-purple-300">{compRatio.toFixed(1)}:1</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="8"
-                          step="0.1"
-                          value={compRatio}
-                          onChange={(e) => {
-                            setCompRatio(parseFloat(e.target.value));
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                        />
-                      </div>
-
-                      {/* GAIN REDUCTION BAR (DYNAMIC SIMULATION) */}
-                      <div className="space-y-1.5 pt-2">
-                        <div className="flex justify-between text-[10px] font-mono font-black text-zinc-500 uppercase tracking-wider">
-                          <span>Simulated gain reduction</span>
-                          <span className="text-red-400">
-                            -{Math.max(0, (-compThreshold) * (compRatio - 1) * 0.05).toFixed(1)} dB
-                          </span>
-                        </div>
-                        <div className="h-2.5 bg-zinc-950 rounded-full overflow-hidden p-0.5 border border-zinc-800">
-                          <div
-                            className="h-full bg-gradient-to-r from-red-500 to-red-600 rounded-full transition-all duration-300"
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                Math.max(0, (-compThreshold) * (compRatio - 1) * 0.8)
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* PEAK LIMITER AND VOICE WATERMARKING SECTION */}
-                  <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-3xl space-y-4">
-                    <h3 className="font-extrabold text-sm text-white uppercase border-b border-zinc-850 pb-2">TRUE PEAK LIMITER & WATERMARK</h3>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Limiter Threshold (dB)</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="-20"
-                          max="0"
-                          value={limiterThreshold}
-                          onChange={(e) => {
-                            setLimiterThreshold(parseFloat(e.target.value) || 0);
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full bg-zinc-950 border border-zinc-850 rounded-xl p-2.5 text-xs text-white font-mono"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Watermark Tag Schedule (Seconds)</label>
-                        <input
-                          type="number"
-                          min="5"
-                          max="60"
-                          value={watermarkInterval}
-                          onChange={(e) => {
-                            setWatermarkInterval(parseInt(e.target.value) || 15);
-                            setMasteringSaved(false);
-                          }}
-                          className="w-full bg-zinc-950 border border-zinc-850 rounded-xl p-2.5 text-xs text-white font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Right Column: Dynamic SVG curve graph, DB meter display, compile CTA (col-span-5) */}
-                <div className="xl:col-span-5 bg-zinc-950 border border-zinc-900 rounded-3xl p-6 lg:sticky lg:top-24 space-y-6 shadow-2xl relative text-left">
-                  
-                  {/* SVG REAL-TIME EQ GRAPH PLOT */}
-                  <div className="space-y-3">
-                    <span className="text-[10px] font-mono font-black text-zinc-500 uppercase tracking-widest block">MASTER WAVE CURVE PLOT</span>
-                    
-                    <div className="rounded-2xl bg-black border border-zinc-900 p-4 aspect-[4/3] flex flex-col justify-between">
-                      {/* Graph Header coordinates */}
-                      <div className="flex justify-between text-[9px] font-mono text-zinc-600 font-bold border-b border-zinc-900 pb-1.5">
-                        <span>EQ CURVE: {eqLow > 0 ? '+' : ''}{eqLow.toFixed(1)} / {eqMid > 0 ? '+' : ''}{eqMid.toFixed(1)} / {eqHigh > 0 ? '+' : ''}{eqHigh.toFixed(1)} dB</span>
-                        <span className="text-purple-500 font-black animate-pulse">ACTIVE COEFFICIENTS</span>
-                      </div>
-
-                      {/* SVG Canvas Plot */}
-                      <div className="flex-1 relative flex items-center justify-center py-4">
-                        <svg viewBox="0 0 400 150" className="w-full h-full stroke-zinc-800 stroke-[0.5] fill-none">
-                          {/* Grid horizontal markers */}
-                          <line x1="0" y1="25" x2="400" y2="25" strokeDasharray="3 3" />
-                          <line x1="0" y1="75" x2="400" y2="75" strokeWidth="1" stroke="rgba(147,51,234,0.15)" />
-                          <line x1="0" y1="125" x2="400" y2="125" strokeDasharray="3 3" />
-
-                          {/* Grid vertical markers */}
-                          <line x1="100" y1="0" x2="100" y2="150" strokeDasharray="3 3" />
-                          <line x1="200" y1="0" x2="200" y2="150" strokeDasharray="3 3" />
-                          <line x1="300" y1="0" x2="300" y2="150" strokeDasharray="3 3" />
-
-                          {/* Dynamic Curve Path based on state - pure SVG math rendering! */}
-                          <path
-                            d={`M 0 75 Q 100 ${75 - eqLow * 5.5} 200 ${75 - eqMid * 5.5} T 400 ${75 - eqHigh * 5.5}`}
-                            stroke="url(#purpleGrad)"
-                            strokeWidth="3.5"
-                            className="transition-all duration-300"
-                          />
-
-                          {/* Glow filter definition */}
-                          <defs>
-                            <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#c084fc" />
-                              <stop offset="50%" stopColor="#a855f7" />
-                              <stop offset="100%" stopColor="#6366f1" />
-                            </linearGradient>
-                          </defs>
-
-                          {/* Interactive indicator nodes */}
-                          <circle cx="100" cy={75 - eqLow * 5.5} r="4.5" fill="#c084fc" className="transition-all duration-300" />
-                          <circle cx="200" cy={75 - eqMid * 5.5} r="4.5" fill="#a855f7" className="transition-all duration-300" />
-                          <circle cx="300" cy={75 - eqHigh * 5.5} r="4.5" fill="#6366f1" className="transition-all duration-300" />
-                        </svg>
-                      </div>
-
-                      {/* Frequency captions */}
-                      <div className="flex justify-between text-[9px] font-mono text-zinc-500 font-bold border-t border-zinc-900 pt-1.5 uppercase">
-                        <span>20Hz Sub</span>
-                        <span>250Hz Bass</span>
-                        <span>2.5kHz Mid</span>
-                        <span>15kHz Air</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* MASTER OUTPUT VERTICAL DB PEAK METERS */}
-                  <div className="p-4 bg-black border border-zinc-900 rounded-2xl space-y-2">
-                    <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">TRUE PEAK LEVEL MATRIX</span>
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Left Out channel */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[9px] font-mono text-zinc-500">
-                          <span>PEAK L</span>
-                          <span>-0.1 dB</span>
-                        </div>
-                        <div className="h-4 bg-zinc-950 border border-zinc-850 rounded-lg p-0.5 overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-emerald-500 via-yellow-500 to-red-500 rounded-md w-[96%]" />
-                        </div>
-                      </div>
-
-                      {/* Right Out channel */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[9px] font-mono text-zinc-500">
-                          <span>PEAK R</span>
-                          <span>-0.1 dB</span>
-                        </div>
-                        <div className="h-4 bg-zinc-950 border border-zinc-850 rounded-lg p-0.5 overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-emerald-500 via-yellow-500 to-red-500 rounded-md w-[95%]" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Save/Compile processing controls */}
-                  <div className="space-y-2 pt-2">
-                    <button
-                      type="button"
-                      disabled={masteringSaving}
-                      onClick={() => {
-                        setMasteringSaving(true);
-                        setTimeout(() => {
-                          setMasteringSaving(false);
-                          setMasteringSaved(true);
-                        }, 1200);
-                      }}
-                      className="w-full py-4 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      {masteringSaving ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-white rounded-full animate-spin" />
-                          <span>COMPILING COEFFICIENTS...</span>
-                        </>
-                      ) : (
-                        <span>COMPILE CONSOLE PROCESSING COEFFICIENTS</span>
-                      )}
-                    </button>
-                    <span className="text-[10px] font-mono text-zinc-500 leading-relaxed text-center block">
-                      Save compiles direct hardware coefficients into high-fidelity playback engine files.
-                    </span>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ==================== 3. MERCH AND BOUTIQUE KITS TAB ==================== */}
-          {activeTab === 'soundkits' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">MERCH & KITS BOUTIQUE</h2>
-                <p className="text-xs text-zinc-500">Configure standard physical merchandise details, stem kits, and trackout bundles.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {soundKits.map((sk) => (
-                  <div key={sk.id} className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-3xl flex items-center justify-between hover:border-purple-500/20 transition-all shadow-md text-left">
-                    <div className="flex items-center gap-4">
-                      <img src={sk.coverUrl} alt={sk.title} className="w-14 h-14 rounded-2xl object-cover shrink-0 border border-zinc-850 shadow" />
-                      <div>
-                        <h4 className="font-extrabold text-sm text-white uppercase">{sk.title}</h4>
-                        <span className="text-[10px] text-purple-300 font-mono">{sk.type}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-sm font-black text-white">${sk.price.toFixed(2)}</div>
-                      <span className="text-[10px] text-zinc-500 font-mono">0 sold</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Merch Placeholder panel with integrity notice */}
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-brand">ADD BOUTIQUE ITEM</h3>
-                <p className="text-xs text-zinc-500 leading-relaxed font-medium">
-                  Drop apparel and high-fidelity stem kits are strictly configured at the factory level to ensure integrated tap NFC stems match digital recordings correctly.
-                </p>
-                <div className="flex justify-end">
-                  <button disabled className="px-5 py-2.5 bg-zinc-850 text-zinc-500 border border-zinc-800 rounded-xl text-xs font-bold font-brand uppercase tracking-wider">
-                    Add New Merchant Item (Offline)
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ==================== 4. SERVICES TAB ==================== */}
-          {activeTab === 'services' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">BESPOKE STUDIO SERVICES</h2>
-                <p className="text-xs text-zinc-500">Add or deactivate custom engineering, sound design, and custom tracking bookings.</p>
-              </div>
-
-              <div className="space-y-4">
-                {services.map((srv) => (
-                  <div key={srv.id} className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-left shadow">
-                    <div className="space-y-1">
-                      <h4 className="font-black text-base text-white uppercase">{srv.title}</h4>
-                      <p className="text-xs text-zinc-400 font-medium leading-relaxed">{srv.description}</p>
-                      <span className="text-[10px] font-mono text-zinc-500 font-bold">Delivery: {srv.deliveryDays} Days</span>
-                    </div>
-                    <div className="font-mono text-base font-black text-purple-300 shrink-0">
-                      ${srv.price.toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ==================== 5. ORDERS & SALES TAB ==================== */}
-          {activeTab === 'sales' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">TRANSACTION ARCHIVE</h2>
-                <p className="text-xs text-zinc-500">Review verified checkout settlements, capture times, and customer details.</p>
+            {/* Recorded Sales Orders */}
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+                <h3 className="font-brand font-black text-sm text-white uppercase tracking-widest">RECORDED SALES ACTIVITY</h3>
+                <span className="text-[10px] font-mono text-zinc-500 font-bold">{salesRecords.length} ORDERS TOTAL</span>
               </div>
 
               {salesRecords.length > 0 ? (
                 <div className="space-y-3">
                   {salesRecords.map((sale) => (
-                    <div key={sale.id} className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div key={sale.id} className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-bold text-white flex items-center gap-2">
                           <span>{sale.beatTitle}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 font-mono border border-purple-500/20">
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 border border-purple-500/20 font-mono">
                             {sale.licenseType}
                           </span>
                         </div>
-                        <p className="text-[11px] text-zinc-400 mt-1">Ref: #{sale.orderId} · {sale.customerName} ({sale.customerEmail})</p>
+                        <div className="text-[11px] text-zinc-400 mt-0.5">{sale.customerEmail} · Order #{sale.orderId}</div>
                       </div>
-                      <div className="text-left sm:text-right shrink-0">
-                        <span className="font-mono text-sm font-black text-purple-300 block">${sale.amount.toFixed(2)}</span>
-                        <span className="text-[10px] text-zinc-500 font-mono">{sale.date}</span>
+                      <div className="text-right">
+                        <div className="text-xs font-mono font-bold text-purple-300">{currencySymbol}{sale.amount.toFixed(2)}</div>
+                        <div className="text-[10px] text-emerald-400 font-semibold">{sale.status}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-10 text-center bg-zinc-950/40 border border-zinc-800 rounded-2xl space-y-2">
+                <div className="p-10 text-center bg-zinc-900/40 border border-zinc-800/80 rounded-2xl space-y-2">
                   <AlertTriangle className="w-8 h-8 text-zinc-600 mx-auto" />
-                  <h4 className="font-brand font-black text-white text-xs tracking-wider">NO ORDERS YET</h4>
-                  <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed font-medium">
-                    No physical or digital sales orders have been registered. Launch promotions or share your beats catalog to trigger actions.
+                  <h4 className="font-brand font-black text-white text-xs tracking-wider uppercase">NO ORDERS RECORDED YET</h4>
+                  <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                    Your store is active and connected to direct escrow payment processing.
                   </p>
                 </div>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ==================== 6. DOWNLOADS & LEADS TAB ==================== */}
-          {activeTab === 'downloads' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-4">
-                <div>
-                  <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">ARTIST LEADS</h2>
-                  <p className="text-xs text-zinc-500">Every artist who requests a free tagged download is recorded for marketing.</p>
-                </div>
-                <button
-                  onClick={handleExportLeads}
-                  disabled={leads.length === 0}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Export CSV ({leads.length})</span>
-                </button>
+        {/* ==================== 2. STUDIO ANALYTICS TAB ==================== */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">STUDIO REPORTING & ANALYTICS</h2>
+                <p className="text-xs text-zinc-500">Real-time revenue monitoring, regional traffic, and listener activity.</p>
               </div>
-
-              {exportNotice && (
-                <div className="p-3 bg-emerald-950/40 border border-emerald-500/20 text-emerald-300 text-xs rounded-xl font-mono">
-                  ✓ Artist lead CSV directory exported successfully!
-                </div>
-              )}
-
-              {leads.length > 0 ? (
-                <div className="overflow-x-auto bg-zinc-950 border border-zinc-900 rounded-3xl">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-zinc-900 text-zinc-400 border-b border-zinc-800 uppercase font-semibold">
-                      <tr>
-                        <th className="p-4">Email</th>
-                        <th className="p-4">Beat Title</th>
-                        <th className="p-4">Captured Date</th>
-                        <th className="p-4">Country</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-900 text-zinc-300 font-mono">
-                      {leads.map((l) => (
-                        <tr key={l.id} className="hover:bg-zinc-900/40 transition-colors">
-                          <td className="p-4 font-bold text-purple-300">{l.email}</td>
-                          <td className="p-4 text-white font-sans font-semibold">{l.beatTitle}</td>
-                          <td className="p-4 text-zinc-500">{l.downloadDate}</td>
-                          <td className="p-4 text-zinc-400">{l.ipCountry || 'USA'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-10 text-center bg-zinc-950/40 border border-zinc-800 rounded-2xl space-y-2">
-                  <Download className="w-8 h-8 text-zinc-600 mx-auto" />
-                  <h4 className="font-brand font-black text-white text-xs tracking-wider">NO LEADS CAPTURED</h4>
-                  <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed font-medium">
-                    When artists request free tagged downloads on your public store, their emails will register here automatically.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ==================== 7. COUPON CAMPAIGNS TAB ==================== */}
-          {activeTab === 'promotions' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">COUPONS & CAMPAIGNS</h2>
-                <p className="text-xs text-zinc-500">Create discount campaigns and manage active promo codes.</p>
-              </div>
-
-              {/* Promo code list */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {promotions.map((promo) => (
-                  <div key={promo.id} className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-3xl flex justify-between items-center text-left">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-extrabold text-purple-300 uppercase tracking-widest">{promo.code}</span>
-                        <span className="text-[10px] bg-purple-950 text-purple-200 border border-purple-500/20 px-2 py-0.5 rounded font-mono font-bold">
-                          {promo.discountPercent}% OFF
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-400 font-medium">{promo.description}</p>
-                      <span className="text-[10px] text-zinc-500 font-mono">Expires: {promo.expirationDate}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleCopyCode(promo.code)}
-                        className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all"
-                        title="Copy Code"
-                      >
-                        {copiedCode === promo.code ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                      <button
-                        onClick={() => onDeletePromotion(promo.id)}
-                        className="p-2 bg-zinc-950 border border-zinc-850 hover:bg-red-950/40 rounded-xl text-zinc-500 hover:text-red-400 transition-all"
-                        title="Delete Campaign"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Create Code Form */}
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-brand">LAUNCH NEW CAMPAIGN</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Campaign Code</label>
-                    <input type="text" value={newPromoCode} onChange={(e) => setNewPromoCode(e.target.value)} placeholder="e.g. VIP30" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white uppercase font-mono" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Discount Percent (%)</label>
-                    <input type="number" value={newPromoDiscount} onChange={(e) => setNewPromoDiscount(parseInt(e.target.value) || 0)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Description</label>
-                    <input type="text" value={newPromoDesc} onChange={(e) => setNewPromoDesc(e.target.value)} placeholder="Summer Sale" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Expiration Date</label>
-                    <input type="date" value={newPromoExp} onChange={(e) => setNewPromoExp(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                  </div>
-                </div>
-                <div className="flex justify-end pt-2">
+              <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-1 gap-1">
+                {(['today', '7days', '30days', 'alltime'] as const).map((interval) => (
                   <button
-                    onClick={() => {
-                      if (newPromoCode) {
-                        onAddPromotion({
-                          id: `promo-${Date.now()}`,
-                          code: newPromoCode.toUpperCase().trim(),
-                          discountPercent: newPromoDiscount,
-                          active: true,
-                          usageCount: 0,
-                          expirationDate: newPromoExp,
-                          description: newPromoDesc || `${newPromoDiscount}% OFF Promotion`
-                        });
-                        setNewPromoCode('');
-                        setNewPromoDesc('');
-                      }
-                    }}
-                    className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer animate-pulse"
+                    key={interval}
+                    onClick={() => setTimeInterval(interval)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      timeInterval === interval ? 'bg-purple-600 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
                   >
-                    Publish Promo Code
+                    {interval === 'today' ? 'Today' : interval === '7days' ? '7 Days' : interval === '30days' ? '30 Days' : 'All-Time'}
                   </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ==================== 8. YOUTUBE VIDEO MANAGEMENT TAB ==================== */}
-          {activeTab === 'youtube_videos' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">YOUTUBE VIDEO VAULT</h2>
-                <p className="text-xs text-zinc-500">Embed and manage official music visuals and live studio scoring sessions on the homepage.</p>
-              </div>
-
-              {/* List current embedded videos */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {youtubeVideos.map((video) => (
-                  <div key={video.id} className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden flex flex-col justify-between">
-                    <div className="aspect-video relative bg-black border-b border-zinc-900">
-                      <iframe src={`https://www.youtube.com/embed/${video.youtubeId}`} title={video.title} className="w-full h-full absolute inset-0" allowFullScreen />
-                    </div>
-                    <div className="p-4 space-y-3 text-left">
-                      <div className="space-y-0.5">
-                        <span className="text-[9px] font-mono font-bold text-purple-400 bg-purple-950/40 border border-purple-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
-                          {video.category}
-                        </span>
-                        <h4 className="font-extrabold text-xs text-white truncate pt-1">{video.title}</h4>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteVideo(video.id)}
-                        className="w-full py-1.5 bg-zinc-900 hover:bg-red-950/30 text-zinc-400 hover:text-red-400 border border-zinc-850 hover:border-red-900/30 rounded-xl text-[10px] font-bold uppercase transition-all"
-                      >
-                        Delete Video
-                      </button>
-                    </div>
-                  </div>
                 ))}
               </div>
-
-              {/* Add New Video Form */}
-              <form onSubmit={handleAddVideo} className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-brand">EMBED NEW VIDEO</h3>
-                
-                {newVideoNotice && (
-                  <div className="p-3 bg-emerald-950/40 border border-emerald-500/20 text-emerald-300 text-xs rounded-xl font-mono">
-                    ✓ New visualizer published to storefront successfully!
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Video Title</label>
-                    <input required type="text" value={newVideoTitle} onChange={(e) => setNewVideoTitle(e.target.value)} placeholder="e.g. TOKYO NIGHTHAWK" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">YouTube Video ID</label>
-                    <input required type="text" value={newVideoId} onChange={(e) => setNewVideoId(e.target.value)} placeholder="e.g. dQw4w9WgXcQ" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Video Category</label>
-                    <select value={newVideoCategory} onChange={(e) => setNewVideoCategory(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white">
-                      <option value="OFFICIAL VISUALIZER">OFFICIAL VISUALIZER</option>
-                      <option value="STUDIO LIVE">STUDIO LIVE</option>
-                      <option value="EXECUTIVE SCORE Deep Dive">EXECUTIVE SCORE Deep Dive</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <div className="sm:col-span-3">
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Description</label>
-                    <input type="text" value={newVideoDesc} onChange={(e) => setNewVideoDesc(e.target.value)} placeholder="Brief companion text summary..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Duration</label>
-                    <input type="text" value={newVideoDuration} onChange={(e) => setNewVideoDuration(e.target.value)} placeholder="3:12" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button type="submit" className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow transition-all cursor-pointer">
-                    Embed Youtube Video
-                  </button>
-                </div>
-              </form>
             </div>
-          )}
 
-          {/* ==================== 9. PROFILE SETTINGS & LIVE PREVIEW TAB ==================== */}
-          {activeTab === 'profile_settings' && (
-            <div className="space-y-8 animate-fadeIn">
-              
-              <div className="border-b border-zinc-900 pb-4">
-                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">PROFILE MANAGEMENT</h2>
-                <p className="text-xs text-zinc-500">Configure global metadata parameters, editable public profile, and social links with real-time preview.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Gross Revenue</span>
+                <div className="text-2xl font-mono font-black text-white">{currencySymbol}{totalRevenue.toFixed(2)}</div>
+                <span className="text-[10px] text-emerald-400 font-bold">Verified Sales</span>
+              </div>
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Total Plays</span>
+                <div className="text-2xl font-mono font-black text-purple-300">{totalPlays}</div>
+                <span className="text-[10px] text-purple-400 font-bold">Streams Count</span>
+              </div>
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Total Downloads</span>
+                <div className="text-2xl font-mono font-black text-white">{totalDownloads}</div>
+                <span className="text-[10px] text-zinc-400 font-bold">Tagged Audios</span>
+              </div>
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Platform Fee Saved</span>
+                <div className="text-2xl font-mono font-black text-emerald-400">{currencySymbol}{(totalRevenue * 0.15).toFixed(2)}</div>
+                <span className="text-[10px] text-zinc-400 font-bold">0% Direct Payouts</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 3. BEATS CATALOG LIBRARY TAB ==================== */}
+        {activeTab === 'catalog' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">BEATS LIBRARY MANAGEMENT</h2>
+                <p className="text-xs text-zinc-500">Edit parameters, toggle visibility, assign featured status, or duplicate tracks.</p>
+              </div>
+              <button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Upload Beat Track</span>
+              </button>
+            </div>
+
+            {/* Catalog Search & Status Filters */}
+            <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-950 p-4 rounded-2xl border border-zinc-900">
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="Search library by title, genre, key, BPM..."
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl py-2 pl-9 pr-3 text-xs text-white focus:outline-none"
+                />
               </div>
 
-              {/* Save states notifications */}
-              {profileSaveState === 'saving' && (
-                <div className="p-4 bg-zinc-900 border border-zinc-800 text-yellow-400 text-xs font-mono font-bold rounded-xl animate-pulse flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 border-2 border-zinc-900 border-t-yellow-400 rounded-full animate-spin" />
-                  <span>SAVING PROFILE... Synchronizing authoritative database files...</span>
-                </div>
-              )}
-              {profileSaveState === 'saved' && (
-                <div className="p-4 bg-emerald-950/40 border border-emerald-500/20 text-emerald-300 text-xs font-mono font-bold rounded-xl flex items-center gap-2 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>SAVED successfully! Authoritative public profile updated in real-time.</span>
-                </div>
-              )}
-              {profileSaveState === 'error' && (
-                <div className="p-4 bg-red-950/40 border border-red-500/20 text-red-300 text-xs font-mono font-bold rounded-xl flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-400" />
-                  <span>ERROR: {profileErrorMsg || 'Saving profile failed. Settle transaction rejected.'}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                {(['ALL', 'PUBLISHED', 'DRAFT', 'UNPUBLISHED', 'FEATURED'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setCatalogStatusFilter(status)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      catalogStatusFilter === status
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              {/* Spacious 2-Column Split: Inputs Form Left + Live Preview Right */}
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-                
-                {/* Inputs Form taking xl:col-span-7 */}
-                <div className="xl:col-span-7 space-y-6 bg-zinc-900/40 border border-zinc-800 p-6 sm:p-8 rounded-3xl shadow-lg">
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-mono font-black text-purple-300 uppercase tracking-widest block border-b border-zinc-800 pb-2">BASIC PROFILE</h3>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Display Name</label>
-                        <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white" />
+            {/* Beats List */}
+            <div className="space-y-3">
+              {filteredCatalogBeats.map((beat) => (
+                <div
+                  key={beat.id}
+                  className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl flex flex-wrap items-center justify-between gap-4 hover:border-zinc-800 transition-all"
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <img
+                      src={beat.artworkUrl}
+                      alt={beat.title}
+                      className="w-12 h-12 rounded-xl object-cover border border-purple-500/20 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-sm text-white truncate">{beat.title}</h4>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                            beat.published !== false
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                          }`}
+                        >
+                          {beat.published !== false ? 'PUBLISHED' : 'DRAFT / UNPUBLISHED'}
+                        </span>
+                        {beat.featured && (
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 border border-purple-500/30 font-bold uppercase">
+                            FEATURED
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Display Tag / Handle</label>
-                        <input type="text" value={profileHandle} onChange={(e) => setProfileHandle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Avatar URL</label>
-                        <input type="text" value={profileAvatar} onChange={(e) => setProfileAvatar(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Banner Image URL</label>
-                        <input type="text" value={profileBanner} onChange={(e) => setProfileBanner(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Location Coordinates</label>
-                      <input type="text" value={profileLocation} onChange={(e) => setProfileLocation(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white" />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Public Bio Description</label>
-                      <textarea rows={4} value={profileBio} onChange={(e) => setProfileBio(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-medium leading-relaxed" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 pt-4 border-t border-zinc-800">
-                    <h3 className="text-xs font-mono font-black text-purple-300 uppercase tracking-widest block border-b border-zinc-800 pb-2">SOCIAL NETWORK PATHS</h3>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Instagram</label>
-                        <input type="text" value={socialInsta} onChange={(e) => setSocialInsta(e.target.value)} placeholder="https://instagram.com/..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">YouTube Channel</label>
-                        <input type="text" value={socialYoutube} onChange={(e) => setSocialYoutube(e.target.value)} placeholder="https://youtube.com/..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Spotify Artist URI</label>
-                        <input type="text" value={socialSpotify} onChange={(e) => setSocialSpotify(e.target.value)} placeholder="https://open.spotify.com/..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">TikTok Profile</label>
-                        <input type="text" value={socialTiktok} onChange={(e) => setSocialTiktok(e.target.value)} placeholder="https://tiktok.com/..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">SoundCloud</label>
-                        <input type="text" value={socialSoundcloud} onChange={(e) => setSocialSoundcloud(e.target.value)} placeholder="https://soundcloud.com/..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Apple Music</label>
-                        <input type="text" value={socialAppleMusic} onChange={(e) => setSocialAppleMusic(e.target.value)} placeholder="https://music.apple.com/..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
+                      <div className="text-xs text-zinc-400 font-mono mt-0.5">
+                        {beat.bpm} BPM · {beat.key} · {beat.genre} · MP3: {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex justify-end pt-4 border-t border-zinc-800/80">
+                  <div className="flex items-center gap-2 ml-auto">
                     <button
-                      type="button"
-                      onClick={handleSaveProfile}
-                      disabled={profileSaveState === 'saving'}
-                      className="px-8 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md cursor-pointer"
+                      onClick={() => startEditingBeat(beat)}
+                      className="p-2 text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      title="Edit Beat Parameters"
                     >
-                      Save Profile Settings
+                      <Edit2 className="w-3.5 h-3.5 text-purple-400" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </button>
+
+                    {onDuplicateBeat && (
+                      <button
+                        onClick={() => {
+                          onDuplicateBeat(beat.id);
+                          triggerSaveState(`Duplicated "${beat.title}"`);
+                        }}
+                        className="p-2 text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                        title="Duplicate Beat"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="hidden sm:inline">Duplicate</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        if (onUpdateBeat) {
+                          onUpdateBeat({ ...beat, published: beat.published === false });
+                          triggerSaveState(beat.published === false ? `Published "${beat.title}"` : `Unpublished "${beat.title}"`);
+                        }
+                      }}
+                      className={`p-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                        beat.published !== false
+                          ? 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                          : 'bg-purple-950 border-purple-500/40 text-purple-300'
+                      }`}
+                    >
+                      {beat.published !== false ? 'Unpublish' : 'Publish'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setConfirmModalData({
+                          isOpen: true,
+                          title: `Delete "${beat.title}"?`,
+                          message: 'Are you sure you want to delete this beat track? This action cannot be undone.',
+                          confirmLabel: 'Delete Beat Track',
+                          onConfirm: () => {
+                            onDeleteBeat(beat.id);
+                            setConfirmModalData((prev) => ({ ...prev, isOpen: false }));
+                            triggerSaveState(`Deleted "${beat.title}"`);
+                          },
+                        });
+                      }}
+                      className="p-2 text-zinc-500 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 rounded-xl transition-colors cursor-pointer"
+                      title="Delete Beat"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                {/* Live Preview Panel taking xl:col-span-5 */}
-                <div className="xl:col-span-5 bg-zinc-950 border border-zinc-900 rounded-3xl p-6 lg:sticky lg:top-24 space-y-5 shadow-2xl relative">
-                  <div className="absolute top-4 right-4 px-2 py-0.5 bg-purple-950 border border-purple-500/20 rounded font-mono text-[9px] text-purple-300 font-bold uppercase tracking-wider animate-pulse">
-                    Live Profile Preview
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <span className="text-[10px] font-mono font-black text-zinc-500 uppercase tracking-widest block text-left">PREVIEW CLIENT VIEW</span>
-                    
-                    {/* Simulated Phone Card Container */}
-                    <div className="rounded-2xl border border-zinc-850 bg-zinc-900/30 overflow-hidden shadow-xl text-left relative">
-                      {/* Simulated Banner */}
-                      <div className="h-28 bg-zinc-950 relative overflow-hidden">
-                        {profileBanner ? (
-                          <img src={profileBanner} alt="banner" className="w-full h-full object-cover filter brightness-50" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-tr from-purple-950 to-zinc-950 flex items-center justify-center text-zinc-800 font-mono text-[9px]">no banner loaded</div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent" />
+        {/* ==================== 4. BEAT PACKS TAB ==================== */}
+        {activeTab === 'beatpacks' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">BEAT PACK BUNDLE MANAGEMENT</h2>
+                <p className="text-xs text-zinc-500">Manage multi-audio stem packages and volume bundles.</p>
+              </div>
+              <button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow flex items-center gap-2 cursor-pointer"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>Upload Beat Pack ZIP</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {beatPacks.map((pack) => (
+                <div
+                  key={pack.id}
+                  className="p-5 bg-zinc-950 border border-zinc-900 rounded-3xl flex flex-wrap items-center justify-between gap-4"
+                >
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={pack.artworkUrl}
+                      alt={pack.name}
+                      className="w-16 h-16 rounded-2xl object-cover border border-purple-500/30 shrink-0"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-extrabold text-base text-white">{pack.name}</h3>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                            pack.published
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-400'
+                          }`}
+                        >
+                          {pack.published ? 'PUBLISHED' : 'DRAFT'}
+                        </span>
                       </div>
-
-                      {/* Simulated Avatar and Header */}
-                      <div className="p-4 -mt-10 flex items-end gap-3 z-10 relative">
-                        <div className="w-16 h-16 rounded-xl bg-zinc-950 border-2 border-zinc-900 overflow-hidden shrink-0 shadow-lg">
-                          {profileAvatar ? (
-                            <img src={profileAvatar} alt="avatar" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-700 bg-zinc-950"><User className="w-6 h-6" /></div>
-                          )}
-                        </div>
-                        <div className="min-w-0 pb-1">
-                          <h4 className="text-sm font-black text-white truncate uppercase tracking-tight leading-snug">{profileName}</h4>
-                          <span className="text-[9px] font-mono text-purple-300 tracking-wider truncate block">{profileHandle}</span>
-                        </div>
-                      </div>
-
-                      {/* Simulated Location & Bio Description */}
-                      <div className="p-4 pt-1 space-y-3">
-                        <div className="flex items-center gap-1 text-[10px] text-zinc-500 font-mono">
-                          <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                          <span>{profileLocation}</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 leading-relaxed font-medium line-clamp-3 pl-3 border-l border-purple-500/40 italic">
-                          {profileBio || 'Write your mysterious biography or tagline to see it render here.'}
-                        </p>
-
-                        {/* Live Social links list */}
-                        <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-800/60">
-                          {[
-                            { link: socialInsta, key: 'insta' },
-                            { link: socialYoutube, key: 'youtube' },
-                            { link: socialSpotify, key: 'spotify' },
-                            { link: socialTiktok, key: 'tiktok' },
-                            { link: socialSoundcloud, key: 'soundcloud' },
-                            { link: socialAppleMusic, key: 'apple' }
-                          ].map((item) => {
-                            if (!item.link || !item.link.startsWith('http')) return null;
-                            return (
-                              <div key={item.key} className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-850 text-purple-400 text-[9px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 scale-90">
-                                <span>{item.key}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      <p className="text-xs text-zinc-400 max-w-md mt-1">{pack.description}</p>
+                      <div className="font-mono text-xs text-purple-300 font-bold mt-2">
+                        Price: {currencySymbol}{pack.price.toFixed(2)} · {pack.beatIds?.length || 0} Included Tracks
                       </div>
                     </div>
                   </div>
-                </div>
 
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (onUpdateBeatPacks) {
+                          const updated = beatPacks.map((p) => (p.id === pack.id ? { ...p, published: !p.published } : p));
+                          onUpdateBeatPacks(updated);
+                          triggerSaveState(pack.published ? `Unpublished ${pack.name}` : `Published ${pack.name}`);
+                        }
+                      }}
+                      className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs rounded-xl border border-zinc-800 transition-colors cursor-pointer"
+                    >
+                      {pack.published ? 'Unpublish' : 'Publish'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setConfirmModalData({
+                          isOpen: true,
+                          title: `Delete Beat Pack "${pack.name}"?`,
+                          message: 'Are you sure you want to remove this beat pack archive?',
+                          confirmLabel: 'Delete Pack',
+                          onConfirm: () => {
+                            if (onUpdateBeatPacks) {
+                              onUpdateBeatPacks(beatPacks.filter((p) => p.id !== pack.id));
+                              triggerSaveState(`Deleted ${pack.name}`);
+                            }
+                            setConfirmModalData((prev) => ({ ...prev, isOpen: false }));
+                          },
+                        });
+                      }}
+                      className="p-2 text-zinc-500 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 rounded-xl transition-colors cursor-pointer"
+                      title="Delete Beat Pack"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 5. COLLECTIONS TAB ==================== */}
+        {activeTab === 'collections' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">REAL COLLECTIONS MANAGEMENT</h2>
+                <p className="text-xs text-zinc-500">Organize beats and beat packs into curated storefront collections.</p>
+              </div>
+              <button
+                onClick={() => setShowAddCollection(true)}
+                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Collection</span>
+              </button>
+            </div>
+
+            {/* Create Collection Drawer / Form */}
+            {showAddCollection && (
+              <div className="p-6 bg-zinc-950 border border-purple-500/30 rounded-3xl space-y-4 animate-fadeIn">
+                <h3 className="font-extrabold text-sm text-white uppercase">CREATE STOREFRONT COLLECTION</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={newColTitle}
+                    onChange={(e) => setNewColTitle(e.target.value)}
+                    placeholder="Collection Title (e.g. VELVET FASHION TRAP)"
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                  />
+                  <textarea
+                    rows={2}
+                    value={newColDesc}
+                    onChange={(e) => setNewColDesc(e.target.value)}
+                    placeholder="Collection Description..."
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!newColTitle.trim()) return;
+                        const newCol: BeatCollection = {
+                          id: `col-${Date.now()}`,
+                          title: newColTitle.trim(),
+                          description: newColDesc.trim() || 'Curated storefront beat collection.',
+                          artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
+                          beatIds: beats.slice(0, 3).map((b) => b.id),
+                          published: true,
+                        };
+                        setCollections([newCol, ...collections]);
+                        setNewColTitle('');
+                        setNewColDesc('');
+                        setShowAddCollection(false);
+                        triggerSaveState('Collection Created');
+                      }}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow cursor-pointer"
+                    >
+                      Save Collection
+                    </button>
+                    <button
+                      onClick={() => setShowAddCollection(false)}
+                      className="px-4 py-2 bg-zinc-900 text-zinc-400 font-bold text-xs rounded-xl"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {collections.map((col) => (
+                <div key={col.id} className="p-5 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+                  <div className="flex items-center gap-3">
+                    <img src={col.artworkUrl} alt={col.title} className="w-12 h-12 rounded-xl object-cover border border-purple-500/20" />
+                    <div>
+                      <h4 className="font-extrabold text-sm text-white">{col.title}</h4>
+                      <p className="text-xs text-zinc-400">{col.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-zinc-900 text-xs font-mono text-zinc-500">
+                    <span>{col.beatIds.length} Included Beats</span>
+                    <button
+                      onClick={() => {
+                        setCollections(collections.filter((c) => c.id !== col.id));
+                        triggerSaveState('Collection Removed');
+                      }}
+                      className="text-rose-400 hover:text-rose-300 font-bold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 6. AUDIO PLAYER & MASTERING TAB ==================== */}
+        {activeTab === 'mastering' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">AUDIO PLAYER & MASTERING PARAMETERS</h2>
+              <p className="text-xs text-zinc-500">Configure Web Audio DSP equalizer, dynamic limiting, and audition watermark intervals.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+                <h3 className="font-bold text-sm text-white uppercase">Studio Equalizer (3-Band)</h3>
+                <div className="space-y-3 text-xs font-mono">
+                  <div>
+                    <div className="flex justify-between text-zinc-400"><span>Low Shelf (80Hz):</span><span>{eqLow > 0 ? `+${eqLow}` : eqLow} dB</span></div>
+                    <input type="range" min="-6" max="6" step="0.5" value={eqLow} onChange={(e) => setEqLow(parseFloat(e.target.value))} className="w-full accent-purple-500" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-zinc-400"><span>Mid Parametric (1.2kHz):</span><span>{eqMid > 0 ? `+${eqMid}` : eqMid} dB</span></div>
+                    <input type="range" min="-6" max="6" step="0.5" value={eqMid} onChange={(e) => setEqMid(parseFloat(e.target.value))} className="w-full accent-purple-500" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-zinc-400"><span>High Air (10kHz):</span><span>{eqHigh > 0 ? `+${eqHigh}` : eqHigh} dB</span></div>
+                    <input type="range" min="-6" max="6" step="0.5" value={eqHigh} onChange={(e) => setEqHigh(parseFloat(e.target.value))} className="w-full accent-purple-500" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+                <h3 className="font-bold text-sm text-white uppercase">Audition Producer Tag Watermark</h3>
+                <div className="space-y-3 text-xs">
+                  <span className="text-zinc-400 block">Watermark Audio Tag Trigger Interval:</span>
+                  <div className="flex gap-2">
+                    {[10, 15, 30, 45].map((sec) => (
+                      <button
+                        key={sec}
+                        onClick={() => {
+                          setWatermarkInterval(sec);
+                          triggerSaveState(`Watermark Interval set to ${sec}s`);
+                        }}
+                        className={`px-3 py-2 rounded-xl font-mono font-bold cursor-pointer ${
+                          watermarkInterval === sec ? 'bg-purple-600 text-white' : 'bg-zinc-900 text-zinc-400'
+                        }`}
+                      >
+                        Every {sec}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ==================== 10. GLOBAL STORE SETTINGS TAB ==================== */}
-          {activeTab === 'settings' && (
-            <div className="max-w-2xl bg-zinc-900/60 border border-zinc-800 p-6 sm:p-8 rounded-3xl space-y-5 animate-fadeIn">
+        {/* ==================== 7. COMMERCE: SALES & ORDERS ==================== */}
+        {activeTab === 'sales' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex justify-between items-center border-b border-zinc-900 pb-4">
               <div>
-                <h3 className="font-brand font-black text-lg text-white uppercase tracking-tight">Store Identity & Preferences</h3>
-                <p className="text-xs text-zinc-500">Configure global storefront branding and voice tag parameters.</p>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">CONFIRMED SALES ORDERS</h2>
+                <p className="text-xs text-zinc-500">Real completed transactions and escrow settlement logs.</p>
               </div>
+              <button onClick={handleExportBuyersCSV} className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs rounded-xl border border-zinc-800 flex items-center gap-2 cursor-pointer">
+                <FileSpreadsheet className="w-4 h-4 text-purple-400" />
+                <span>Export Buyer CSV</span>
+              </button>
+            </div>
 
-              <div className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-semibold uppercase text-[10px]">Store Public Name</label>
-                  <input type="text" defaultValue={settings.storeName} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:border-purple-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-semibold uppercase text-[10px]">Custom Store Domain</label>
-                  <input type="text" defaultValue={settings.customDomain} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white font-mono focus:border-purple-500 outline-none" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-3">
+              {salesRecords.map((r) => (
+                <div key={r.id} className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl flex justify-between items-center text-xs">
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-semibold uppercase text-[10px]">Currency Symbol</label>
-                    <input type="text" defaultValue={settings.currencySymbol} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white font-mono focus:border-purple-500 outline-none" />
+                    <h4 className="font-bold text-white">{r.beatTitle} ({r.licenseType})</h4>
+                    <span className="text-zinc-400 font-mono">{r.customerName} · {r.customerEmail} · Order #{r.orderId}</span>
                   </div>
-                  <div>
-                    <label className="block text-zinc-400 mb-1 font-semibold uppercase text-[10px]">Voice Tag Frequency (Secs)</label>
-                    <input type="number" defaultValue={settings.voiceTagFrequencySeconds} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white font-mono focus:border-purple-500 outline-none" />
+                  <div className="text-right font-mono font-bold">
+                    <div className="text-purple-300">{currencySymbol}{r.amount.toFixed(2)}</div>
+                    <div className="text-emerald-400 text-[10px]">{r.status}</div>
                   </div>
                 </div>
-                <div className="pt-2 flex justify-end">
-                  <button className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer">
-                    Save Store Preferences
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 8. COMMERCE: ARTIST LEADS ==================== */}
+        {activeTab === 'downloads' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex justify-between items-center border-b border-zinc-900 pb-4">
+              <div>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">ARTIST LEADS CAPTURED</h2>
+                <p className="text-xs text-zinc-500">Verified email addresses acquired from free download requests.</p>
+              </div>
+              <button onClick={handleExportLeads} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl shadow flex items-center gap-2 cursor-pointer">
+                <Download className="w-4 h-4" />
+                <span>Export Leads CSV</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {leads.map((l) => (
+                <div key={l.id} className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl flex justify-between items-center text-xs">
+                  <div>
+                    <h4 className="font-bold text-white">{l.email}</h4>
+                    <span className="text-zinc-400 font-mono">Downloaded: {l.beatTitle} · {l.downloadDate}</span>
+                  </div>
+                  <span className="font-mono text-purple-300 font-bold">{l.ipCountry}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 9. COMMERCE: CUSTOMER CRM ==================== */}
+        {activeTab === 'crm' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">CUSTOMER CRM INBOX</h2>
+              <p className="text-xs text-zinc-500">Direct artist communication and license negotiation inbox.</p>
+            </div>
+
+            <div className="space-y-4">
+              {inboxMessages.map((msg) => (
+                <div key={msg.id} className="p-5 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-white text-sm">{msg.subject}</h4>
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 font-mono font-bold uppercase">{msg.type}</span>
+                  </div>
+                  <p className="text-xs text-zinc-400">{msg.customerName} ({msg.customerEmail}) · {msg.date}</p>
+                  <div className="space-y-2 pt-2 border-t border-zinc-900">
+                    {msg.messages.map((m, idx) => (
+                      <div key={idx} className={`p-3 rounded-xl text-xs ${m.sender === 'producer' ? 'bg-purple-950/40 text-purple-200 ml-6' : 'bg-zinc-900 text-zinc-300'}`}>
+                        {m.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 10. COMMERCE: COUPON CAMPAIGNS ==================== */}
+        {activeTab === 'promotions' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">COUPON CAMPAIGNS & PROMOTIONS</h2>
+              <p className="text-xs text-zinc-500">Configure promotional discount codes for checkout.</p>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <h3 className="font-extrabold text-sm text-white uppercase">ADD NEW PROMO CODE</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input type="text" value={newPromoCode} onChange={(e) => setNewPromoCode(e.target.value)} placeholder="PROMO CODE (e.g. VIP50)" className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white uppercase font-mono" />
+                <input type="number" value={newPromoDiscount} onChange={(e) => setNewPromoDiscount(parseFloat(e.target.value))} placeholder="Discount %" className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+                <button
+                  onClick={() => {
+                    if (!newPromoCode.trim()) return;
+                    onAddPromotion({
+                      id: `promo-${Date.now()}`,
+                      code: newPromoCode.toUpperCase().trim(),
+                      discountPercent: newPromoDiscount,
+                      description: 'Custom promotional discount.',
+                      expirationDate: newPromoExp,
+                      active: true,
+                      usageCount: 0,
+                    });
+                    setNewPromoCode('');
+                    triggerSaveState('Promotion Code Created');
+                  }}
+                  className="py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow cursor-pointer"
+                >
+                  Create Code
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {promotions.map((p) => (
+                <div key={p.id} className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-mono font-bold text-purple-300 text-sm">{p.code}</span>
+                    <span className="text-zinc-400 block">{p.discountPercent}% Discount · Expires {p.expirationDate}</span>
+                  </div>
+                  <button onClick={() => onDeletePromotion(p.id)} className="text-rose-400 hover:text-rose-300 font-bold">Delete</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 11. COMMERCE: BESPOKE SERVICES ==================== */}
+        {activeTab === 'services' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">BESPOKE SERVICES & FREELANCE INTAKE</h2>
+              <p className="text-xs text-zinc-500">Custom beat production, mixing, and mastering service tiers.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {services.map((srv) => (
+                <div key={srv.id} className="p-5 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-white text-sm">{srv.title}</h4>
+                    <span className="font-mono text-purple-300 font-bold">{currencySymbol}{srv.price.toFixed(2)}</span>
+                  </div>
+                  <p className="text-xs text-zinc-400">{srv.description}</p>
+                  <div className="text-[10px] font-mono text-zinc-500 pt-2 border-t border-zinc-900">
+                    Delivery Time: {srv.deliveryDays} Business Days
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 12. STOREFRONT: FEATURED CONTENT ==================== */}
+        {activeTab === 'featured_content' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">FEATURED CONTENT & STOREFRONT PRESENTATION</h2>
+              <p className="text-xs text-zinc-500">Select spotlight releases and pin beats to top storefront positions.</p>
+            </div>
+
+            <div className="space-y-3">
+              {beats.map((beat) => (
+                <div key={beat.id} className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-3">
+                    <img src={beat.artworkUrl} alt={beat.title} className="w-10 h-10 rounded-xl object-cover" />
+                    <div>
+                      <h4 className="font-bold text-white">{beat.title}</h4>
+                      <span className="text-zinc-400 font-mono">{beat.bpm} BPM · {beat.key}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (onUpdateBeat) {
+                        onUpdateBeat({ ...beat, featured: !beat.featured });
+                        triggerSaveState(beat.featured ? `Unpinned ${beat.title}` : `Pinned ${beat.title} to Featured Spotlight`);
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                      beat.featured ? 'bg-purple-600 text-white shadow' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {beat.featured ? 'Featured Spotlight' : 'Pin to Spotlight'}
                   </button>
                 </div>
-              </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ==================== 11. PAYMENT SETTINGS & INTEGRATIONS TAB ==================== */}
-          {activeTab === 'integrations' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="bg-zinc-900/60 p-5 rounded-3xl border border-zinc-800">
-                <h3 className="font-brand font-black text-lg text-white uppercase tracking-tight">Payment & Distribution Integrations</h3>
-                <p className="text-xs text-zinc-500">Direct secure integrations for instant bank payouts and automated lead directories.</p>
+        {/* ==================== 13. STOREFRONT: YOUTUBE VIDEOS ==================== */}
+        {activeTab === 'youtube_videos' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">YOUTUBE VIDEOS EMBEDDING</h2>
+              <p className="text-xs text-zinc-500">Embed studio visualizers and beat videos onto public store page.</p>
+            </div>
+
+            <form onSubmit={handleAddVideo} className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <h3 className="font-extrabold text-sm text-white uppercase">EMBED NEW YOUTUBE VIDEO</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="text" value={newVideoTitle} onChange={(e) => setNewVideoTitle(e.target.value)} placeholder="Video Title" className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white" />
+                <input type="text" value={newVideoId} onChange={(e) => setNewVideoId(e.target.value)} placeholder="YouTube Video ID (e.g. dQw4w9WgXcQ)" className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+              </div>
+              <button type="submit" className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow cursor-pointer">
+                Embed Video
+              </button>
+            </form>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {youtubeVideos.map((v) => (
+                <div key={v.id} className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-2">
+                  <h4 className="font-bold text-white text-xs">{v.title}</h4>
+                  <p className="text-[11px] text-zinc-400 font-mono">ID: {v.youtubeId} · Category: {v.category}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 14. PROFILE: PUBLIC PROFILE ==================== */}
+        {activeTab === 'profile_settings' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">PUBLIC PRODUCER PROFILE SETTINGS</h2>
+              <p className="text-xs text-zinc-500">Manage display branding, cover banners, bio description, and social media channels.</p>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 block mb-1">Producer Brand Name</label>
+                  <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 block mb-1">Handle / Username</label>
+                  <input type="text" value={profileHandle} onChange={(e) => setProfileHandle(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-zinc-400 block mb-1">Bio Description</label>
+                <textarea rows={3} value={profileBio} onChange={(e) => setProfileBio(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white" />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { name: 'Stripe Payments Gateway', desc: 'Direct credit/debit card checkout processing', status: 'Connected', active: true },
-                  { name: 'PayPal Commerce Gateway', desc: 'Instant PayPal Smart Buttons checkout connection', status: 'Connected', active: true },
-                  { name: 'YouTube Content ID Sync', desc: 'Automated copyright protection for upload audio', status: 'Active Protection', active: true },
-                  { name: 'Mailchimp Sync', desc: 'Auto-sync captured free download email leads', status: 'Active Sync', active: true },
-                ].map((item, idx) => (
-                  <div key={idx} className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-2xl flex items-center justify-between hover:border-purple-500/20 transition-all text-left group">
-                    <div className="space-y-1">
-                      <div className="font-extrabold text-sm text-white group-hover:text-purple-300 transition-colors">{item.name}</div>
-                      <div className="text-[11px] text-zinc-400">{item.desc}</div>
-                      <div className="text-[10px] text-emerald-400 font-black uppercase pt-1.5 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                        <span>{item.status}</span>
-                      </div>
-                    </div>
-                    <Zap className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform shrink-0" />
-                  </div>
-                ))}
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 block mb-1">Instagram Handle</label>
+                  <input type="text" value={socialInsta} onChange={(e) => setSocialInsta(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 block mb-1">YouTube Channel URL</label>
+                  <input type="text" value={socialYoutube} onChange={(e) => setSocialYoutube(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white" />
+                </div>
+              </div>
+
+              <button onClick={handleSaveProfile} className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer">
+                Save Profile Settings
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 15. SETTINGS: STORE CONFIGURATION ==================== */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">STOREFRONT CONFIGURATION SETTINGS</h2>
+              <p className="text-xs text-zinc-500">Store title, currency symbols, and invoice defaults.</p>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 block mb-1">Store Name</label>
+                  <input type="text" value={settings.storeName} readOnly className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 block mb-1">Currency Symbol</label>
+                  <input type="text" value={settings.currencySymbol} readOnly className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+                </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-        </main>
-      </div>
+        {/* ==================== 16. SETTINGS: PAYMENT INTEGRATIONS ==================== */}
+        {activeTab === 'integrations' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">DIRECT ESCROW PAYMENT GATEWAYS</h2>
+              <p className="text-xs text-zinc-500">Connect Stripe and PayPal account credentials for automated payouts.</p>
+            </div>
 
-      {/* Upload File Modal (7-Step Wizard) */}
-      <UploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onPublishBeat={(newBeat) => {
-          if (onPublishBeat) onPublishBeat(newBeat);
-        }}
-        currencySymbol={currencySymbol}
-      />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-extrabold text-sm text-white">Stripe Express Payouts</h4>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 font-bold">CONNECTED</span>
+                </div>
+                <p className="text-xs text-zinc-400">Accept Credit Cards, Apple Pay, and Google Pay with zero extra platform fees.</p>
+              </div>
 
-      {/* Edit Beat parameters modal */}
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-extrabold text-sm text-white">PayPal Business API</h4>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 font-bold">CONNECTED</span>
+                </div>
+                <p className="text-xs text-zinc-400">Instant client payouts and buyer protection for international beat licensing.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 17. SETTINGS: LEGAL CONTRACTS ==================== */}
+        {activeTab === 'legal_services' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">LEGAL CONTRACTS & LICENSE AGREEMENTS</h2>
+              <p className="text-xs text-zinc-500">Automated licensing contracts delivered to buyers upon checkout.</p>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+              <h4 className="font-extrabold text-sm text-white">Standard MP3 & Premium Lease Contract</h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Non-exclusive licensing agreement granting buyer non-exclusive rights for commercial distribution on streaming platforms.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 18. SETTINGS: SPLITS & COPYRIGHT ==================== */}
+        {activeTab === 'splits_copyright' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">SPLITS & COPYRIGHT MANAGEMENT</h2>
+              <p className="text-xs text-zinc-500">PRO affiliations, Content ID protection, and multi-producer royalty splits.</p>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="font-extrabold text-sm text-white">YouTube Content ID Protection</h4>
+                <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 font-bold">ACTIVE</span>
+              </div>
+              <p className="text-xs text-zinc-400">Automated copyright claim detection protecting your instrumental compositions.</p>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 19. SETTINGS: MARKETING & SECURITY ==================== */}
+        {activeTab === 'marketing_security' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="border-b border-zinc-900 pb-4">
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">MARKETING PIXELS & SECURITY BLOCKS</h2>
+              <p className="text-xs text-zinc-500">Tracking pixel injection and automated transaction screening filters.</p>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <div>
+                <label className="text-xs font-bold text-zinc-400 block mb-1">Google Analytics Measurement ID (G-ID)</label>
+                <input type="text" value={googleAnalyticsId} onChange={(e) => setGoogleAnalyticsId(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-400 block mb-1">Meta (Facebook) Pixel ID</label>
+                <input type="text" value={metaPixelId} onChange={(e) => setMetaPixelId(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-400 block mb-1">TikTok Pixel ID</label>
+                <input type="text" value={tikTokPixelId} onChange={(e) => setTikTokPixelId(e.target.value)} className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono" />
+              </div>
+              <button onClick={() => triggerSaveState('Tracking Pixels Updated')} className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer">
+                Save Tracking Pixels
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Upload Modal Overlay */}
+      {isUploadModalOpen && (
+        <UploadModal
+          isOpen={isUploadModalOpen}
+          onClose={() => setIsUploadModalOpen(false)}
+          onPublishBeat={(newBeat) => {
+            if (onPublishBeat) onPublishBeat(newBeat);
+            setIsUploadModalOpen(false);
+            triggerSaveState(`Published new beat "${newBeat.title}"`);
+          }}
+          currencySymbol={currencySymbol}
+        />
+      )}
+
+      {/* Reusable Destructive Action Confirmation Modal */}
+      {confirmModalData.isOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-zinc-950 border border-rose-500/30 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+            <div className="flex items-center gap-2 text-rose-400">
+              <AlertTriangle className="w-5 h-5" />
+              <h3 className="font-extrabold text-white text-base">{confirmModalData.title}</h3>
+            </div>
+            <p className="text-xs text-zinc-300 leading-relaxed font-medium">{confirmModalData.message}</p>
+            <div className="pt-2 flex gap-3">
+              <button
+                onClick={confirmModalData.onConfirm}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer"
+              >
+                {confirmModalData.confirmLabel}
+              </button>
+              <button
+                onClick={() => setConfirmModalData((prev) => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2.5 bg-zinc-900 text-zinc-400 font-bold text-xs rounded-xl hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Beat Parameters Modal Overlay */}
       {editingBeat && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-zinc-950/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fadeIn text-left">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-base font-black text-white uppercase tracking-wider font-brand">EDIT INSTRUMENTAL</h3>
-              <button onClick={() => setEditingBeat(null)} className="p-1 text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+            <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+              <h3 className="font-brand font-black text-sm text-white uppercase tracking-wider">EDIT BEAT PARAMETERS</h3>
+              <button onClick={() => setEditingBeat(null)} className="text-zinc-500 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="space-y-4 text-xs">
+            <div className="space-y-3">
               <div>
-                <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Beat Title</label>
-                <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white" />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">BPM</label>
-                  <input type="number" value={editBpm} onChange={(e) => setEditBpm(parseInt(e.target.value) || 0)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Scale Key</label>
-                  <input type="text" value={editKey} onChange={(e) => setEditKey(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Genre</label>
-                  <select value={editGenre} onChange={(e) => setEditGenre(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white">
-                    <option value="TRAP">TRAP</option>
-                    <option value="FREESTYLE TRAP">FREESTYLE TRAP</option>
-                    <option value="DARK SYNTH">DARK SYNTH</option>
-                    <option value="HARD TRAP">HARD TRAP</option>
-                    <option value="DRILL">DRILL</option>
-                    <option value="HYPER TRAP">HYPER TRAP</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Standard Lease Price ($)</label>
-                  <input type="number" value={editPriceVal} onChange={(e) => setEditPriceVal(parseFloat(e.target.value) || 0)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Unlimited Price ($)</label>
-                  <input type="number" value={editUnlimitedPrice} onChange={(e) => setEditUnlimitedPrice(parseFloat(e.target.value) || 0)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono" />
+                <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Beat Artwork</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden border border-zinc-800 shrink-0 bg-zinc-900">
+                    <img src={editArtworkUrl || '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg'} alt="Artwork" className="w-full h-full object-cover" />
+                  </div>
+                  <input
+                    type="file"
+                    id="editBeatDeviceArtworkInput"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          if (ev.target?.result) {
+                            setEditArtworkUrl(ev.target.result as string);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="editBeatDeviceArtworkInput"
+                    className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs text-center rounded-xl cursor-pointer transition-all shadow flex items-center justify-center gap-1.5"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>Upload Device Image</span>
+                  </label>
                 </div>
               </div>
 
-              {/* Artwork selection with presets */}
-              <div>
-                <label className="block text-[10px] text-zinc-500 mb-1 font-bold uppercase">Artwork Image Source</label>
-                <input type="text" value={editArtworkUrl} onChange={(e) => setEditArtworkUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white font-mono mb-2" />
-                <div className="flex gap-2">
-                  {artworkPresets.map((img) => (
-                    <button
-                      key={img}
-                      onClick={() => setEditArtworkUrl(img)}
-                      className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 ${
-                        editArtworkUrl === img ? 'border-purple-500' : 'border-transparent'
-                      }`}
-                    >
-                      <img src={img} alt="preset" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">BPM Tempo</label>
+                  <input
+                    type="number"
+                    value={editBpm}
+                    onChange={(e) => setEditBpm(parseInt(e.target.value) || 140)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Key Scale</label>
+                  <input
+                    type="text"
+                    value={editKey}
+                    onChange={(e) => setEditKey(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <label className="flex items-center gap-2 font-bold text-zinc-400 cursor-pointer">
-                  <input type="checkbox" checked={editFeatured} onChange={(e) => setEditFeatured(e.target.checked)} className="rounded bg-zinc-950 border-zinc-800 text-purple-600 focus:ring-0" />
-                  <span>Spotlight Featured</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">MP3 Lease ($)</label>
+                  <input
+                    type="number"
+                    value={editPriceVal}
+                    onChange={(e) => setEditPriceVal(parseFloat(e.target.value) || 29.99)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Unlimited Lease ($)</label>
+                  <input
+                    type="number"
+                    value={editUnlimitedPrice}
+                    onChange={(e) => setEditUnlimitedPrice(parseFloat(e.target.value) || 199.99)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-2 text-xs text-zinc-300 font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editFeatured}
+                    onChange={(e) => setEditFeatured(e.target.checked)}
+                    className="accent-purple-600 rounded"
+                  />
+                  <span>Pin to Featured Spotlight</span>
                 </label>
-                <label className="flex items-center gap-2 font-bold text-zinc-400 cursor-pointer">
-                  <input type="checkbox" checked={editPublished} onChange={(e) => setEditPublished(e.target.checked)} className="rounded bg-zinc-950 border-zinc-800 text-purple-600 focus:ring-0" />
-                  <span>Published Publicly</span>
+
+                <label className="flex items-center gap-2 text-xs text-zinc-300 font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editPublished}
+                    onChange={(e) => setEditPublished(e.target.checked)}
+                    className="accent-purple-600 rounded"
+                  />
+                  <span>Published on Storefront</span>
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-zinc-800 pt-4">
-              <button onClick={() => setEditingBeat(null)} className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold font-brand uppercase tracking-wider">Cancel</button>
-              <button onClick={saveEditedBeat} className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-purple-950">Save Changes</button>
+            <div className="pt-2 flex gap-3">
+              <button
+                onClick={saveEditedBeat}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => setEditingBeat(null)}
+                className="px-4 py-2.5 bg-zinc-900 text-zinc-400 font-bold text-xs rounded-xl hover:text-white"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

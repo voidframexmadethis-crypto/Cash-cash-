@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Menu, X, Sparkles, User, Volume2, Search, Music } from 'lucide-react';
+import { ShoppingBag, Menu, X, Sparkles, User, Volume2, Search, Music, Plus } from 'lucide-react';
 import { CartItem } from '../types';
 
 interface HeaderProps {
@@ -8,6 +8,7 @@ interface HeaderProps {
   cart: CartItem[];
   setIsCartOpen: (open: boolean) => void;
   currencySymbol: string;
+  onOpenAudioPlayer?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   cart,
   setIsCartOpen,
   currencySymbol,
+  onOpenAudioPlayer,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -118,10 +120,22 @@ export const Header: React.FC<HeaderProps> = ({
           >
             SEARCH BY SOUND
           </button>
+          <button
+            onClick={() => {
+              if (onOpenAudioPlayer) {
+                onOpenAudioPlayer();
+              }
+            }}
+            className="hover:text-white transition-colors py-1 text-purple-300 font-extrabold flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-950/60 border border-purple-500/30 hover:border-purple-400/60 shadow-sm"
+            title="Open Audio Player"
+          >
+            <Volume2 className="w-3.5 h-3.5 text-purple-400" />
+            <span>AUDIO PLAYER</span>
+          </button>
         </nav>
 
-        {/* Right Area: Search, Cart, Profile, Studio */}
-        <div className="hidden md:flex items-center gap-4">
+        {/* Right Area: Search, Cart, Upload Hub, Profile, Studio */}
+        <div className="hidden md:flex items-center gap-3">
           {/* Quick Search */}
           <button
             onClick={() => setCurrentView('browse')}
@@ -145,17 +159,31 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
+          {/* Upload Hub Button */}
+          <button
+            onClick={() => setCurrentView('uploader')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 border ${
+              currentView === 'uploader'
+                ? 'bg-purple-950 text-purple-200 border-purple-400 ring-1 ring-purple-400/40'
+                : 'bg-zinc-900/80 hover:bg-zinc-850 text-zinc-300 border-zinc-800'
+            }`}
+            title="Open Upload Hub"
+          >
+            <Plus className="w-3.5 h-3.5 text-purple-400" />
+            <span>Upload</span>
+          </button>
+
           {/* Profile User Button */}
           <button
             onClick={() => setCurrentView('profile')}
-            className={`flex items-center gap-2 pl-3 border-l border-zinc-800 text-xs font-semibold transition-colors group ${
+            className={`flex items-center gap-2 pl-2.5 border-l border-zinc-800 text-xs font-semibold transition-colors group ${
               currentView === 'profile' ? 'text-purple-300 font-bold' : 'text-zinc-300 hover:text-white'
             }`}
           >
             <div className="w-7 h-7 rounded-full bg-purple-950 border border-purple-500/40 flex items-center justify-center text-purple-300 group-hover:border-purple-400">
               <User className="w-3.5 h-3.5" />
             </div>
-            <span className="hidden xl:inline">Cashmere Kid$</span>
+            <span className="hidden xl:inline">Profile</span>
           </button>
 
           {/* Studio Dashboard Button */}
@@ -246,6 +274,18 @@ export const Header: React.FC<HeaderProps> = ({
             className={`block w-full text-left py-2.5 ${currentView === 'search-by-sound' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
             SEARCH BY SOUND
+          </button>
+          <button
+            onClick={() => {
+              if (onOpenAudioPlayer) {
+                onOpenAudioPlayer();
+              }
+              setMobileMenuOpen(false);
+            }}
+            className="block w-full text-left py-2.5 text-purple-300 font-extrabold flex items-center gap-2 hover:text-white"
+          >
+            <Volume2 className="w-4 h-4 text-purple-400" />
+            <span>AUDIO PLAYER</span>
           </button>
           <button
             onClick={() => { setCurrentView('profile'); setMobileMenuOpen(false); }}

@@ -127,11 +127,22 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_BEAT_PACKS;
   });
 
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('voodoo_favorites');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('voodoo_recently_viewed');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Audio Playback State
   const [currentBeat, setCurrentBeat] = useState<Beat | null>(() => beats[0] || null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
   // Modals & Drawers State
+  const [audioPlayerExpandTrigger, setAudioPlayerExpandTrigger] = useState<number>(0);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [selectedBuyBeat, setSelectedBuyBeat] = useState<Beat | null>(null);
   const [selectedFreeBeat, setSelectedFreeBeat] = useState<Beat | null>(null);
@@ -171,6 +182,28 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('voodoo_beat_packs', JSON.stringify(beatPacks));
   }, [beatPacks]);
+
+  useEffect(() => {
+    localStorage.setItem('voodoo_favorites', JSON.stringify(favoriteIds));
+  }, [favoriteIds]);
+
+  useEffect(() => {
+    localStorage.setItem('voodoo_recently_viewed', JSON.stringify(recentlyViewedIds));
+  }, [recentlyViewedIds]);
+
+  const handleToggleFavorite = (beat: Beat) => {
+    setFavoriteIds((prev) =>
+      prev.includes(beat.id) ? prev.filter((id) => id !== beat.id) : [...prev, beat.id]
+    );
+  };
+
+  const handleViewDetailWithHistory = (beat: Beat) => {
+    setSelectedDetailBeat(beat);
+    setRecentlyViewedIds((prev) => {
+      const filtered = prev.filter((id) => id !== beat.id);
+      return [beat.id, ...filtered].slice(0, 10);
+    });
+  };
 
   // Deep-linking parsing on mount
   useEffect(() => {
@@ -418,6 +451,7 @@ export default function App() {
   };
 
   const publishedBeats = beats.filter((b) => b.published !== false);
+  const recentlyViewedBeats = publishedBeats.filter((b) => recentlyViewedIds.includes(b.id));
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
@@ -428,6 +462,7 @@ export default function App() {
         cart={cart}
         setIsCartOpen={setIsCartOpen}
         currencySymbol={settings.currencySymbol}
+        onOpenAudioPlayer={() => setAudioPlayerExpandTrigger((prev) => prev + 1)}
       />
 
       {/* Main View Container */}
@@ -443,10 +478,15 @@ export default function App() {
             onBuyClick={(beat) => setSelectedBuyBeat(beat)}
             onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
             onShareClick={(beat) => setSelectedShareBeat(beat)}
-            onViewDetail={(beat) => setSelectedDetailBeat(beat)}
+            onViewDetail={handleViewDetailWithHistory}
             onNavigate={handleNavigateWithGenre}
             currencySymbol={settings.currencySymbol}
             youtubeVideos={youtubeVideos}
+            onAddMerchToCart={handleAddMerchToCart}
+            onAddBeatPackToCart={handleAddBeatPackToCart}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            recentlyViewedBeats={recentlyViewedBeats}
           />
         )}
 
@@ -459,9 +499,11 @@ export default function App() {
             onBuyClick={(beat) => setSelectedBuyBeat(beat)}
             onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
             onShareClick={(beat) => setSelectedShareBeat(beat)}
-            onViewDetail={(beat) => setSelectedDetailBeat(beat)}
+            onViewDetail={handleViewDetailWithHistory}
             initialGenreFilter={initialGenreFilter}
             currencySymbol={settings.currencySymbol}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
 
@@ -488,6 +530,7 @@ export default function App() {
             onDeletePromotion={handleDeletePromotion}
             onPublishBeat={handlePublishBeat}
             onUpdateBeat={handleUpdateBeat}
+            onReorderBeats={setBeats}
             currencySymbol={settings.currencySymbol}
             profile={profile}
             onUpdateProfile={setProfile}
@@ -502,7 +545,11 @@ export default function App() {
         {currentView === 'uploader' && (
           <UploaderView
             onPublishBeat={handlePublishBeat}
+            onPublishBeatPack={(newPack) => {
+              setBeatPacks((prev) => [newPack, ...prev]);
+            }}
             onNavigateToBrowse={() => setCurrentView('browse')}
+            onExitToDashboard={() => setCurrentView('dashboard')}
             currencySymbol={settings.currencySymbol}
             beats={beats}
             onSwitchToBeatPacks={() => setCurrentView('beatpacks')}
@@ -531,8 +578,10 @@ export default function App() {
             onBuyClick={(beat) => setSelectedBuyBeat(beat)}
             onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
             onShareClick={(beat) => setSelectedShareBeat(beat)}
-            onViewDetail={(beat) => setSelectedDetailBeat(beat)}
+            onViewDetail={handleViewDetailWithHistory}
             currencySymbol={settings.currencySymbol}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
 
@@ -643,6 +692,7 @@ export default function App() {
         currencySymbol={settings.currencySymbol}
         beats={publishedBeats}
         onPlayToggle={handlePlayToggle}
+        externalExpandTrigger={audioPlayerExpandTrigger}
       />
 
       {/* Beat Product Detail Modal */}

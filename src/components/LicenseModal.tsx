@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, ShieldCheck, Sparkles, ShoppingBag } from 'lucide-react';
+import { X, Check, ShieldCheck, Sparkles, ShoppingBag, LayoutGrid, Table } from 'lucide-react';
 import { Beat, LicenseTierKey } from '../types';
 import { LICENSE_TIERS } from '../utils/licenseInfo';
 
@@ -19,6 +19,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
   currencySymbol,
 }) => {
   const [selectedLicenseKey, setSelectedLicenseKey] = useState<LicenseTierKey>('mp3Lease');
+  const [viewMode, setViewMode] = useState<'cards' | 'comparison'>('cards');
 
   if (!isOpen || !beat) return null;
 
@@ -42,112 +43,215 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
   const currentTierPrice = getBeatPriceForTier(selectedLicenseKey);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-4xl bg-zinc-900 border border-purple-500/30 rounded-3xl shadow-2xl shadow-purple-950/80 overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/85 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-5xl bg-zinc-900 border border-purple-500/30 rounded-3xl shadow-2xl shadow-purple-950/80 overflow-hidden max-h-[92vh] flex flex-col">
         {/* Modal Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+        <div className="p-4 sm:p-5 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3 bg-zinc-950/80">
           <div className="flex items-center gap-3">
             <img
               src={beat.artworkUrl}
               alt={beat.title}
-              className="w-12 h-12 rounded-xl object-cover border border-purple-500/30"
+              className="w-12 h-12 rounded-xl object-cover border border-purple-500/30 shadow-md shrink-0"
             />
             <div>
-              <span className="text-xs font-bold text-purple-400 uppercase tracking-widest">SELECT LICENSE OPTION</span>
-              <h3 className="text-lg font-bold text-white">{beat.title}</h3>
+              <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">
+                COMPARE & SELECT LICENSE
+              </span>
+              <h3 className="text-lg font-black text-white">{beat.title}</h3>
               <div className="text-xs text-zinc-400 font-mono">
-                {beat.bpm} BPM · {beat.key} · {beat.genre}
+                PROD. CASHMERE KID$ · {beat.bpm} BPM · {beat.key} · {beat.genre}
               </div>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-1">
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  viewMode === 'cards'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cards</span>
+              </button>
+              <button
+                onClick={() => setViewMode('comparison')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  viewMode === 'comparison'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>Full Matrix</span>
+              </button>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {licenseKeys.map((key) => {
-              const tier = LICENSE_TIERS[key];
-              const price = getBeatPriceForTier(key);
-              const isSelected = selectedLicenseKey === key;
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 scrollbar-thin scrollbar-thumb-zinc-800">
+          {viewMode === 'cards' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {licenseKeys.map((key) => {
+                const tier = LICENSE_TIERS[key];
+                const price = getBeatPriceForTier(key);
+                const isSelected = selectedLicenseKey === key;
 
-              return (
-                <div
-                  key={key}
-                  onClick={() => setSelectedLicenseKey(key)}
-                  className={`cursor-pointer p-4 rounded-2xl border transition-all relative flex flex-col justify-between ${
-                    isSelected
-                      ? 'bg-purple-950/40 border-purple-500 shadow-lg shadow-purple-950/50 ring-1 ring-purple-500'
-                      : 'bg-zinc-950/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
-                  }`}
-                >
-                  {tier.popular && (
-                    <span className="absolute -top-2.5 right-4 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-violet-500 text-white rounded-full shadow">
-                      MOST POPULAR
-                    </span>
-                  )}
-
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-base text-white">{tier.name}</h4>
-                      <span className="font-mono text-lg font-extrabold text-purple-300">
-                        {currencySymbol}{price.toFixed(2)}
+                return (
+                  <div
+                    key={key}
+                    onClick={() => setSelectedLicenseKey(key)}
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all relative flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-purple-950/40 border-purple-500 shadow-xl shadow-purple-950/60 ring-1 ring-purple-500'
+                        : 'bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
+                    }`}
+                  >
+                    {tier.popular && (
+                      <span className="absolute -top-2.5 right-4 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-purple-600 to-violet-500 text-white rounded-full shadow-md">
+                        MOST POPULAR
                       </span>
-                    </div>
+                    )}
 
-                    <p className="text-xs text-zinc-400 mt-1">{tier.description}</p>
-
-                    <div className="mt-3 pt-3 border-t border-zinc-800/80 space-y-1.5 text-xs text-zinc-300 font-sans">
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Audio Format:</span>
-                        <span className="font-medium">{tier.format}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Streams Limit:</span>
-                        <span className="font-medium">{tier.audioStreams}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Track Stems:</span>
-                        <span className={`font-medium ${tier.stemsIncluded ? 'text-purple-400 font-bold' : 'text-zinc-500'}`}>
-                          {tier.stemsIncluded ? 'INCLUDED (WAV)' : 'Not Included'}
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-extrabold text-base text-white">{tier.name}</h4>
+                        <span className="font-mono text-xl font-black text-purple-300">
+                          {currencySymbol}{price.toFixed(2)}
                         </span>
                       </div>
+
+                      <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">{tier.description}</p>
+
+                      <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2 text-xs text-zinc-300 font-sans">
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-500">Audio Format:</span>
+                          <span className="font-semibold text-white">{tier.format}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-500">Audio Streams:</span>
+                          <span className="font-semibold text-purple-300">{tier.audioStreams}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-500">Music Videos:</span>
+                          <span className="font-medium">{tier.videoStreams}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-500">Track Stems:</span>
+                          <span className={`font-bold ${tier.stemsIncluded ? 'text-purple-400' : 'text-zinc-500'}`}>
+                            {tier.stemsIncluded ? 'INCLUDED (WAV STEMS)' : 'Not Included'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-500">Radio Airplay:</span>
+                          <span className="font-medium text-zinc-300">{tier.radioStations}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-xs font-semibold">
+                      <span className={isSelected ? 'text-purple-300 flex items-center gap-1.5 font-bold' : 'text-zinc-500'}>
+                        {isSelected ? <Check className="w-4 h-4 text-purple-400" /> : null}
+                        {isSelected ? 'Selected License' : 'Click to select option'}
+                      </span>
+                      <span className="text-[10px] font-mono text-purple-400 font-bold uppercase">
+                        {tier.royaltySplit}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="mt-4 pt-2 flex items-center justify-between text-xs font-semibold">
-                    <span className={isSelected ? 'text-purple-300 flex items-center gap-1' : 'text-zinc-500'}>
-                      {isSelected ? <Check className="w-4 h-4 text-purple-400" /> : null}
-                      {isSelected ? 'Selected' : 'Click to select'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 p-4 bg-zinc-950 border border-purple-500/20 rounded-2xl space-y-2 text-xs">
-            <div className="flex items-center gap-2 text-purple-300 font-bold">
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
-              <span>GUARANTEED 100% ROYALTY SPLIT TO ARTIST</span>
+                );
+              })}
             </div>
-            <p className="text-zinc-400">
-              All licenses purchased through CASHMERE KID$ come with automated contract delivery, zero copyright strikes guarantee, and studio master audio files.
+          ) : (
+            /* Full Comparison Matrix View */
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {licenseKeys.map((key) => {
+                  const tier = LICENSE_TIERS[key];
+                  const price = getBeatPriceForTier(key);
+                  const isSelected = selectedLicenseKey === key;
+
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => setSelectedLicenseKey(key)}
+                      className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-purple-950/50 border-purple-500 shadow-lg ring-1 ring-purple-500'
+                          : 'bg-zinc-950/80 border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-mono font-bold text-purple-400 uppercase">{key}</span>
+                        {isSelected && <Check className="w-4 h-4 text-purple-400" />}
+                      </div>
+                      <h4 className="font-extrabold text-sm text-white mt-1">{tier.name}</h4>
+                      <div className="font-mono text-lg font-black text-purple-300 mt-1">
+                        {currencySymbol}{price.toFixed(2)}
+                      </div>
+
+                      <div className="mt-3 pt-3 border-t border-zinc-800 space-y-2 text-[11px] text-zinc-300">
+                        <div>
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold">Audio File</div>
+                          <div className="font-semibold text-white">{tier.format}</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold">Streaming Limit</div>
+                          <div className="font-semibold text-purple-300">{tier.audioStreams}</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold">Video Rights</div>
+                          <div>{tier.videoStreams}</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold">Radio Stations</div>
+                          <div>{tier.radioStations}</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold">Track Stems</div>
+                          <div className={tier.stemsIncluded ? 'text-purple-400 font-bold' : 'text-zinc-500'}>
+                            {tier.stemsIncluded ? 'Yes (WAV Stems)' : 'No'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold">Royalties</div>
+                          <div className="text-purple-300 font-bold">{tier.royaltySplit}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 p-4 bg-zinc-950 border border-purple-500/20 rounded-2xl space-y-1.5 text-xs">
+            <div className="flex items-center gap-2 text-purple-300 font-bold">
+              <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>TRANSPARENT 100% ROYALTY SPLIT & INSTANT CONTRACT DELIVERY</span>
+            </div>
+            <p className="text-zinc-400 leading-relaxed text-[11px]">
+              All licenses purchased through CASHMERE KID$ include instant PDF contract agreement download, zero copyright strikes guarantee, and studio master uncompressed audio files.
             </p>
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span className="text-xs text-zinc-400">Selected License Total:</span>
-            <div className="text-xl font-mono font-extrabold text-white">
+            <span className="text-xs text-zinc-400 font-medium">Selected License Total:</span>
+            <div className="text-2xl font-mono font-black text-white">
               {currencySymbol}{currentTierPrice.toFixed(2)}
             </div>
           </div>
@@ -157,10 +261,10 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
               onAddToCart(beat, selectedLicenseKey);
               onClose();
             }}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-500 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-purple-950/60 active:scale-95 transition-all"
+            className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-500 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-purple-950/80 active:scale-95 transition-all cursor-pointer"
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Add To Cart</span>
+            <span>Add Selected License To Cart</span>
           </button>
         </div>
       </div>

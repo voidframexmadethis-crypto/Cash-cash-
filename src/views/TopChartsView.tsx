@@ -30,6 +30,8 @@ interface TopChartsViewProps {
   onShareClick: (beat: Beat) => void;
   onViewDetail: (beat: Beat) => void;
   currencySymbol: string;
+  favoriteIds?: string[];
+  onToggleFavorite?: (beat: Beat) => void;
 }
 
 export const TopChartsView: React.FC<TopChartsViewProps> = ({
@@ -42,6 +44,8 @@ export const TopChartsView: React.FC<TopChartsViewProps> = ({
   onShareClick,
   onViewDetail,
   currencySymbol,
+  favoriteIds = [],
+  onToggleFavorite,
 }) => {
   const [chartCategory, setChartCategory] = useState<'top' | 'trending' | 'new' | 'featured'>('top');
   const [timePeriod, setTimePeriod] = useState<'week' | 'month' | 'all'>('week');

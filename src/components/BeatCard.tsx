@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Sparkles, Volume2 } from 'lucide-react';
+import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Sparkles, Volume2, Heart } from 'lucide-react';
 import { Beat } from '../types';
 
 interface BeatCardProps {
@@ -12,6 +12,8 @@ interface BeatCardProps {
   onShareClick: (beat: Beat) => void;
   onViewDetail: (beat: Beat) => void;
   currencySymbol: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: (beat: Beat) => void;
 }
 
 export const BeatCard: React.FC<BeatCardProps> = ({
@@ -24,6 +26,8 @@ export const BeatCard: React.FC<BeatCardProps> = ({
   onShareClick,
   onViewDetail,
   currencySymbol,
+  isFavorite = false,
+  onToggleFavorite,
 }) => {
   const isThisPlaying = isCurrent && isPlaying;
 
@@ -65,9 +69,28 @@ export const BeatCard: React.FC<BeatCardProps> = ({
           </div>
         )}
 
-        {/* Key Badge */}
-        <div className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-zinc-800 text-zinc-300 font-mono text-[10px] font-bold">
-          {beat.key}
+        {/* Key Badge & Heart Button */}
+        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+          {onToggleFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(beat);
+              }}
+              className={`p-1.5 rounded-lg backdrop-blur-md border transition-all ${
+                isFavorite
+                  ? 'bg-rose-950/90 border-rose-500 text-rose-400'
+                  : 'bg-black/70 border-zinc-800 text-zinc-400 hover:text-white hover:bg-black/90'
+              }`}
+              title={isFavorite ? 'Remove from Saved Vault' : 'Save Beat to Favorites'}
+            >
+              <Heart className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
+          )}
+
+          <div className="px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-zinc-800 text-zinc-300 font-mono text-[10px] font-bold">
+            {beat.key}
+          </div>
         </div>
 
         {/* Centered Play / Pause Control Button */}
@@ -76,7 +99,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
             e.stopPropagation();
             onPlayToggle(beat);
           }}
-          className={`absolute inset-0 m-auto w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 shadow-2xl z-10 ${
+          className={`absolute inset-0 m-auto w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 shadow-2xl z-10 cursor-pointer ${
             isThisPlaying
               ? 'bg-purple-600 text-white scale-110 ring-4 ring-purple-400/40 opacity-100'
               : 'bg-white/95 text-zinc-950 hover:bg-purple-500 hover:text-white opacity-0 group-hover/art:opacity-100 group-hover/art:scale-105 sm:opacity-90'
@@ -161,7 +184,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
             {beat.freeDownload && (
               <button
                 onClick={() => onFreeDownloadClick(beat)}
-                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-purple-300 border border-zinc-800 transition-colors shrink-0"
+                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-purple-300 border border-zinc-800 transition-colors shrink-0 cursor-pointer"
                 title="Free Download"
                 aria-label="Free Download"
               >
@@ -171,7 +194,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
 
             <button
               onClick={() => onShareClick(beat)}
-              className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors shrink-0 hidden sm:block"
+              className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors shrink-0 hidden sm:block cursor-pointer"
               title="Share Beat"
               aria-label="Share Beat"
             >
@@ -180,7 +203,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
 
             <button
               onClick={() => onBuyClick(beat)}
-              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md shadow-purple-950 transition-all flex items-center gap-1.5 shrink-0"
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md shadow-purple-950 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>Buy</span>

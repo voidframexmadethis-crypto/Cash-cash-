@@ -17,7 +17,11 @@ import {
   Repeat,
   CheckCircle2,
   Music,
-  Sparkles
+  Sparkles,
+  Mic,
+  AlertCircle,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { Beat } from '../types';
 import { audioSynth } from '../utils/audioSynth';
@@ -34,6 +38,7 @@ interface WaveformPlayerProps {
   currencySymbol: string;
   beats: Beat[];
   onPlayToggle: (beat: Beat) => void;
+  externalExpandTrigger?: number;
 }
 
 export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
@@ -48,6 +53,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   currencySymbol,
   beats = [],
   onPlayToggle,
+  externalExpandTrigger,
 }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(165);
@@ -60,51 +66,118 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [isWatermarkActive, setIsWatermarkActive] = useState(true);
   const [showAuditionControls, setShowAuditionControls] = useState(false);
   const [isExpandedFullPlayer, setIsExpandedFullPlayer] = useState(false);
-  const [playerState, setPlayerState] = useState<'idle' | 'loading' | 'playing' | 'paused' | 'error' | 'finished'>('idle');
-  const [hoverSeekSecs, setHoverSeekSecs] = useState<number | null>(null);
+  const [playerState, setPlayerState] = useState<
+    'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'seeking' | 'buffering' | 'finished' | 'error' | 'unavailable'
+  >('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (externalExpandTrigger && externalExpandTrigger > 0) {
+      setIsExpandedFullPlayer(true);
+    }
+  }, [externalExpandTrigger]);
+
+  // --- COMMENT & TABS STATE (BEATSTARS LAYOUT) ---
+  const [commentInput, setCommentInput] = useState('');
+  const [activeTab, setActiveTab] = useState<'related' | 'comments'>('related');
+  const [commentsMap, setCommentsMap] = useState<
+    Record<string, Array<{ id: string; author: string; text: string; date: string }>>
+  >({
+    'beat-1': [
+      { id: 'c1', author: 'Drake Fan 808', text: 'This 808 glide on Valentino Velvet is insane 🔥', date: '2 hours ago' },
+      { id: 'c2', author: 'Metro Vibe', text: 'Just bought the Unlimited lease, recording verses now!', date: '1 day ago' },
+    ],
+    'beat-2': [
+      { id: 'c3', author: 'CyberRapper', text: 'Tokyo Nighthawk energy is next level 🏎️⚡', date: '3 hours ago' },
+    ],
+  });
+
+  const handlePostComment = () => {
+    if (!commentInput.trim() || !currentBeat) return;
+    const newComment = {
+      id: `c-${Date.now()}`,
+      author: 'You (Verified Artist)',
+      text: commentInput.trim(),
+      date: 'Just now',
+    };
+    setCommentsMap((prev) => ({
+      ...prev,
+      [currentBeat.id]: [newComment, ...(prev[currentBeat.id] || [])],
+    }));
+    setCommentInput('');
+  };
+
+  const activeComments = (currentBeat && commentsMap[currentBeat.id]) || [
+    { id: 'c-default', author: 'VIP Artist', text: 'Southside & Metro vibes are crazy on this one! 💯', date: '5 hours ago' },
+  ];
+
+  // --- WRITE A VERSE LISTENING MODE ---
+  const [writeVerseMode, setWriteVerseMode] = useState(false);
+  const [loopInTime, setLoopInTime] = useState(15);
+  const [loopOutTime, setLoopOutTime] = useState(45);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fullCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    audioSynth.setCallbacks(
-      (time, dur) => {
-        setCurrentTime(time);
-        setDuration(dur);
-        if (time >= dur && !isLooping) {
-          setPlayerState('finished');
+    try {
+      audioSynth.setCallbacks(
+        (time, dur) => {
+          setCurrentTime(time);
+          setDuration(dur || 165);
+
+          // Handle Write A Verse Loop
+          if (writeVerseMode && isPlaying && time >= loopOutTime) {
+            audioSynth.seek(loopInTime);
+            setCurrentTime(loopInTime);
+            return;
+          }
+
+          if (time >= (dur || 165) && !isLooping && !writeVerseMode) {
+            setPlayerState('finished');
+          }
+        },
+        () => {
+          if (isLooping && currentBeat) {
+            audioSynth.seek(0);
+            setCurrentTime(0);
+          } else if (!writeVerseMode) {
+            // Continuous Listening Queue Autoplay
+            setCurrentTime(0);
+            onNext();
+          }
         }
-      },
-      () => {
-        if (isLooping && currentBeat) {
-          audioSynth.seek(0);
-          setCurrentTime(0);
-        } else {
-          // Continuous Listening Queue Autoplay
-          setCurrentTime(0);
-          onNext();
-        }
-      }
-    );
-  }, [setIsPlaying, isLooping, currentBeat, onNext]);
+      );
+    } catch (err) {
+      setPlayerState('error');
+      setErrorMessage('Audio engine initialization error.');
+    }
+  }, [setIsPlaying, isLooping, currentBeat, onNext, writeVerseMode, loopInTime, loopOutTime, isPlaying]);
 
   useEffect(() => {
     if (currentBeat) {
       setPlayerState('loading');
+      setErrorMessage(null);
+
       const timer = setTimeout(() => {
-        if (isPlaying) {
-          setPlayerState('playing');
-          audioSynth.playBeat(
-            currentBeat.id,
-            currentBeat.bpm,
-            currentBeat.key,
-            currentBeat.durationSeconds || 165
-          );
-        } else {
-          setPlayerState('paused');
-          audioSynth.pauseBeat();
+        try {
+          if (isPlaying) {
+            setPlayerState('playing');
+            audioSynth.playBeat(
+              currentBeat.id,
+              currentBeat.bpm,
+              currentBeat.key,
+              currentBeat.durationSeconds || 165
+            );
+          } else {
+            setPlayerState('paused');
+            audioSynth.pauseBeat();
+          }
+        } catch (err) {
+          setPlayerState('error');
+          setErrorMessage('Playback stream error. Please try again.');
         }
-      }, 150);
+      }, 120);
       return () => clearTimeout(timer);
     } else {
       setPlayerState('idle');
@@ -138,7 +211,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     audioSynth.setTempoMultiplier(multiplier);
   };
 
-  // Render Canvas Waveform
+  // Render Canvas Waveform with Write A Verse loop range highlight
   const drawWaveformOnCanvas = (canvas: HTMLCanvasElement | null, isFull: boolean = false) => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -153,9 +226,29 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     const gap = (width - barCount * barWidth) / (barCount - 1);
     const progressRatio = duration > 0 ? currentTime / duration : 0;
 
+    const loopInRatio = duration > 0 ? loopInTime / duration : 0;
+    const loopOutRatio = duration > 0 ? loopOutTime / duration : 1;
+
+    // Draw Write A Verse Loop Highlight Region
+    if (writeVerseMode) {
+      const startX = loopInRatio * width;
+      const endX = loopOutRatio * width;
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.18)';
+      ctx.fillRect(startX, 0, Math.max(2, endX - startX), height);
+
+      // Loop In marker line
+      ctx.fillStyle = '#c084fc';
+      ctx.fillRect(startX, 0, 2, height);
+
+      // Loop Out marker line
+      ctx.fillStyle = '#f43f5e';
+      ctx.fillRect(endX - 2, 0, 2, height);
+    }
+
     const freqData = isPlaying ? audioSynth.getFrequencyData() : new Uint8Array(32);
 
     for (let i = 0; i < barCount; i++) {
+      const barRatio = i / barCount;
       const baseHeightRatio =
         Math.sin(i * 0.15) * 0.35 +
         Math.cos(i * 0.08) * 0.25 +
@@ -173,7 +266,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       const x = i * (barWidth + gap);
       const y = (height - h) / 2;
 
-      const isPlayed = i / barCount <= progressRatio;
+      const isPlayed = barRatio <= progressRatio;
 
       if (isPlayed) {
         const grad = ctx.createLinearGradient(0, y, 0, y + h);
@@ -182,7 +275,11 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         grad.addColorStop(1, '#6b21a8');
         ctx.fillStyle = grad;
       } else {
-        ctx.fillStyle = '#27272a';
+        if (writeVerseMode && barRatio >= loopInRatio && barRatio <= loopOutRatio) {
+          ctx.fillStyle = '#581c87';
+        } else {
+          ctx.fillStyle = '#27272a';
+        }
       }
 
       ctx.beginPath();
@@ -190,7 +287,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       ctx.fill();
 
       // Playhead line
-      if (Math.abs(i / barCount - progressRatio) < 1 / barCount) {
+      if (Math.abs(barRatio - progressRatio) < 1 / barCount) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(x + barWidth / 2 - 1, 0, 2, height);
       }
@@ -208,7 +305,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     };
     render();
     return () => cancelAnimationFrame(animId);
-  }, [currentTime, duration, isPlaying, isExpandedFullPlayer]);
+  }, [currentTime, duration, isPlaying, isExpandedFullPlayer, writeVerseMode, loopInTime, loopOutTime]);
 
   if (!currentBeat) return null;
 
@@ -223,237 +320,414 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     const clickX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
     const targetSecs = ratio * duration;
+    setPlayerState('seeking');
     setCurrentTime(targetSecs);
     audioSynth.seek(targetSecs);
+    setTimeout(() => {
+      setPlayerState(isPlaying ? 'playing' : 'paused');
+    }, 100);
   };
 
   return (
     <>
-      {/* Full Player Overlay Modal */}
+      {/* Full Player Overlay Modal (BeatStars Interface) */}
       {isExpandedFullPlayer && (
-        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col justify-between p-6 sm:p-12 animate-fadeIn text-zinc-100 overflow-y-auto">
-          {/* Header Bar */}
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="fixed inset-0 z-50 bg-[#0a0a0c] flex flex-col p-4 sm:p-8 text-zinc-100 overflow-y-auto font-sans animate-fadeIn">
+          {/* Top Header Navigation */}
+          <div className="max-w-6xl mx-auto w-full flex items-center justify-between pb-4 border-b border-zinc-800/80 mb-6">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-400" />
-              <span className="font-brand font-black tracking-widest text-lg text-white uppercase">
+              <span className="font-brand font-black text-white text-base sm:text-lg uppercase tracking-wider">
                 CASHMERE KID$ VAULT PLAYER
               </span>
             </div>
 
-            <button
-              onClick={() => setIsExpandedFullPlayer(false)}
-              className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
-              title="Close Expanded Player"
-            >
-              <Minimize2 className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setWriteVerseMode(!writeVerseMode)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                  writeVerseMode
+                    ? 'bg-purple-600 border-purple-400 text-white shadow-md'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>WRITE A VERSE MODE</span>
+              </button>
+
+              <button
+                onClick={() => setIsExpandedFullPlayer(false)}
+                className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                title="Close Player"
+              >
+                <Minimize2 className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Full Player Body */}
-          <div className="max-w-7xl mx-auto w-full my-auto py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-            {/* Left Column: Large Artwork (lg:col-span-4) */}
-            <div className="lg:col-span-4 flex flex-col items-center">
-              <div className="relative aspect-square w-64 sm:w-80 md:w-96 lg:w-full rounded-3xl overflow-hidden border border-purple-500/30 shadow-2xl shadow-purple-950/80 group">
+          {/* Main Hero Player Card (BeatStars Section) */}
+          <div className="max-w-6xl mx-auto w-full bg-[#121215] border border-zinc-800/90 rounded-2xl p-5 sm:p-7 space-y-6 shadow-2xl">
+            {/* Top Info Block: Artwork + Details */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-7">
+              {/* Artwork */}
+              <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-xl overflow-hidden shrink-0 border border-zinc-800 shadow-xl group">
                 <img
                   src={currentBeat.artworkUrl}
                   alt={currentBeat.title}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-
-                {isPlaying && (
-                  <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-purple-900/80 border border-purple-400/40 text-purple-200 text-xs font-bold uppercase tracking-wider animate-pulse flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-purple-400" />
-                    <span>Playing</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Middle Column: Controls & Large Waveform (lg:col-span-5) */}
-            <div className="lg:col-span-5 w-full space-y-6 text-center lg:text-left flex flex-col justify-center">
-              <div className="space-y-3">
-                {/* Active Player Status Badge */}
-                <div className="flex justify-center lg:justify-start">
-                  {playerState === 'loading' && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-yellow-400 text-[10px] font-mono font-bold uppercase animate-pulse">
-                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                      <span>Loading analog stems...</span>
-                    </div>
-                  )}
-                  {playerState === 'playing' && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950 border border-purple-500/30 text-purple-300 text-[10px] font-mono font-bold uppercase">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
-                      <span>High-Fidelity Playback</span>
-                    </div>
-                  )}
-                  {playerState === 'finished' && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono font-bold uppercase">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      <span>Continuous queue loaded</span>
-                    </div>
-                  )}
-                  {playerState === 'paused' && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 text-[10px] font-mono font-bold uppercase">
-                      <span>Audition paused</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950 border border-purple-500/30 text-purple-300 text-xs font-bold uppercase">
-                  <span>{currentBeat.genre}</span>
-                  <span>·</span>
-                  <span>{currentBeat.key}</span>
-                </div>
-
-                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none uppercase">
-                  {currentBeat.title}
-                </h2>
-
-                <div className="flex items-center justify-center lg:justify-start gap-2 text-sm text-zinc-300 font-semibold">
-                  <span>PROD. CASHMERE KID$</span>
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-950" />
-                  <span>·</span>
-                  <span className="font-mono text-purple-300">{Math.round(currentBeat.bpm * tempoMultiplier)} BPM</span>
-                </div>
-              </div>
-
-              {/* Large Seekable Waveform */}
-              <div className="space-y-2">
-                <div
-                  onClick={handleSeek}
-                  className="w-full h-20 bg-zinc-950/90 rounded-2xl p-3 border border-zinc-800 hover:border-purple-500/50 cursor-pointer relative shadow-inner"
-                >
-                  <canvas
-                    ref={fullCanvasRef}
-                    width={800}
-                    height={60}
-                    className="w-full h-full block"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between font-mono text-xs text-zinc-400 px-1">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(duration)}</span>
-                </div>
-              </div>
-
-              {/* Playback Controls */}
-              <div className="flex items-center justify-center lg:justify-start gap-5 pt-2">
-                <button
-                  onClick={() => setIsLooping(!isLooping)}
-                  className={`p-3 rounded-2xl border transition-colors ${
-                    isLooping ? 'bg-purple-950 border-purple-500 text-purple-300 font-bold' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                  }`}
-                  title="Loop Track"
-                >
-                  <Repeat className="w-5 h-5" />
-                </button>
-
-                <button
-                  onClick={onPrev}
-                  className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
-                >
-                  <SkipBack className="w-6 h-6" />
-                </button>
-
                 <button
                   onClick={() => setIsPlaying(!isPlaying)}
-                  className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center justify-center shadow-2xl shadow-purple-950 transform hover:scale-105 transition-all"
+                  className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-purple-600/90 hover:bg-purple-500 text-white flex items-center justify-center shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  {isPlaying ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
-                </button>
-
-                <button
-                  onClick={onNext}
-                  className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
-                >
-                  <SkipForward className="w-6 h-6" />
-                </button>
-
-                <button
-                  onClick={() => setIsLiked(!isLiked)}
-                  className={`p-3 rounded-2xl border transition-colors ${
-                    isLiked ? 'bg-red-950/40 border-red-500/50 text-red-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+                  {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-0.5" />}
                 </button>
               </div>
 
-              {/* Purchase & Download Actions */}
-              <div className="pt-4 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-                <button
-                  onClick={() => {
-                    setIsExpandedFullPlayer(false);
-                    onBuyClick(currentBeat);
-                  }}
-                  className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-sm shadow-xl flex items-center gap-2"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>Buy License — {currencySymbol}{currentBeat.pricing.mp3Lease.toFixed(2)}</span>
-                </button>
+              {/* Track Details */}
+              <div className="flex-1 space-y-3 min-w-0 w-full">
+                {/* Title row with Purple Play Button */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shrink-0 shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                  >
+                    {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+                  </button>
 
-                {currentBeat.freeDownload && (
+                  <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight truncate">
+                    {currentBeat.title} | Cashmere Kid$ Type Beat 2026
+                  </h1>
+                </div>
+
+                {/* Producer Handle */}
+                <div className="text-xs font-bold text-zinc-400 uppercase font-mono tracking-wider">
+                  {currentBeat.producerName || 'CASHMEREKID'}
+                </div>
+
+                {/* Metadata Badges */}
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                  <span className="px-2.5 py-0.5 rounded bg-zinc-800/90 text-zinc-200 font-bold border border-zinc-700/60">
+                    BPM {currentBeat.bpm}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded bg-zinc-800/90 text-zinc-200 font-bold border border-zinc-700/60">
+                    ♫ {currentBeat.key}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded bg-zinc-800/90 text-zinc-400 font-medium border border-zinc-700/60">
+                    {currentBeat.releaseDate || 'September 25, 2026'}
+                  </span>
+                </div>
+
+                {/* Subtitle / Description */}
+                <p className="text-xs text-zinc-400 line-clamp-1">
+                  {currentBeat.description || `${currentBeat.title} | Southside Type Beat 2026`}
+                </p>
+
+                {/* Action Buttons & Tag Pills */}
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  {/* Purchase Button */}
                   <button
                     onClick={() => {
                       setIsExpandedFullPlayer(false);
-                      onFreeDownloadClick(currentBeat);
+                      onBuyClick(currentBeat);
                     }}
-                    className="px-5 py-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-purple-300 font-extrabold text-xs flex items-center gap-2"
+                    className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-md flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>Free Download</span>
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>+ {currencySymbol}{currentBeat.pricing.mp3Lease.toFixed(2)}</span>
                   </button>
-                )}
 
+                  {/* Download Button */}
+                  {currentBeat.freeDownload ? (
+                    <button
+                      onClick={() => {
+                        setIsExpandedFullPlayer(false);
+                        onFreeDownloadClick(currentBeat);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>DOWNLOAD</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setIsExpandedFullPlayer(false);
+                        onBuyClick(currentBeat);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-zinc-800/80 text-zinc-400 font-bold text-xs flex items-center gap-1.5 cursor-pointer hover:bg-zinc-700 hover:text-white"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>LEASE TO DOWNLOAD</span>
+                    </button>
+                  )}
+
+                  {/* Share Button */}
+                  <button
+                    onClick={() => onShareClick(currentBeat)}
+                    className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>SHARE</span>
+                  </button>
+
+                  {/* Tags */}
+                  <div className="flex flex-wrap items-center gap-1.5 ml-auto sm:ml-0">
+                    {currentBeat.tags?.slice(0, 3).map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-3 py-1 rounded-full bg-black/70 border border-zinc-800 text-zinc-400 text-xs font-mono"
+                      >
+                        {tag.toLowerCase()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Write A Verse Loop Mode Bar (if enabled) */}
+            {writeVerseMode && (
+              <div className="p-4 bg-purple-950/40 border border-purple-500/40 rounded-xl space-y-3 animate-fadeIn">
+                <div className="flex items-center justify-between text-xs font-bold text-purple-300">
+                  <span className="flex items-center gap-2">
+                    <Mic className="w-4 h-4 text-purple-400" />
+                    <span>WRITE A VERSE LOOP MODE</span>
+                  </span>
+                  <button onClick={() => setWriteVerseMode(false)} className="text-[10px] text-zinc-400 hover:text-white uppercase">Close</button>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                  <div>
+                    <span className="text-purple-300">Start: {formatTime(loopInTime)}</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={loopOutTime - 5}
+                      value={loopInTime}
+                      onChange={(e) => setLoopInTime(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-zinc-800 accent-purple-500 rounded mt-1"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-purple-300">End: {formatTime(loopOutTime)}</span>
+                    <input
+                      type="range"
+                      min={loopInTime + 5}
+                      max={duration}
+                      value={loopOutTime}
+                      onChange={(e) => setLoopOutTime(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-zinc-800 accent-rose-500 rounded mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Waveform Canvas Bar */}
+            <div className="space-y-1.5">
+              <div
+                onClick={handleSeek}
+                className="w-full h-16 bg-black/90 rounded-xl p-2.5 border border-zinc-800/80 hover:border-purple-500/40 cursor-pointer relative shadow-inner"
+              >
+                <canvas ref={fullCanvasRef} width={900} height={50} className="w-full h-full block" />
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono text-zinc-500 px-1">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
+
+            {/* Comment Input Box & Collaborator Bar */}
+            <div className="space-y-4 pt-2 border-t border-zinc-800/80">
+              {/* Comment Input */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={commentInput}
+                  onChange={(e) => setCommentInput(e.target.value.slice(0, 240))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handlePostComment();
+                  }}
+                  placeholder="Write a comment..."
+                  className="flex-1 bg-black/60 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors"
+                />
+                <span className="text-xs font-mono text-zinc-500 shrink-0">
+                  {commentInput.length}/240
+                </span>
                 <button
-                  onClick={() => onShareClick(currentBeat)}
-                  className="p-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white"
-                  title="Share Beat"
+                  onClick={handlePostComment}
+                  className="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs tracking-wider uppercase cursor-pointer"
                 >
-                  <Share2 className="w-4 h-4" />
+                  SEND
                 </button>
               </div>
-            </div>
 
-            {/* Right Column: Studio Playback Queue (lg:col-span-3) */}
-            <div className="lg:col-span-3 w-full bg-zinc-950/60 border border-zinc-900 rounded-3xl p-5 flex flex-col space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
-                <h3 className="text-xs font-black tracking-widest uppercase text-purple-300 font-brand">UP NEXT / QUEUE</h3>
-                <span className="text-[10px] font-mono text-zinc-500 font-bold">{beats.length} TRACKS</span>
-              </div>
-              <div className="space-y-3 overflow-y-auto max-h-[360px] pr-1 scrollbar-thin scrollbar-thumb-zinc-800">
-                {beats.map((beat) => {
-                  const isCurrent = beat.id === currentBeat.id;
-                  return (
-                    <div
-                      key={beat.id}
-                      onClick={() => onPlayToggle(beat)}
-                      className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all border ${
-                        isCurrent
-                          ? 'bg-purple-950/40 border-purple-500/40'
-                          : 'bg-zinc-900/40 border-transparent hover:bg-zinc-900/80 hover:border-zinc-850'
-                      }`}
-                    >
-                      <img src={beat.artworkUrl} alt={beat.title} className="w-9 h-9 rounded-lg object-cover shrink-0 border border-zinc-800" />
-                      <div className="flex-1 min-w-0 text-left">
-                        <h4 className={`text-xs font-bold truncate ${isCurrent ? 'text-purple-300' : 'text-white'}`}>{beat.title}</h4>
-                        <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{beat.bpm} BPM · {beat.key}</div>
-                      </div>
-                      {isCurrent && isPlaying && (
-                        <div className="flex items-end gap-0.5 h-3 shrink-0">
-                          <span className="w-0.5 bg-purple-400 rounded-full animate-pulse" />
-                          <span className="w-0.5 bg-purple-300 rounded-full animate-pulse delay-75" />
-                          <span className="w-0.5 bg-purple-400 rounded-full animate-pulse delay-150" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Collaborators */}
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-xs font-bold text-zinc-400">Collaborators:</span>
+                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-zinc-800/60">
+                  <div className="w-7 h-7 rounded-full bg-purple-950 border border-purple-500/40 flex items-center justify-center font-bold text-xs text-purple-300">
+                    CK
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-white">Cashmere Kid$</span>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase">PRODUCER</span>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+
+          {/* Sub-Navigation Tabs */}
+          <div className="max-w-6xl mx-auto w-full my-6 border-b border-zinc-800 flex justify-center gap-8">
+            <button
+              onClick={() => setActiveTab('related')}
+              className={`pb-3 text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                activeTab === 'related'
+                  ? 'text-white border-b-2 border-purple-500'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              RELATED TRACKS
+            </button>
+            <button
+              onClick={() => setActiveTab('comments')}
+              className={`pb-3 text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                activeTab === 'comments'
+                  ? 'text-white border-b-2 border-purple-500'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              COMMENTS ({activeComments.length})
+            </button>
+          </div>
+
+          {/* Tab Contents */}
+          <div className="max-w-6xl mx-auto w-full pb-12">
+            {activeTab === 'related' && (
+              <div className="bg-[#121215] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-zinc-800/80 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider">
+                  <div className="col-span-6 sm:col-span-5">TITLE</div>
+                  <div className="col-span-2 sm:col-span-1 text-center">TIME</div>
+                  <div className="col-span-2 sm:col-span-1 text-center">BPM</div>
+                  <div className="hidden sm:block col-span-3">TAGS</div>
+                  <div className="col-span-2 sm:col-span-2 text-right">ACTIONS</div>
+                </div>
+
+                {/* Rows */}
+                <div className="divide-y divide-zinc-800/60">
+                  {beats.map((beat) => {
+                    const isSelected = beat.id === currentBeat.id;
+                    return (
+                      <div
+                        key={beat.id}
+                        onClick={() => onPlayToggle(beat)}
+                        className={`grid grid-cols-12 gap-4 px-5 py-3.5 items-center hover:bg-zinc-900/80 transition-colors cursor-pointer group ${
+                          isSelected ? 'bg-purple-950/20' : ''
+                        }`}
+                      >
+                        {/* Title + Thumbnail */}
+                        <div className="col-span-6 sm:col-span-5 flex items-center gap-3 min-w-0">
+                          <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-zinc-800">
+                            <img src={beat.artworkUrl} alt={beat.title} className="w-full h-full object-cover" />
+                            {isSelected && isPlaying && (
+                              <div className="absolute inset-0 bg-purple-950/80 flex items-center justify-center">
+                                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className={`text-xs font-bold truncate ${isSelected ? 'text-purple-300' : 'text-white group-hover:text-purple-300'}`}>
+                              {beat.title} | Cashmere Kid$ Type Beat
+                            </h4>
+                          </div>
+                        </div>
+
+                        {/* Time */}
+                        <div className="col-span-2 sm:col-span-1 text-center text-xs font-mono text-zinc-400">
+                          {beat.duration}
+                        </div>
+
+                        {/* BPM */}
+                        <div className="col-span-2 sm:col-span-1 text-center text-xs font-mono text-zinc-400">
+                          {beat.bpm}
+                        </div>
+
+                        {/* Tags */}
+                        <div className="hidden sm:flex col-span-3 items-center gap-1.5 overflow-hidden">
+                          {beat.tags?.slice(0, 2).map((t) => (
+                            <span key={t} className="px-2 py-0.5 rounded-full bg-black/60 border border-zinc-800 text-[10px] font-mono text-zinc-400 truncate">
+                              {t.toLowerCase()}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="col-span-2 sm:col-span-2 flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          {beat.freeDownload && (
+                            <button
+                              onClick={() => {
+                                setIsExpandedFullPlayer(false);
+                                onFreeDownloadClick(beat);
+                              }}
+                              className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
+                              title="Download"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => onShareClick(beat)}
+                            className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 hidden sm:block"
+                            title="Share"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setIsExpandedFullPlayer(false);
+                              onBuyClick(beat);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs flex items-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>+ ${beat.pricing.mp3Lease.toFixed(2)}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'comments' && (
+              <div className="bg-[#121215] border border-zinc-800/80 rounded-2xl p-6 space-y-4 max-w-3xl mx-auto shadow-xl">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300 font-mono">
+                  COMMUNITY FEEDBACK ({activeComments.length})
+                </h3>
+
+                <div className="space-y-3 divide-y divide-zinc-800/60">
+                  {activeComments.map((comment) => (
+                    <div key={comment.id} className="pt-3 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-purple-950 border border-purple-500/40 flex items-center justify-center font-bold text-xs text-purple-300 shrink-0">
+                        {comment.author[0]}
+                      </div>
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-bold text-white">{comment.author}</span>
+                          <span className="text-[10px] text-zinc-500">{comment.date}</span>
+                        </div>
+                        <p className="text-xs text-zinc-300 mt-1 leading-relaxed">{comment.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -506,7 +780,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-purple-400 font-bold">Producer Tag Preview:</span>
+                <span className="text-purple-400 font-bold">Producer Tag Watermark:</span>
                 <button
                   onClick={() => setIsWatermarkActive(!isWatermarkActive)}
                   className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold transition-colors ${
@@ -515,7 +789,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                       : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
                   }`}
                 >
-                  {isWatermarkActive ? 'TAG ACTIVE (PROTECTED)' : 'CLEAN AUDITION'}
+                  {isWatermarkActive ? 'WATERMARK ACTIVE (PROTECTED)' : 'CLEAN AUDITION'}
                 </button>
               </div>
             </div>
@@ -583,6 +857,19 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
               </button>
 
+              {/* WRITE A VERSE MODE TOGGLE BUTTON */}
+              <button
+                onClick={() => setWriteVerseMode(!writeVerseMode)}
+                className={`p-2 rounded-xl border transition-colors ${
+                  writeVerseMode
+                    ? 'bg-purple-600 border-purple-400 text-white shadow-md'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+                title="Write A Verse Loop Mode"
+              >
+                <Mic className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={() => setIsExpandedFullPlayer(true)}
                 className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
@@ -615,7 +902,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
                 <button
                   onClick={() => setIsPlaying(!isPlaying)}
-                  className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-purple-950 hover:scale-105 transition-all"
+                  className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-purple-950 hover:scale-105 transition-all cursor-pointer"
                   title={isPlaying ? 'Pause' : 'Play'}
                 >
                   {isPlaying ? (
@@ -691,7 +978,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
               <button
                 onClick={() => onBuyClick(currentBeat)}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl shadow-md shadow-purple-950 transition-all shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl shadow-md shadow-purple-950 transition-all shrink-0 cursor-pointer"
               >
                 <ShoppingBag className="w-3.5 h-3.5" />
                 <span>Buy {currencySymbol}{currentBeat.pricing.mp3Lease.toFixed(2)}</span>
