@@ -146,6 +146,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
   const [showCropModal, setShowCropModal] = useState<boolean>(false);
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
   const [showReplaceModal, setShowReplaceModal] = useState<boolean>(false);
+  const [wavAlertMessage, setWavAlertMessage] = useState<string | null>(null);
   
   // Replace target
   const [replaceTargetBeat, setReplaceTargetBeat] = useState<Beat | null>(null);
@@ -383,7 +384,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Storage upload failed');
+        throw new Error(errorData.error || `Storage upload failed: ${res.status} ${res.statusText}`);
       }
 
       const result = await res.json();
@@ -404,20 +405,23 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
             : item
         )
       );
+      showToast('Upload Successful', `File "${queueItem?.fileName}" uploaded successfully.`, 'success');
     } catch (err: any) {
       clearInterval(progressInterval);
+      console.error('[UploadSystem] Error:', err);
       setQueue((prev) =>
         prev.map((item) =>
           item.id === itemId
             ? {
                 ...item,
-                status: 'completed', // Graceful fallback to client audio object URL
-                progress: 100,
-                audioUrl: item.audioObjectUrl,
+                status: 'failed',
+                progress: 0,
+                errorMessage: err.message || 'Unknown upload error'
               }
             : item
         )
       );
+      showToast('Upload Failed', err.message || 'Storage upload failed.', 'error');
     }
   };
 
