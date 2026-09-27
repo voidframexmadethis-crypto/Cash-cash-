@@ -3,12 +3,6 @@ import { X, ShieldCheck, ShoppingBag, Sparkles, Tag, ArrowRight, Wallet, CheckCi
 import { Beat, CartItem, LicenseTierKey, SaleRecord } from '../types';
 import { LICENSE_TIERS } from '../utils/licenseInfo';
 
-// PayPal interface declaration
-interface PayPalButtonsActions {
-  createOrder: (data: any) => Promise<string>;
-  capture: () => Promise<any>;
-}
-
 interface DirectCheckoutModalProps {
   beat: Beat | null;
   selectedLicenseKey: LicenseTierKey;
@@ -32,44 +26,11 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'processing' | 'succeeded' | 'failed'>('idle');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [paypalLoaded, setPaypalLoaded] = useState(false);
   const paypalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCurrentLicenseKey(selectedLicenseKey);
   }, [selectedLicenseKey]);
-
-  // Isolated PayPal Script Loading
-  useEffect(() => {
-    if (!isOpen) {
-      setPaypalLoaded(false);
-      return;
-    }
-
-    const loadPayPalScript = async () => {
-      if (window.paypal) {
-        setPaypalLoaded(true);
-        return;
-      }
-      
-      const script = document.createElement('script');
-      script.src = 'https://www.paypal.com/sdk/js?client-id=sb&currency=USD&components=buttons';
-      script.async = true;
-      script.onload = () => setPaypalLoaded(true);
-      script.onerror = () => {
-        setCheckoutStatus('failed');
-        setCheckoutError('PayPal SDK failed to load.');
-      };
-      document.body.appendChild(script);
-    };
-
-    loadPayPalScript();
-
-    return () => {
-        // Optional: remove script if needed, but usually keeping it cached is fine
-        // If we want total isolation, remove it here.
-    };
-  }, [isOpen]);
 
   if (!isOpen || !beat) return null;
 
@@ -81,48 +42,6 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
 
   const discountAmount = basePrice * appliedDiscount;
   const total = Math.max(0, basePrice - discountAmount);
-
-  // Render isolated PayPal buttons
-  useEffect(() => {
-    if (paypalLoaded && paypalContainerRef.current) {
-        paypalContainerRef.current.innerHTML = '';
-        if (window.paypal && window.paypal.Buttons) {
-            try {
-                window.paypal.Buttons({
-                    createOrder: async () => {
-                        const res = await fetch('/api/paypal/create-order', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                cart: [{ id: beat.id, beatTitle: beat.title, price: total, licenseName: tier.name }],
-                                total: total
-                            }),
-                        });
-                        if (!res.ok) throw new Error('Failed to create order');
-                        const data = await res.json();
-                        return data.orderId;
-                    },
-                    onApprove: async (data: any) => {
-                        const res = await fetch('/api/paypal/verify-order', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ orderId: data.orderID }),
-                        });
-                        if (!res.ok) throw new Error('Capture failed');
-                        const captureData = await res.json();
-                        handlePayPalDirectSuccess(captureData);
-                    },
-                    onError: (err: any) => {
-                        setCheckoutStatus('failed');
-                        setCheckoutError('Payment failed. Please try again.');
-                    }
-                }).render(paypalContainerRef.current);
-            } catch (e) {
-                setCheckoutError('Failed to initialize PayPal buttons.');
-            }
-        }
-    }
-  }, [paypalLoaded, isOpen, total]);
 
   const handlePayPalDirectSuccess = (details: any) => {
     setCheckoutStatus('succeeded');
@@ -162,45 +81,49 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     setCheckoutStatus('processing');
     setCheckoutError(null);
 
-    const singleCartItem: CartItem = {
-      id: `direct-${Date.now()}`,
-      beatId: beat.id,
-      beatTitle: beat.title,
-      artworkUrl: beat.artworkUrl,
-      licenseKey: currentLicenseKey,
-      licenseName: tier.name,
-      price: basePrice,
-      bpm: beat.bpm,
-      key: beat.key,
-      genre: beat.genre,
+    // Load PayPal script only when Buy is clicked
+    const script = document.createElement('script');
+    script.src = 'https://www.paypal.com/sdk/js?client-id=sb&currency=USD&components=buttons';
+    script.async = true;
+    script.onload = () => {
+        // Initialize buttons
+        if (window.paypal && window.paypal.Buttons) {
+            window.paypal.Buttons({
+                createOrder: async () => {
+                    const res = await fetch('/api/paypal/create-order', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            cart: [{ id: beat.id, beatTitle: beat.title, price: total, licenseName: tier.name }],
+                            total: total
+                        }),
+                    });
+                    if (!res.ok) throw new Error('Failed to create order');
+                    const data = await res.json();
+                    return data.orderId;
+                },
+                onApprove: async (data: any) => {
+                    const res = await fetch('/api/paypal/verify-order', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId: data.orderID }),
+                    });
+                    if (!res.ok) throw new Error('Capture failed');
+                    const captureData = await res.json();
+                    handlePayPalDirectSuccess(captureData);
+                },
+                onError: (err: any) => {
+                    setCheckoutStatus('failed');
+                    setCheckoutError('Payment failed. Please try again.');
+                }
+            }).render(paypalContainerRef.current);
+        }
     };
-
-    try {
-      const res = await fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cart: [singleCartItem],
-          discount: appliedDiscount,
-          promoCode,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Order initiation failed (HTTP ${res.status}).`);
-      }
-
-      const data = await res.json();
-      if (data.approvalUrl) {
-        window.location.href = data.approvalUrl;
-      } else {
-        throw new Error(data.message || 'Failed to retrieve PayPal gateway redirect URL.');
-      }
-    } catch (err: any) {
-      console.error('[DirectCheckoutModal] Exception:', err);
-      setCheckoutStatus('failed');
-      setCheckoutError(err.message || 'Payment initiation failed. Please try again.');
-    }
+    script.onerror = () => {
+        setCheckoutStatus('failed');
+        setCheckoutError('PayPal SDK failed to load.');
+    };
+    document.body.appendChild(script);
   };
 
   return (
@@ -286,34 +209,6 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
             </div>
           </div>
 
-          {/* License Rights Highlights */}
-          <div className="p-3.5 bg-purple-950/30 border border-purple-500/20 rounded-2xl space-y-2 text-xs">
-            <div className="flex items-center justify-between text-purple-300 font-bold border-b border-purple-500/20 pb-1.5">
-              <span>{tier.name} Rights Included</span>
-              <span className="font-mono">{tier.royaltySplit}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-300 font-sans">
-              <div>
-                <span className="text-zinc-500 block text-[10px] uppercase">Audio Streams</span>
-                <span className="font-semibold text-white">{tier.audioStreams}</span>
-              </div>
-              <div>
-                <span className="text-zinc-500 block text-[10px] uppercase">Music Videos</span>
-                <span className="font-semibold text-white">{tier.videoStreams}</span>
-              </div>
-              <div>
-                <span className="text-zinc-500 block text-[10px] uppercase">Master Stems</span>
-                <span className={tier.stemsIncluded ? 'text-purple-400 font-bold' : 'text-zinc-400'}>
-                  {tier.stemsIncluded ? 'Included (WAV Stems)' : 'MP3 Master Audio'}
-                </span>
-              </div>
-              <div>
-                <span className="text-zinc-500 block text-[10px] uppercase">Radio Airplay</span>
-                <span className="font-semibold text-white">{tier.radioStations}</span>
-              </div>
-            </div>
-          </div>
-
           {/* Promo Code Input */}
           <div>
             <form onSubmit={handleApplyPromo} className="flex gap-2">
@@ -353,10 +248,6 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                 <span className="font-mono">-{currencySymbol}{discountAmount.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between text-zinc-500 text-[11px]">
-              <span>Escrow & Transfer Fee:</span>
-              <span className="font-mono text-emerald-400 font-bold">$0.00 (NO HIDDEN FEES)</span>
-            </div>
             <div className="flex justify-between items-center text-sm font-black text-white pt-2 border-t border-zinc-850">
               <span>Total Amount Due:</span>
               <span className="font-mono text-purple-300 text-lg">{currencySymbol}{total.toFixed(2)}</span>
@@ -371,7 +262,7 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
             </div>
           )}
 
-          {/* Real PayPal Gateway Actions */}
+          {/* PayPal Container */}
           <div className="space-y-3">
             <button
               onClick={handleProceedToPayPal}
@@ -385,22 +276,7 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
               )}
               <span>Complete Payment with PayPal ({currencySymbol}{total.toFixed(2)})</span>
             </button>
-
-            {!usePayPalSDK ? (
-              <button
-                onClick={() => setUsePayPalSDK(true)}
-                className="w-full py-2 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
-              >
-                Or Render In-Page PayPal Buttons
-              </button>
-            ) : !paypalLoaded ? (
-              <div className="py-2.5 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500">
-                <div className="w-3.5 h-3.5 rounded-full border-2 border-zinc-800 border-t-yellow-400 animate-spin" />
-                <span>Connecting PayPal Gateway...</span>
-              </div>
-            ) : (
-              <div id="direct-paypal-button-container" className="w-full pt-1" />
-            )}
+            <div ref={paypalContainerRef} className="w-full pt-1" />
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-zinc-500 justify-center">
