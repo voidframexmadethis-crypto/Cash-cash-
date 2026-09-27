@@ -129,7 +129,7 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
   ).slice(0, 5);
 
   return (
-    <div className="space-y-8 pb-32 font-sans text-left animate-fadeIn">
+    <div className="w-[999px] max-w-full min-h-[875px] mx-auto space-y-8 pb-32 font-sans text-left animate-fadeIn">
       {/* Top Banner / Header Kicker */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-gradient-to-r from-purple-950/60 via-zinc-950 to-zinc-950 border border-purple-500/20 rounded-3xl shadow-2xl">
         <div className="flex items-center gap-3">

@@ -486,7 +486,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       {isExpandedFullPlayer && (
         <div className="fixed inset-0 z-50 bg-[#09090b] flex flex-col p-4 sm:p-8 text-zinc-100 overflow-y-auto font-sans animate-fadeIn">
           {/* Header Navigation */}
-          <div className="max-w-6xl mx-auto w-full flex items-center justify-between pb-4 border-b border-zinc-850 mb-6">
+          <div className="w-[999px] max-w-full mx-auto flex items-center justify-between pb-4 border-b border-zinc-850 mb-6">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-400" />
               <span className="font-extrabold text-white text-base sm:text-lg uppercase tracking-wider">
@@ -543,7 +543,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           )}
 
           {/* Expanded Player Main Body */}
-          <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-8 items-start my-auto">
+          <div className="w-[999px] max-w-full min-h-[875px] mx-auto bg-zinc-950/80 border border-purple-500/30 rounded-3xl p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 items-start my-auto shadow-2xl">
             {/* Left Column: Big Cover Artwork */}
             <div className="flex flex-col items-center space-y-4">
               <div className="relative aspect-square w-full max-w-sm rounded-3xl bg-zinc-900 border border-zinc-800 overflow-hidden shadow-2xl group">

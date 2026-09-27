@@ -22,6 +22,41 @@ export const FreeDownloadModal: React.FC<FreeDownloadModalProps> = ({
 
   if (!isOpen || !beat) return null;
 
+  const isDirectDownloadWithoutEmail = beat.freeDownloadType === 'untagged';
+
+  const handleDirectDownload = () => {
+    setIsDownloading(true);
+    try {
+      onLeadCaptured('direct_download@artist.guest', beat);
+      const downloadFilename = `${beat.title.replaceAll(' ', '_')}_CASHMERE_KIDS_DEMO.mp3`;
+      if (beat.iaUrl || beat.audioUrl) {
+        const fileUrl = beat.iaUrl || beat.audioUrl;
+        const link = document.createElement('a');
+        link.href = fileUrl || '';
+        link.target = '_blank';
+        link.download = downloadFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        const demoContent = `[CASHMERE KID$ FREE TAGGED BEAT DEMO]\nTitle: ${beat.title}\nProducer: ${beat.producerName || 'CASHMERE KID$'}\nBPM: ${beat.bpm}\nKey: ${beat.key}\nGenre: ${beat.genre}\nLicense: Non-Commercial Promotional Demonstration Only\nTimestamp: ${new Date().toISOString()}`;
+        const blob = new Blob([demoContent], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${beat.title.replaceAll(' ', '_')}_DEMO_AGREEMENT.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      setDownloaded(true);
+    } catch (err: any) {
+      console.error('[FreeDownloadModal] Direct download error:', err);
+      setError('Download could not be initialized. Please retry.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !email.includes('@') || !email.includes('.')) {
@@ -103,49 +138,78 @@ export const FreeDownloadModal: React.FC<FreeDownloadModalProps> = ({
               </div>
             </div>
 
-            {/* Clear, honest description of what is collected and why */}
-            <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2 mb-4 text-xs text-zinc-300">
-              <div className="flex items-center gap-1.5 font-bold text-purple-300">
-                <Info className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>Why We Request Your Email</span>
-              </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Enter your artist email below to receive an instant direct download link for the authorized demo version of <strong>{beat.title}</strong> and join the VIP CASHMERE KID$ artist community. No payment or credit card is required for genuinely free downloads.
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
-                  Your Artist Email
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="artist@recordlabel.com"
-                    required
-                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  />
+            {isDirectDownloadWithoutEmail ? (
+              <div className="space-y-4">
+                <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2 text-xs text-zinc-300">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                    <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Direct Free Download Enabled</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    The producer has set this beat for instant 1-click free download. No email or registration required.
+                  </p>
                 </div>
-                {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-              </div>
 
-              <button
-                type="submit"
-                disabled={isDownloading}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-500 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-purple-950/60 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                {isDownloading ? (
-                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-                <span>Download Free Beat Demo</span>
-              </button>
-            </form>
+                <button
+                  type="button"
+                  onClick={handleDirectDownload}
+                  disabled={isDownloading}
+                  className="w-full py-4 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  {isDownloading ? (
+                    <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  <span>INSTANT DIRECT DOWNLOAD DEMO MP3</span>
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2 mb-4 text-xs text-zinc-300">
+                  <div className="flex items-center gap-1.5 font-bold text-purple-300">
+                    <Info className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Why We Request Your Email</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    Enter your artist email below to receive an instant direct download link for the authorized demo version of <strong>{beat.title}</strong> and join the VIP CASHMERE KID$ artist community. No payment or credit card is required for genuinely free downloads.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
+                      Your Artist Email
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="artist@recordlabel.com"
+                        required
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                    </div>
+                    {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isDownloading}
+                    className="w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-500 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-purple-950/60 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                  >
+                    {isDownloading ? (
+                      <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>Download Free Beat Demo</span>
+                  </button>
+                </form>
+              </div>
+            )}
 
             <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500">
               <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
