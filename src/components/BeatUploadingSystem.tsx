@@ -454,20 +454,44 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const applySquareCrop = () => {
-    setQueue((prev) =>
-      prev.map((item, idx) =>
-        idx === selectedItemIndex
-          ? {
-              ...item,
-              artworkUrl: cropperRawImage,
-              artworkName: 'Custom Cover.jpg',
-            }
-          : item
-      )
-    );
-    setShowCropModal(false);
-    showToast('Artwork Cropped', 'Square cover artwork attached to beat.', 'success');
+  const applySquareCrop = async () => {
+    // Convert data URL to File
+    const response = await fetch(cropperRawImage);
+    const blob = await response.blob();
+    const file = new File([blob], 'artwork.jpg', { type: 'image/jpeg' });
+
+    // Upload artwork
+    const formData = new FormData();
+    formData.append('audioFile', file);
+    formData.append('fileName', 'artwork.jpg');
+    formData.append('mediaType', 'image/jpeg');
+
+    try {
+      const res = await fetch('/api/storage/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error('Artwork upload failed');
+
+      const result = await res.json();
+      
+      setQueue((prev) =>
+        prev.map((item, idx) =>
+          idx === selectedItemIndex
+            ? {
+                ...item,
+                artworkUrl: result.iaUrl || result.playbackUrl,
+                artworkName: 'Custom Cover.jpg',
+              }
+            : item
+        )
+      );
+      setShowCropModal(false);
+      showToast('Artwork Uploaded', 'Cover artwork saved to persistent storage.', 'success');
+    } catch (err) {
+      showToast('Upload Error', 'Failed to save artwork to server.', 'error');
+    }
   };
 
   // Step Wizard Controls

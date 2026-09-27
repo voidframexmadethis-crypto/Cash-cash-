@@ -91,6 +91,11 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                   handlePayPalDirectSuccess(details);
                 });
               },
+              onCancel: (data: any) => {
+                console.log('[PayPalDirect] Cancelled:', data);
+                setCheckoutStatus('idle');
+                setCheckoutError('Payment cancelled.');
+              },
               onError: (err: any) => {
                 console.error('[PayPalDirect] Error:', err);
                 setCheckoutStatus('failed');
