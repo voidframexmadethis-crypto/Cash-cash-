@@ -297,7 +297,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
 
   // ====================================================
-  // PAPER TRAIL & FLASH SALES SECURE DATABASE (IN-MEMORY)
+  // BEAT MARKETPLACE PERSISTENCE SYSTEM (D1 & R2)
   // ====================================================
 
   interface PaperTrailEntry {
@@ -334,8 +334,142 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   const paperTrailLogs: PaperTrailEntry[] = [];
   const flashSales: FlashSale[] = [];
 
-  // PayPal Server Order Creation Endpoint
-  app.post('/api/paypal/create-order', (req, res) => {
+  interface Beat {
+    id: string;
+    title: string;
+    slug: string;
+    description: string;
+    bpm: number;
+    key: string;
+    genre: string;
+    mood: string;
+    tags: string[];
+    price: number;
+    free_download: boolean;
+    status: 'draft' | 'published' | 'archived';
+    artwork_asset_id?: string;
+    main_audio_asset_id?: string;
+    preview_audio_asset_id?: string;
+    created_at: string;
+    updated_at: string;
+    published_at?: string;
+  }
+
+  interface BeatAsset {
+    id: string;
+    beat_id: string;
+    asset_type: 'artwork' | 'main_audio' | 'preview_audio' | 'download';
+    r2_key: string;
+    original_filename: string;
+    mime_type: string;
+    file_size: number;
+    created_at: string;
+  }
+
+  // D1/R2 Simulated Persistence
+  const beatsStore = new Map<string, Beat>();
+  const assetsStore = new Map<string, BeatAsset>();
+
+  // API: Create Beat Draft
+  app.post('/api/beats/create', (req, res) => {
+    const id = `cc_${Date.now()}`;
+    const newBeat: Beat = {
+      id,
+      title: 'UNTITLED BEAT',
+      slug: id,
+      description: '',
+      bpm: 140,
+      key: 'C Minor',
+      genre: 'Trap',
+      mood: 'Dark',
+      tags: [],
+      price: 0,
+      free_download: false,
+      status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    beatsStore.set(id, newBeat);
+    res.json(newBeat);
+  });
+
+  // API: Upload Asset (Audio/Artwork)
+  app.post('/api/beats/:beatId/upload', upload.single('file'), (req, res) => {
+    try {
+      const { beatId } = req.params;
+      const { assetType } = req.body; // 'artwork' | 'main_audio' | 'preview_audio'
+      const file = req.file;
+
+      if (!file || !beatId || !assetType) {
+        return res.status(400).json({ error: 'Missing file, beatId, or assetType' });
+      }
+
+      const beat = beatsStore.get(beatId);
+      if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+      // Simulate R2 upload (save to /media)
+      const assetId = `as_${Date.now()}`;
+      const extension = file.originalname.split('.').pop();
+      const r2Key = `beats/${beatId}/${assetType}/${assetId}.${extension}`;
+      
+      const MEDIA_DIR = path.resolve('media');
+      if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
+      fs.writeFileSync(path.join(MEDIA_DIR, `${assetId}.${extension}`), file.buffer);
+
+      // Create D1 Asset record
+      const newAsset: BeatAsset = {
+        id: assetId,
+        beat_id: beatId,
+        asset_type: assetType,
+        r2_key: r2Key,
+        original_filename: file.originalname,
+        mime_type: file.mimetype,
+        file_size: file.size,
+        created_at: new Date().toISOString(),
+      };
+      assetsStore.set(assetId, newAsset);
+
+      // Update Beat reference
+      if (assetType === 'artwork') beat.artwork_asset_id = assetId;
+      if (assetType === 'main_audio') beat.main_audio_asset_id = assetId;
+      beat.updated_at = new Date().toISOString();
+      beatsStore.set(beatId, beat);
+
+      res.json(newAsset);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Upload failed', message: err.message });
+    }
+  });
+
+
+
+  // API: Update Beat Metadata
+  app.put('/api/beats/:beatId', (req, res) => {
+    const { beatId } = req.params;
+    const beat = beatsStore.get(beatId);
+    if (!beat) return res.status(404).json({ error: 'Not found' });
+    
+    Object.assign(beat, req.body, { updated_at: new Date().toISOString() });
+    beatsStore.set(beatId, beat);
+    res.json(beat);
+  });
+
+  // API: Publish Beat
+  app.put('/api/beats/:beatId/publish', (req, res) => {
+    const { beatId } = req.params;
+    const beat = beatsStore.get(beatId);
+    if (!beat) return res.status(404).json({ error: 'Not found' });
+    
+    // Simple validation
+    if (!beat.main_audio_asset_id) return res.status(400).json({ error: 'No audio asset' });
+    if (!beat.artwork_asset_id) return res.status(400).json({ error: 'No artwork asset' });
+    
+    beat.status = 'published';
+    beat.published_at = new Date().toISOString();
+    beatsStore.set(beatId, beat);
+    res.json(beat);
+  });
+
     try {
       const { cart, discount = 0 } = req.body;
       if (!cart || !Array.isArray(cart) || cart.length === 0) {
