@@ -152,6 +152,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
   const [isReplacingAudio, setIsReplacingAudio] = useState<boolean>(false);
 
   // Artwork Cropper
+  const [isSavingArtwork, setIsSavingArtwork] = useState<boolean>(false);
   const [cropperRawImage, setCropperRawImage] = useState<string>('');
 
   // Audio Playback
@@ -455,42 +456,57 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
   };
 
   const applySquareCrop = async () => {
-    // Convert data URL to File
-    const response = await fetch(cropperRawImage);
-    const blob = await response.blob();
-    const file = new File([blob], 'artwork.jpg', { type: 'image/jpeg' });
-
-    // Upload artwork
-    const formData = new FormData();
-    formData.append('audioFile', file);
-    formData.append('fileName', 'artwork.jpg');
-    formData.append('mediaType', 'image/jpeg');
-
+    if (isSavingArtwork) return;
+    setIsSavingArtwork(true);
+    
     try {
+      // Convert data URL to File
+      const response = await fetch(cropperRawImage);
+      if (!response.ok) throw new Error('Failed to process image data');
+      const blob = await response.blob();
+      const file = new File([blob], 'artwork.jpg', { type: 'image/jpeg' });
+
+      // Upload artwork
+      const formData = new FormData();
+      formData.append('audioFile', file);
+      formData.append('fileName', 'artwork.jpg');
+      formData.append('mediaType', 'image/jpeg');
+
       const res = await fetch('/api/storage/upload', {
         method: 'POST',
         body: formData,
       });
 
-      if (!res.ok) throw new Error('Artwork upload failed');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown upload error' }));
+        throw new Error(errorData.error || 'Artwork upload failed');
+      }
 
       const result = await res.json();
+      
+      const newUrl = result.iaUrl || result.playbackUrl;
+      if (!newUrl) throw new Error('Upload successful but URL missing from server response');
       
       setQueue((prev) =>
         prev.map((item, idx) =>
           idx === selectedItemIndex
             ? {
                 ...item,
-                artworkUrl: result.iaUrl || result.playbackUrl,
+                artworkUrl: newUrl,
                 artworkName: 'Custom Cover.jpg',
               }
             : item
         )
       );
-      setShowCropModal(false);
+      
       showToast('Artwork Uploaded', 'Cover artwork saved to persistent storage.', 'success');
-    } catch (err) {
-      showToast('Upload Error', 'Failed to save artwork to server.', 'error');
+      setShowCropModal(false);
+      
+    } catch (err: any) {
+      console.error('Artwork save error:', err);
+      showToast('Upload Error', err.message || 'Failed to save artwork to server.', 'error');
+    } finally {
+      setIsSavingArtwork(false);
     }
   };
 
@@ -1438,7 +1454,9 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowCropModal(false)} className="px-4 py-2 bg-zinc-900 text-zinc-400 font-bold text-xs rounded-xl">Cancel</button>
-              <button onClick={applySquareCrop} className="px-5 py-2 bg-purple-600 text-white font-black text-xs uppercase rounded-xl">Save Square Crop</button>
+              <button onClick={applySquareCrop} disabled={isSavingArtwork} className="px-5 py-2 bg-purple-600 text-white font-black text-xs uppercase rounded-xl disabled:opacity-50">
+                {isSavingArtwork ? 'Saving...' : 'Save Square Crop'}
+              </button>
             </div>
           </div>
         </div>

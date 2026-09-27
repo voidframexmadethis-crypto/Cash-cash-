@@ -75,21 +75,50 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
         if (window.paypal && window.paypal.Buttons) {
           try {
             window.paypal.Buttons({
-              createOrder: (data: any, actions: any) => {
-                return actions.order.create({
-                  purchase_units: [{
-                    amount: {
-                      value: total.toFixed(2),
-                      currency_code: 'USD',
-                    },
-                    description: `CASHMERE KID$ - ${beat.title} (${tier.name})`,
-                  }],
-                });
+              createOrder: async (data: any, actions: any) => {
+                try {
+                  const res = await fetch('/api/paypal/create-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      cart: [{
+                        id: beat.id,
+                        beatTitle: beat.title,
+                        price: total,
+                        licenseName: tier.name,
+                      }],
+                      total: total
+                    }),
+                  });
+
+                  if (!res.ok) throw new Error('Failed to create order on server');
+                  const orderData = await res.json();
+                  return orderData.orderId;
+                } catch (err: any) {
+                  console.error('[PayPalDirect] createOrder Error:', err);
+                  setCheckoutStatus('failed');
+                  setCheckoutError('PayPal Order creation failed. Please try again.');
+                  throw err;
+                }
               },
-              onApprove: (data: any, actions: any) => {
-                return actions.order.capture().then((details: any) => {
-                  handlePayPalDirectSuccess(details);
-                });
+              onApprove: async (data: any, actions: any) => {
+                try {
+                  const res = await fetch('/api/paypal/verify-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      orderId: data.orderID
+                    }),
+                  });
+                  
+                  if (!res.ok) throw new Error('Capture failed on server');
+                  const captureData = await res.json();
+                  handlePayPalDirectSuccess(captureData);
+                } catch (err: any) {
+                  console.error('[PayPalDirect] onApprove Error:', err);
+                  setCheckoutStatus('failed');
+                  setCheckoutError('Payment capture failed. Please contact support.');
+                }
               },
               onCancel: (data: any) => {
                 console.log('[PayPalDirect] Cancelled:', data);
