@@ -37,6 +37,7 @@ import {
   ListOrdered
 } from 'lucide-react';
 import { Beat, GenreType, BeatPack } from '../types';
+import { ArtworkUploader } from './ArtworkUploader';
 
 export interface BeatUploadingSystemProps {
   onPublishBeat: (newBeat: Beat) => void;
@@ -151,22 +152,8 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
   const [replaceAudioFile, setReplaceAudioFile] = useState<File | null>(null);
   const [isReplacingAudio, setIsReplacingAudio] = useState<boolean>(false);
 
-  // Artwork Cropper
-  const [isSavingArtwork, setIsSavingArtwork] = useState<boolean>(false);
-  const [cropperRawImage, setCropperRawImage] = useState<string>('');
+  // Replaceable section for artwork uploader
 
-  // Audio Playback
-  const [isPreviewPlaying, setIsPreviewPlaying] = useState<boolean>(false);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  // WAV Rejection Alert Toast
-  const [wavAlertMessage, setWavAlertMessage] = useState<string | null>(null);
-
-  // Active Drafts
-  const [savedDrafts, setSavedDrafts] = useState<Beat[]>(() => {
-    const saved = localStorage.getItem('voodoo_beat_drafts');
-    return saved ? JSON.parse(saved) : [];
-  });
 
   const showToast = (title: string, desc: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage({ title, desc, type });
@@ -442,72 +429,6 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
       }
       return filtered;
     });
-  };
-
-  // Artwork Handler
-  const handleArtworkFileSelected = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setCropperRawImage(dataUrl);
-      setShowCropModal(true);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const applySquareCrop = async () => {
-    if (isSavingArtwork) return;
-    setIsSavingArtwork(true);
-    
-    try {
-      // Convert data URL to File
-      const response = await fetch(cropperRawImage);
-      if (!response.ok) throw new Error('Failed to process image data');
-      const blob = await response.blob();
-      const file = new File([blob], 'artwork.jpg', { type: 'image/jpeg' });
-
-      // Upload artwork
-      const formData = new FormData();
-      formData.append('audioFile', file);
-      formData.append('fileName', 'artwork.jpg');
-      formData.append('mediaType', 'image/jpeg');
-
-      const res = await fetch('/api/storage/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown upload error' }));
-        throw new Error(errorData.error || 'Artwork upload failed');
-      }
-
-      const result = await res.json();
-      
-      const newUrl = result.iaUrl || result.playbackUrl;
-      if (!newUrl) throw new Error('Upload successful but URL missing from server response');
-      
-      setQueue((prev) =>
-        prev.map((item, idx) =>
-          idx === selectedItemIndex
-            ? {
-                ...item,
-                artworkUrl: newUrl,
-                artworkName: 'Custom Cover.jpg',
-              }
-            : item
-        )
-      );
-      
-      showToast('Artwork Uploaded', 'Cover artwork saved to persistent storage.', 'success');
-      setShowCropModal(false);
-      
-    } catch (err: any) {
-      console.error('Artwork save error:', err);
-      showToast('Upload Error', err.message || 'Failed to save artwork to server.', 'error');
-    } finally {
-      setIsSavingArtwork(false);
-    }
   };
 
   // Step Wizard Controls
@@ -968,29 +889,23 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
                   </div>
                 </div>
 
-                {/* Upload or Link Artwork Controls */}
                 <div className="md:col-span-2 space-y-5">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-400 uppercase block">Option A: Upload Custom Artwork Image File</label>
-                    <input
-                      type="file"
-                      id="artworkFileInput"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleArtworkFileSelected(e.target.files[0]);
-                        }
+                    <label className="text-xs font-bold text-zinc-400 uppercase block">Upload Artwork</label>
+                    <ArtworkUploader
+                      currentArtworkUrl={activeItem.artworkUrl}
+                      title={activeItem.title}
+                      onArtworkSaved={(url) => {
+                        setQueue((prev) =>
+                          prev.map((item, idx) =>
+                            idx === selectedItemIndex ? { ...item, artworkUrl: url } : item
+                          )
+                        );
+                        showToast('Artwork Uploaded', 'Cover artwork saved to persistent storage.', 'success');
                       }}
                     />
-                    <label
-                      htmlFor="artworkFileInput"
-                      className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded-xl text-xs text-purple-300 font-bold uppercase flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <ImageIcon className="w-4 h-4 text-purple-400" />
-                      <span>Upload Image File (JPG / PNG)</span>
-                    </label>
                   </div>
+
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-400 uppercase block">Option B: Paste Direct Cover Image URL</label>

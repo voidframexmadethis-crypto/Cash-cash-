@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, ShoppingBag, Sparkles, Tag, ArrowRight, Wallet, CheckCircle, AlertCircle, Music } from 'lucide-react';
 import { Beat, CartItem, LicenseTierKey, SaleRecord } from '../types';
 import { LICENSE_TIERS } from '../utils/licenseInfo';
 
-declare global {
-  interface Window {
-    paypal?: any;
-  }
+// PayPal interface declaration
+interface PayPalButtonsActions {
+  createOrder: (data: any) => Promise<string>;
+  capture: () => Promise<any>;
 }
 
 interface DirectCheckoutModalProps {
@@ -32,28 +32,44 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'processing' | 'succeeded' | 'failed'>('idle');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [usePayPalSDK, setUsePayPalSDK] = useState(false);
   const [paypalLoaded, setPaypalLoaded] = useState(false);
+  const paypalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCurrentLicenseKey(selectedLicenseKey);
   }, [selectedLicenseKey]);
 
+  // Isolated PayPal Script Loading
   useEffect(() => {
-    if (usePayPalSDK && !paypalLoaded) {
+    if (!isOpen) {
+      setPaypalLoaded(false);
+      return;
+    }
+
+    const loadPayPalScript = async () => {
+      if (window.paypal) {
+        setPaypalLoaded(true);
+        return;
+      }
+      
       const script = document.createElement('script');
       script.src = 'https://www.paypal.com/sdk/js?client-id=sb&currency=USD&components=buttons';
       script.async = true;
-      script.onload = () => {
-        setPaypalLoaded(true);
-      };
+      script.onload = () => setPaypalLoaded(true);
       script.onerror = () => {
         setCheckoutStatus('failed');
         setCheckoutError('PayPal SDK failed to load.');
       };
       document.body.appendChild(script);
-    }
-  }, [usePayPalSDK, paypalLoaded]);
+    };
+
+    loadPayPalScript();
+
+    return () => {
+        // Optional: remove script if needed, but usually keeping it cached is fine
+        // If we want total isolation, remove it here.
+    };
+  }, [isOpen]);
 
   if (!isOpen || !beat) return null;
 
@@ -66,105 +82,63 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const discountAmount = basePrice * appliedDiscount;
   const total = Math.max(0, basePrice - discountAmount);
 
-  // Render in-modal PayPal buttons
+  // Render isolated PayPal buttons
   useEffect(() => {
-    if (paypalLoaded && usePayPalSDK && checkoutStatus === 'idle') {
-      const container = document.getElementById('direct-paypal-button-container');
-      if (container) {
-        container.innerHTML = '';
+    if (paypalLoaded && paypalContainerRef.current) {
+        paypalContainerRef.current.innerHTML = '';
         if (window.paypal && window.paypal.Buttons) {
-          try {
-            window.paypal.Buttons({
-              createOrder: async (data: any, actions: any) => {
-                try {
-                  const res = await fetch('/api/paypal/create-order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      cart: [{
-                        id: beat.id,
-                        beatTitle: beat.title,
-                        price: total,
-                        licenseName: tier.name,
-                      }],
-                      total: total
-                    }),
-                  });
-
-                  if (!res.ok) throw new Error('Failed to create order on server');
-                  const orderData = await res.json();
-                  return orderData.orderId;
-                } catch (err: any) {
-                  console.error('[PayPalDirect] createOrder Error:', err);
-                  setCheckoutStatus('failed');
-                  setCheckoutError('PayPal Order creation failed. Please try again.');
-                  throw err;
-                }
-              },
-              onApprove: async (data: any, actions: any) => {
-                try {
-                  const res = await fetch('/api/paypal/verify-order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      orderId: data.orderID
-                    }),
-                  });
-                  
-                  if (!res.ok) throw new Error('Capture failed on server');
-                  const captureData = await res.json();
-                  handlePayPalDirectSuccess(captureData);
-                } catch (err: any) {
-                  console.error('[PayPalDirect] onApprove Error:', err);
-                  setCheckoutStatus('failed');
-                  setCheckoutError('Payment capture failed. Please contact support.');
-                }
-              },
-              onCancel: (data: any) => {
-                console.log('[PayPalDirect] Cancelled:', data);
-                setCheckoutStatus('idle');
-                setCheckoutError('Payment cancelled.');
-              },
-              onError: (err: any) => {
-                console.error('[PayPalDirect] Error:', err);
-                setCheckoutStatus('failed');
-                setCheckoutError('PayPal Secure Transaction was rejected or failed. Please try again.');
-              },
-            }).render('#direct-paypal-button-container');
-          } catch (e) {
-            console.error('[PayPalDirect] Rendering error:', e);
-            setCheckoutStatus('failed');
-            setCheckoutError('PayPal button rendering failed.');
-          }
+            try {
+                window.paypal.Buttons({
+                    createOrder: async () => {
+                        const res = await fetch('/api/paypal/create-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                cart: [{ id: beat.id, beatTitle: beat.title, price: total, licenseName: tier.name }],
+                                total: total
+                            }),
+                        });
+                        if (!res.ok) throw new Error('Failed to create order');
+                        const data = await res.json();
+                        return data.orderId;
+                    },
+                    onApprove: async (data: any) => {
+                        const res = await fetch('/api/paypal/verify-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orderId: data.orderID }),
+                        });
+                        if (!res.ok) throw new Error('Capture failed');
+                        const captureData = await res.json();
+                        handlePayPalDirectSuccess(captureData);
+                    },
+                    onError: (err: any) => {
+                        setCheckoutStatus('failed');
+                        setCheckoutError('Payment failed. Please try again.');
+                    }
+                }).render(paypalContainerRef.current);
+            } catch (e) {
+                setCheckoutError('Failed to initialize PayPal buttons.');
+            }
         }
-      }
     }
-  }, [paypalLoaded, usePayPalSDK, checkoutStatus, total, currentLicenseKey, beat]);
+  }, [paypalLoaded, isOpen, total]);
 
   const handlePayPalDirectSuccess = (details: any) => {
-    setCheckoutStatus('processing');
-    const generatedId = details.id || `CK-${Math.floor(10000 + Math.random() * 90000)}`;
-    const payerName = details.payer?.name?.given_name || 'VIP Artist';
-    const payerEmail = details.payer?.email_address || 'client@paypal.com';
-
-    const newRecord: SaleRecord = {
-      id: `sale-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      orderId: generatedId,
-      customerName: payerName,
-      customerEmail: payerEmail,
+    setCheckoutStatus('succeeded');
+    onRecordSale([{
+      id: `sale-${Date.now()}`,
+      orderId: details.id || `CK-${Math.random()}`,
+      customerName: 'VIP Artist',
+      customerEmail: 'client@paypal.com',
       beatTitle: beat.title,
       licenseType: tier.name,
       amount: total,
-      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      date: new Date().toISOString(),
       status: 'Completed',
-    };
-
-    onRecordSale([newRecord]);
-    setCheckoutStatus('succeeded');
-
-    // Trigger instant verified checkout receipt redirect
+    }]);
     setTimeout(() => {
-      window.location.href = `/checkout/result?status=success&order_id=${generatedId}`;
+        window.location.href = `/checkout/result?status=success`;
     }, 800);
   };
 

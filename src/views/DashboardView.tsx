@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ArtworkUploader } from '../components/ArtworkUploader';
 import {
   DollarSign,
   Play,
@@ -3514,39 +3515,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="space-y-3">
-              <div>
-                <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Beat Artwork</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl overflow-hidden border border-zinc-800 shrink-0 bg-zinc-900">
-                    <img src={editArtworkUrl || '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg'} alt="Artwork" className="w-full h-full object-cover" />
-                  </div>
-                  <input
-                    type="file"
-                    id="editBeatDeviceArtworkInput"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        const file = e.target.files[0];
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          if (ev.target?.result) {
-                            setEditArtworkUrl(ev.target.result as string);
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                      }
+                <div className="space-y-2">
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Beat Artwork</label>
+                  <ArtworkUploader
+                    currentArtworkUrl={editArtworkUrl}
+                    title={editTitle}
+                    onArtworkSaved={(url) => {
+                      setEditArtworkUrl(url);
+                      triggerSaveState('Artwork saved');
                     }}
                   />
-                  <label
-                    htmlFor="editBeatDeviceArtworkInput"
-                    className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs text-center rounded-xl cursor-pointer transition-all shadow flex items-center justify-center gap-1.5"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span>Upload Device Image</span>
-                  </label>
                 </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
