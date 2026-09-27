@@ -25,6 +25,7 @@ import { MerchView } from './views/MerchView';
 import { BeatPacksView } from './views/BeatPacksView';
 import { HallOfFameView } from './views/HallOfFameView';
 import { CheckoutResultView } from './views/CheckoutResultView';
+import { AudioPlayerView } from './views/AudioPlayerView';
 
 import {
   Beat,
@@ -225,6 +226,7 @@ export default function App() {
   // Deep-linking parsing and routing on mount + popstate
   useEffect(() => {
     const handleRouting = () => {
+      const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       const queryBeatId = params.get('beat');
       if (queryBeatId) {
@@ -234,12 +236,12 @@ export default function App() {
         }
       }
 
-      // Check if we are on a checkout return or cancel flow
-      const isCheckoutPath = window.location.pathname.startsWith('/checkout');
-      const hasCheckoutParams = params.has('status') || params.has('paypal_success') || params.has('order_id') || params.has('token');
-
-      if (isCheckoutPath || hasCheckoutParams) {
+      if (pathname === '/audio-player') {
+        setCurrentView('player');
+      } else if (pathname.startsWith('/checkout') || params.has('status') || params.has('paypal_success') || params.has('order_id') || params.has('token')) {
         setCurrentView('checkout-result');
+      } else if (pathname === '/') {
+        setCurrentView((prev) => prev === 'player' ? 'home' : prev);
       }
     };
 
@@ -247,6 +249,19 @@ export default function App() {
     window.addEventListener('popstate', handleRouting);
     return () => window.removeEventListener('popstate', handleRouting);
   }, [beats]);
+
+  // Synchronize browser address bar pathname with currentView
+  useEffect(() => {
+    if (currentView === 'player') {
+      if (window.location.pathname !== '/audio-player') {
+        window.history.pushState({ view: 'player' }, '', '/audio-player');
+      }
+    } else {
+      if (window.location.pathname === '/audio-player') {
+        window.history.pushState({ view: currentView }, '', '/');
+      }
+    }
+  }, [currentView]);
 
   // Audio Controls
   const handlePlayToggle = (beat: Beat) => {
@@ -324,9 +339,22 @@ export default function App() {
       return;
     }
     if (!currentBeat) return;
-    const currentIndex = beats.findIndex((b) => b.id === currentBeat.id);
-    const prevIndex = (currentIndex - 1 + beats.length) % beats.length;
-    setCurrentBeat(beats[prevIndex]);
+    
+    // Determine the list to navigate based on current view and whether current beat is draft
+    const isDashboard = currentView === 'dashboard' || currentView === 'uploader';
+    const isCurrentDraft = currentBeat.published === false;
+    const listToNavigate = (isDashboard || isCurrentDraft) 
+      ? beats 
+      : beats.filter((b) => b.published !== false);
+      
+    if (listToNavigate.length === 0) return;
+    
+    const currentIndex = listToNavigate.findIndex((b) => b.id === currentBeat.id);
+    const prevIndex = currentIndex === -1 
+      ? 0 
+      : (currentIndex - 1 + listToNavigate.length) % listToNavigate.length;
+      
+    setCurrentBeat(listToNavigate[prevIndex]);
     setIsPlaying(true);
   };
 
@@ -336,9 +364,22 @@ export default function App() {
       return;
     }
     if (!currentBeat) return;
-    const currentIndex = beats.findIndex((b) => b.id === currentBeat.id);
-    const nextIndex = (currentIndex + 1) % beats.length;
-    setCurrentBeat(beats[nextIndex]);
+    
+    // Determine the list to navigate based on current view and whether current beat is draft
+    const isDashboard = currentView === 'dashboard' || currentView === 'uploader';
+    const isCurrentDraft = currentBeat.published === false;
+    const listToNavigate = (isDashboard || isCurrentDraft) 
+      ? beats 
+      : beats.filter((b) => b.published !== false);
+      
+    if (listToNavigate.length === 0) return;
+    
+    const currentIndex = listToNavigate.findIndex((b) => b.id === currentBeat.id);
+    const nextIndex = currentIndex === -1 
+      ? 0 
+      : (currentIndex + 1) % listToNavigate.length;
+      
+    setCurrentBeat(listToNavigate[nextIndex]);
     setIsPlaying(true);
   };
 
@@ -673,6 +714,23 @@ export default function App() {
           />
         )}
 
+        {currentView === 'player' && (
+          <AudioPlayerView
+            beats={publishedBeats}
+            currentBeat={currentBeat}
+            isPlaying={isPlaying}
+            onPlayToggle={handlePlayToggle}
+            onBuyClick={(beat) => setSelectedBuyBeat(beat)}
+            onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
+            onShareClick={(beat) => setSelectedShareBeat(beat)}
+            onViewDetail={handleViewDetailWithHistory}
+            currencySymbol={settings.currencySymbol}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            onNavigateToBrowse={() => setCurrentView('browse')}
+          />
+        )}
+
         {currentView === 'browse' && (
           <BrowseView
             beats={publishedBeats}
@@ -912,6 +970,8 @@ export default function App() {
         beatPackTrackIndex={beatPackTrackIndex}
         onNextBeatPackTrack={handleNextBeatPackTrack}
         onExitBeatPackMode={handleExitBeatPackMode}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
       />
 
       {/* Beat Product Detail Modal */}

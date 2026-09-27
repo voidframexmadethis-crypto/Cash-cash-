@@ -55,6 +55,8 @@ interface WaveformPlayerProps {
   beatPackTrackIndex?: number;
   onNextBeatPackTrack?: () => void;
   onExitBeatPackMode?: () => void;
+  currentView?: string;
+  setCurrentView?: (view: string) => void;
 }
 
 export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
@@ -74,6 +76,8 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   beatPackTrackIndex = 0,
   onNextBeatPackTrack,
   onExitBeatPackMode,
+  currentView,
+  setCurrentView,
 }) => {
   // Core Time & Volume States
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -291,6 +295,56 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     }
   };
 
+  // Keyboard Shortcuts for Audio Player Navigation & Control
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if the user is typing in an input, textarea, or contenteditable
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true')
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying(!isPlaying);
+      } else if (e.code === 'ArrowRight') {
+        if (e.shiftKey) {
+          // Seek forward 10 seconds
+          const target = Math.min(duration, currentTime + 10);
+          setCurrentTime(target);
+          audioSynth.seek(target);
+        } else {
+          // Next track
+          onNext();
+        }
+      } else if (e.code === 'ArrowLeft') {
+        if (e.shiftKey) {
+          // Seek backward 10 seconds
+          const target = Math.max(0, currentTime - 10);
+          setCurrentTime(target);
+          audioSynth.seek(target);
+        } else {
+          // Prev track
+          onPrev();
+        }
+      } else if (e.code === 'KeyM') {
+        toggleMute();
+      } else if (e.code === 'KeyL') {
+        setIsLooping(!isLooping);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPlaying, setIsPlaying, currentTime, duration, onNext, onPrev, isLooping]);
+
   // Feature 17: Continue Listening Controls
   const handleContinueFromSaved = () => {
     if (promptSavedPosition > 0) {
@@ -450,7 +504,12 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
               </button>
 
               <button
-                onClick={() => setIsExpandedFullPlayer(false)}
+                onClick={() => {
+                  setIsExpandedFullPlayer(false);
+                  if (setCurrentView && currentView === 'player') {
+                    setCurrentView('home');
+                  }
+                }}
                 className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer"
                 title="Collapse Player"
               >
@@ -809,7 +868,12 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           <div className="flex items-center gap-3.5 min-w-0 max-w-xs sm:max-w-sm">
             <div
               className="relative w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden cursor-pointer shrink-0"
-              onClick={() => setIsExpandedFullPlayer(true)}
+              onClick={() => {
+                setIsExpandedFullPlayer(true);
+                if (setCurrentView && currentView !== 'player') {
+                  setCurrentView('player');
+                }
+              }}
             >
               <img src={currentBeat.artworkUrl} alt={currentBeat.title} className="w-full h-full object-cover" />
               {playerState === 'loading' && (
@@ -821,7 +885,12 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h4 className="font-extrabold text-sm text-white truncate cursor-pointer hover:text-purple-300" onClick={() => setIsExpandedFullPlayer(true)}>
+                <h4 className="font-extrabold text-sm text-white truncate cursor-pointer hover:text-purple-300" onClick={() => {
+                  setIsExpandedFullPlayer(true);
+                  if (setCurrentView && currentView !== 'player') {
+                    setCurrentView('player');
+                  }
+                }}>
                   {currentBeat.title}
                 </h4>
               </div>
@@ -833,12 +902,30 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
           {/* Middle: Feature 13 Visual Waveform Canvas & Transport Controls */}
           <div className="hidden md:flex flex-1 items-center gap-4 max-w-xl">
-            <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg cursor-pointer shrink-0"
-            >
-              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={onPrev}
+                className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                title="Previous Beat"
+              >
+                <SkipBack className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg cursor-pointer transition-transform hover:scale-105 shrink-0"
+              >
+                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+              </button>
+
+              <button
+                onClick={onNext}
+                className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                title="Next Beat"
+              >
+                <SkipForward className="w-4 h-4" />
+              </button>
+            </div>
 
             <div className="flex-1 space-y-1">
               <div className="relative w-full h-8 cursor-pointer" onClick={handleSeek}>
@@ -853,12 +940,28 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
           {/* Right: Actions, Volume & Expand */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="md:hidden w-12 h-12 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer shrink-0"
-            >
-              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-            </button>
+            <div className="flex md:hidden items-center gap-2 shrink-0">
+              <button
+                onClick={onPrev}
+                className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
+                title="Previous Beat"
+              >
+                <SkipBack className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="w-12 h-12 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer shrink-0"
+              >
+                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+              </button>
+              <button
+                onClick={onNext}
+                className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
+                title="Next Beat"
+              >
+                <SkipForward className="w-4 h-4" />
+              </button>
+            </div>
 
             <button
               onClick={() => onBuyClick(currentBeat)}
@@ -869,7 +972,12 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
             </button>
 
             <button
-              onClick={() => setIsExpandedFullPlayer(true)}
+              onClick={() => {
+                setIsExpandedFullPlayer(true);
+                if (setCurrentView && currentView !== 'player') {
+                  setCurrentView('player');
+                }
+              }}
               className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 cursor-pointer"
               title="Expand Full Player"
             >

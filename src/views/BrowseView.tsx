@@ -58,6 +58,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Feature 26: Filter Chips States
   const [selectedGenre, setSelectedGenre] = useState<string>(initialGenreFilter || 'ALL');
+  const [selectedTag, setSelectedTag] = useState<string>('ALL');
   const [selectedKey, setSelectedKey] = useState<string>('ALL');
   const [selectedBpmRange, setSelectedBpmRange] = useState<string>('ALL');
   const [selectedPriceMax, setSelectedPriceMax] = useState<number | 'ALL'>('ALL');
@@ -67,15 +68,30 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const [featuredOnly, setFeaturedOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'price-asc' | 'price-desc' | 'bpm' | 'popular'>('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Default to list view as in uploaded screenshot
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Feature 23: Top Tracks Timeframe State
   const [topTracksTimeframe, setTopTracksTimeframe] = useState<'all' | '30days' | '7days'>('all');
 
-  const genres = ['ALL', 'TRAP', 'FREESTYLE TRAP', 'DARK SYNTH', 'HARD TRAP', 'DRILL', 'HYPER TRAP'];
+  const firstTierGenres = [
+    { label: '🔥 POP', value: 'POP' },
+    { label: 'AFRO', value: 'AFRO' },
+    { label: 'TRAP', value: 'TRAP' },
+    { label: 'NEW SCHOOL', value: 'NEW SCHOOL' },
+    { label: 'LATINO', value: 'LATINO' },
+    { label: 'ELECTRO', value: 'ELECTRO' },
+    { label: 'HIP HOP', value: 'HIP HOP' },
+    { label: 'DIRTY SOUTH', value: 'DIRTY SOUTH' },
+    { label: 'SMOOTH', value: 'SMOOTH' },
+    { label: 'BANGER', value: 'BANGER' }
+  ];
+
+  const secondTierTags = [
+    'Guitar', 'AfroPop', 'AfroBeat', 'New School', 'Smooth', 'Banger', 'Rap Fr', 'Chill', 'Pop', 'Dark', 'Melodic', 'Chill Beat', 'Urban Pop', 'AfroHouse', 'Rap Beat'
+  ];
+
   const musicalKeys = ['ALL', 'C Minor', 'C# Minor', 'D Minor', 'D# Minor', 'F Minor', 'F# Minor', 'G Minor', 'G# Minor', 'A Minor', 'A# Minor', 'E Minor'];
-  const moodsList = ['ALL', 'Dark', 'Aggressive', 'High Fashion', 'Bouncy', 'Melancholic', 'Energetic'];
   const bpmRanges = [
     { label: 'ALL BPM', value: 'ALL' },
     { label: '120–130 BPM', value: '120-130' },
@@ -102,9 +118,16 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
         beat.bpm.toString().includes(q) ||
         (q.includes('bpm') && beat.bpm.toString().includes(q.replace('bpm', '').trim()));
 
-      const matchesGenre = selectedGenre === 'ALL' || beat.genre.toUpperCase() === selectedGenre.toUpperCase();
+      const matchesGenre = selectedGenre === 'ALL' || 
+        beat.genre.toUpperCase() === selectedGenre.toUpperCase() || 
+        beat.tags.some(t => t.toUpperCase() === selectedGenre.toUpperCase());
+
+      const matchesTag = selectedTag === 'ALL' || 
+        beat.tags.some(t => t.toLowerCase() === selectedTag.toLowerCase()) || 
+        beat.genre.toLowerCase() === selectedTag.toLowerCase() || 
+        beat.moods.some(m => m.toLowerCase() === selectedTag.toLowerCase());
+
       const matchesKey = selectedKey === 'ALL' || beat.key === selectedKey;
-      const matchesMood = selectedMood === 'ALL' || beat.moods.some((m) => m.toLowerCase() === selectedMood.toLowerCase());
       
       let matchesBpmRange = true;
       if (selectedBpmRange === '120-130') matchesBpmRange = beat.bpm >= 120 && beat.bpm <= 130;
@@ -123,8 +146,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       return (
         matchesSearch &&
         matchesGenre &&
+        matchesTag &&
         matchesKey &&
-        matchesMood &&
         matchesBpmRange &&
         matchesPrice &&
         matchesFree &&
@@ -159,10 +182,10 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const isFilteringActive =
     searchQuery !== '' ||
     selectedGenre !== 'ALL' ||
+    selectedTag !== 'ALL' ||
     selectedKey !== 'ALL' ||
     selectedBpmRange !== 'ALL' ||
     selectedPriceMax !== 'ALL' ||
-    selectedMood !== 'ALL' ||
     freeDownloadOnly ||
     featuredOnly ||
     favoritesOnly;
@@ -170,6 +193,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedGenre('ALL');
+    setSelectedTag('ALL');
     setSelectedKey('ALL');
     setSelectedBpmRange('ALL');
     setSelectedPriceMax('ALL');
@@ -181,63 +205,96 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   };
 
   return (
-    <div className="space-y-10 pb-32 text-left font-sans animate-fadeIn">
+    <div className="space-y-10 pb-32 text-left font-sans animate-fadeIn bg-black min-h-screen">
       
       {/* ========================================================================= */}
-      {/* 25. ADVANCED STORE SEARCH BAR                                             */}
+      {/* 25. ADVANCED STORE SEARCH BAR WITH LEFT ALIGNED SEARCH ICON              */}
       {/* ========================================================================= */}
-      <div className="relative w-full max-w-4xl mx-auto">
+      <div className="relative w-full max-w-4xl mx-auto px-4 mt-6">
+        <div className="absolute left-8 top-1/2 -translate-y-1/2 text-zinc-500">
+          <Search className="w-5 h-5" />
+        </div>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search beats by title, BPM (e.g. 140 BPM), Key (e.g. C Minor), Genre, Mood, or #tag..."
-          className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 text-white rounded-2xl py-4 pl-6 pr-12 text-sm sm:text-base font-medium focus:outline-none shadow-2xl transition-all placeholder-zinc-500"
+          placeholder="Search for a Beat, Genre, Type Beat..."
+          className="w-full bg-[#0d0d0e] border border-zinc-900 focus:border-zinc-700 text-white rounded-xl py-3.5 pl-12 pr-6 text-sm sm:text-base font-medium focus:outline-none shadow-2xl transition-all placeholder-zinc-600"
         />
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400">
-          <Search className="w-5 h-5 text-purple-400" />
-        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 26. FAST-ACCESS FILTER CHIPS & ACTIVE FILTERS STRIP                       */}
+      {/* DOUBLE-TIER FAST-ACCESS PILLS WITH CENTERED RESET BUTTON                 */}
       {/* ========================================================================= */}
-      <div className="space-y-3 bg-zinc-950 p-5 rounded-3xl border border-zinc-850 shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          
-          {/* Genre Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-none">
-            {genres.map((g) => (
+      <div className="w-full max-w-4xl mx-auto px-4 flex flex-col items-center gap-4">
+        
+        {/* Tier 1: Primary Genres */}
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-full">
+          {firstTierGenres.map((g) => {
+            const isActive = selectedGenre === g.value;
+            return (
               <button
-                key={g}
-                onClick={() => setSelectedGenre(g)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                  selectedGenre === g
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-950 border border-purple-400/40'
-                    : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-850'
+                key={g.value}
+                onClick={() => {
+                  setSelectedGenre(isActive ? 'ALL' : g.value);
+                  setSelectedTag('ALL'); // Reset tag if genre is clicked
+                }}
+                className={`px-4 py-2 rounded-full text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 border ${
+                  isActive
+                    ? 'bg-[#18181b] text-white border-zinc-700 shadow-lg shadow-black/40'
+                    : 'bg-[#0d0d0e] text-zinc-400 hover:text-white border-transparent hover:bg-zinc-900/40'
                 }`}
               >
-                {g}
+                <span>{g.label}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          {/* Controls Right */}
-          <div className="flex items-center gap-3 ml-auto">
-            {/* Mobile Filter Sheet Trigger */}
-            <button
-              onClick={() => setMobileFilterOpen(true)}
-              className="md:hidden px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-extrabold text-zinc-300 flex items-center gap-1.5 cursor-pointer"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-purple-400" />
-              <span>Filters</span>
-            </button>
+        {/* Tier 2: Specific Tags / Vibes */}
+        <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-full">
+          {secondTierTags.map((tag) => {
+            const isActive = selectedTag === tag;
+            return (
+              <button
+                key={tag}
+                onClick={() => {
+                  setSelectedTag(isActive ? 'ALL' : tag);
+                  setSelectedGenre('ALL'); // Reset genre if tag is clicked
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer border ${
+                  isActive
+                    ? 'bg-[#18181b] text-white border-zinc-700 shadow-lg shadow-black/40'
+                    : 'bg-[#0d0d0e] text-zinc-500 hover:text-white border-transparent hover:bg-zinc-900/40'
+                }`}
+              >
+                <span>{tag}</span>
+              </button>
+            );
+          })}
+        </div>
 
+        {/* Reset Button (Centered exactly as shown in screenshot) */}
+        {(isFilteringActive || selectedTag !== 'ALL') && (
+          <button
+            onClick={resetFilters}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0d0d0e] hover:bg-[#18181b] border border-zinc-800 text-xs font-bold text-zinc-300 hover:text-white rounded-xl transition-all cursor-pointer shadow-md"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Reset</span>
+          </button>
+        )}
+      </div>
+
+      {/* Control Strip (Sort, Key, BPM selectors) */}
+      <div className="w-full max-w-4xl mx-auto px-4">
+        <div className="flex items-center justify-between p-3 bg-[#0d0d0e]/60 rounded-2xl border border-zinc-900">
+          <div className="flex items-center gap-3">
             {/* Key Filter Dropdown */}
             <select
               value={selectedKey}
               onChange={(e) => setSelectedKey(e.target.value)}
-              className="hidden md:block bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
+              className="bg-[#0d0d0e] border border-zinc-900 text-zinc-400 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
             >
               {musicalKeys.map((k) => (
                 <option key={k} value={k}>
@@ -250,7 +307,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             <select
               value={selectedBpmRange}
               onChange={(e) => setSelectedBpmRange(e.target.value)}
-              className="hidden md:block bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
+              className="bg-[#0d0d0e] border border-zinc-900 text-zinc-400 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
             >
               {bpmRanges.map((b) => (
                 <option key={b.value} value={b.value}>
@@ -263,87 +320,72 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
+              className="bg-[#0d0d0e] border border-zinc-900 text-zinc-400 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer"
             >
-              <option value="newest">Sort: Newest Releases</option>
+              <option value="newest">Sort: Newest</option>
               <option value="popular">Sort: Most Played</option>
               <option value="price-asc">Price: Low → High</option>
               <option value="price-desc">Price: High → Low</option>
               <option value="bpm">Sort: BPM</option>
             </select>
+          </div>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                  viewMode === 'grid' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-                title="Grid View"
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                  viewMode === 'list' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-                title="List View"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-[#0d0d0e] p-1 rounded-xl border border-zinc-900">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'grid' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-white'
+              }`}
+              title="Grid View"
+            >
+              <Grid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'list' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-white'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Feature 26: Active Filters Strip Display */}
+        {/* Feature 26: Active Filters Strip Display (Subtle helper badge) */}
         {isFilteringActive && (
-          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-zinc-900 text-xs">
-            <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider">
-              ACTIVE FILTERS:
-            </span>
-
+          <div className="flex flex-wrap items-center gap-2 pt-3 text-xs mt-3">
             {searchQuery && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-950 border border-purple-500/40 text-purple-300 rounded-xl font-mono">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-full font-mono">
                 <span>"{searchQuery}"</span>
                 <X className="w-3.5 h-3.5 cursor-pointer hover:text-white" onClick={() => setSearchQuery('')} />
               </span>
             )}
-
             {selectedGenre !== 'ALL' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-950 border border-purple-500/40 text-purple-300 rounded-xl font-mono">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-full font-mono">
                 <span>Genre: {selectedGenre}</span>
                 <X className="w-3.5 h-3.5 cursor-pointer hover:text-white" onClick={() => setSelectedGenre('ALL')} />
               </span>
             )}
-
+            {selectedTag !== 'ALL' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-full font-mono">
+                <span>Tag: {selectedTag}</span>
+                <X className="w-3.5 h-3.5 cursor-pointer hover:text-white" onClick={() => setSelectedTag('ALL')} />
+              </span>
+            )}
             {selectedKey !== 'ALL' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-950 border border-purple-500/40 text-purple-300 rounded-xl font-mono">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-full font-mono">
                 <span>Key: {selectedKey}</span>
                 <X className="w-3.5 h-3.5 cursor-pointer hover:text-white" onClick={() => setSelectedKey('ALL')} />
               </span>
             )}
-
             {selectedBpmRange !== 'ALL' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-950 border border-purple-500/40 text-purple-300 rounded-xl font-mono">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-full font-mono">
                 <span>BPM: {selectedBpmRange}</span>
                 <X className="w-3.5 h-3.5 cursor-pointer hover:text-white" onClick={() => setSelectedBpmRange('ALL')} />
               </span>
             )}
-
-            {favoritesOnly && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-950 border border-rose-500/40 text-rose-300 rounded-xl font-mono">
-                <span>Saved Favorites</span>
-                <X className="w-3.5 h-3.5 cursor-pointer hover:text-white" onClick={() => setFavoritesOnly(false)} />
-              </span>
-            )}
-
-            <button
-              onClick={resetFilters}
-              className="ml-auto text-xs font-bold text-red-400 hover:text-red-300 underline cursor-pointer"
-            >
-              Clear All Filters
-            </button>
           </div>
         )}
       </div>

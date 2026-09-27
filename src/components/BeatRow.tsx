@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Volume2, Heart } from 'lucide-react';
+import { Play, Pause, Download, ShoppingCart, Share2, Heart, Check } from 'lucide-react';
 import { Beat } from '../types';
 
 interface BeatRowProps {
@@ -35,114 +35,96 @@ export const BeatRow: React.FC<BeatRowProps> = ({
 
   return (
     <div
-      className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all duration-200 text-left font-sans ${
+      onClick={() => onViewDetail && onViewDetail(beat)}
+      className={`group flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border transition-all duration-200 text-left font-sans cursor-pointer ${
         isCurrent
-          ? 'bg-purple-950/30 border-purple-500/80 shadow-lg shadow-purple-950/50 ring-1 ring-purple-500/40'
-          : 'bg-zinc-950 border-zinc-900 hover:bg-zinc-900/60 hover:border-zinc-800'
+          ? 'bg-zinc-900/90 border-zinc-700 shadow-xl shadow-black/80'
+          : 'bg-zinc-950/40 border-zinc-900/60 hover:bg-zinc-900/50 hover:border-zinc-800'
       }`}
     >
-      {/* Index, Artwork & Play Button */}
-      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        <span className="w-5 text-center text-xs font-mono font-extrabold text-zinc-500 group-hover:text-purple-400 shrink-0">
-          {index + 1}
-        </span>
-
+      {/* Left side: Artwork, Play button, Title, Genres */}
+      <div className="flex items-center gap-4 min-w-0 flex-1">
+        {/* Square Artwork with overlay play button */}
         <div
-          className="relative group/thumb shrink-0 cursor-pointer w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800"
-          onClick={() => onViewDetail && onViewDetail(beat)}
+          className="relative shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 shadow-md"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlayToggle(beat);
+          }}
         >
           <img
             src={beat.artworkUrl}
             alt={beat.title}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform group-hover/thumb:scale-110"
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.src = '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg';
             }}
           />
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onPlayToggle(beat);
-            }}
-            className={`absolute inset-0 bg-black/60 flex items-center justify-center transition-opacity cursor-pointer ${
-              isCurrent ? 'opacity-100' : 'opacity-0 group-hover/thumb:opacity-100'
+          <div
+            className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity duration-200 ${
+              isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}
           >
             {isThisPlaying ? (
-              <Pause className="w-5 h-5 text-purple-400 fill-current" />
+              <Pause className="w-5 h-5 text-white fill-current" />
             ) : (
               <Play className="w-5 h-5 text-white fill-current ml-0.5" />
             )}
-          </button>
+          </div>
         </div>
 
-        {/* Title, Producer & Clean Metadata */}
+        {/* Title and Genres/Vibe right below it */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {isThisPlaying && (
-              <div className="flex items-end gap-0.5 h-3.5 shrink-0 px-1 py-0.5 rounded bg-purple-950/80 border border-purple-500/40" title="Now Playing">
-                <span className="w-0.5 bg-purple-400 rounded-full animate-pulse h-2.5" />
-                <span className="w-0.5 bg-purple-300 rounded-full animate-pulse h-3 delay-75" />
-                <span className="w-0.5 bg-purple-400 rounded-full animate-pulse h-2 delay-150" />
-              </div>
-            )}
-            <h4
-              onClick={() => onViewDetail && onViewDetail(beat)}
-              className="font-extrabold text-sm text-white group-hover:text-purple-300 transition-colors truncate cursor-pointer"
-            >
+            <h4 className="font-extrabold text-base text-zinc-100 group-hover:text-white transition-colors truncate">
               {beat.title}
             </h4>
             {beat.featured && (
-              <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-purple-900/80 text-purple-200 rounded border border-purple-400/30 shrink-0">
+              <span className="px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider bg-purple-950/80 text-purple-300 rounded border border-purple-800/30 shrink-0">
                 Featured
               </span>
             )}
-            {beat.freeDownload && (
-              <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-emerald-950/80 text-emerald-300 rounded border border-emerald-500/40 shrink-0">
-                FREE
-              </span>
-            )}
           </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-0.5 font-medium">
-            <span className="text-purple-300 font-semibold">{beat.producerName || 'CASHMERE KID$'}</span>
-            <CheckCircle2 className="w-3 h-3 text-purple-400 fill-purple-950 shrink-0" />
-            <span aria-hidden="true" className="text-zinc-600">·</span>
-            <span className="font-mono text-zinc-300">{beat.bpm} BPM</span>
-            <span aria-hidden="true" className="text-zinc-600">·</span>
-            <span className="font-mono text-zinc-300">{beat.key}</span>
-            <span aria-hidden="true" className="text-zinc-600 hidden sm:inline">·</span>
-            <span className="font-mono text-zinc-400 hidden sm:inline">{beat.genre}</span>
-          </div>
+          <p className="text-xs text-zinc-400 mt-0.5 font-medium truncate">
+            {beat.moods?.slice(0, 2).join(', ') || beat.genre}
+          </p>
         </div>
       </div>
 
-      {/* Tags (Desktop) */}
-      <div className="hidden lg:flex items-center gap-1.5 text-xs text-zinc-500 w-44 truncate font-medium">
-        {beat.tags.slice(0, 3).map((tag) => `#${tag}`).join(' ')}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex items-center gap-2 shrink-0">
-        <div className="text-right pr-2 hidden sm:block">
-          <span className="text-xs font-black font-mono text-white block">
-            {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}
-          </span>
-          <span className="text-[10px] text-zinc-500 font-medium">
-            {beat.freeDownload ? 'Free / Lease' : 'MP3 Lease'}
-          </span>
+      {/* Middle-right: BPM & Vibe Tags */}
+      <div className="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0 min-w-[200px] justify-between sm:justify-start">
+        {/* BPM display */}
+        <div className="text-sm font-semibold text-zinc-300 font-mono">
+          {beat.bpm} BPM
         </div>
 
+        {/* Tags / Mood badges as shown in image */}
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          {beat.genre && (
+            <span className="px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-bold text-zinc-300 capitalize">
+              {beat.genre.toLowerCase()}
+            </span>
+          )}
+          {beat.tags?.slice(0, 1).map((tag) => (
+            <span key={tag} className="px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-bold text-zinc-400">
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Right: Favorite, Free Download & Buy button */}
+      <div className="flex items-center gap-2.5 justify-end shrink-0" onClick={(e) => e.stopPropagation()}>
         {onToggleFavorite && (
           <button
             onClick={() => onToggleFavorite(beat)}
             className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
               isFavorite
-                ? 'bg-rose-950/80 border-rose-500 text-rose-400'
-                : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'
+                ? 'bg-rose-950/40 border-rose-500/50 text-rose-400'
+                : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-500 hover:text-white hover:border-zinc-700'
             }`}
             title={isFavorite ? 'Remove from Saved Vault' : 'Save Beat to Favorites'}
           >
@@ -150,30 +132,33 @@ export const BeatRow: React.FC<BeatRowProps> = ({
           </button>
         )}
 
-        {beat.freeDownload && (
-          <button
-            onClick={() => onFreeDownloadClick(beat)}
-            className="p-2.5 text-purple-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors cursor-pointer"
-            title="Free Download"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-        )}
-
         <button
           onClick={() => onShareClick(beat)}
-          className="p-2.5 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors hidden sm:block cursor-pointer"
+          className="p-2.5 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800/80 hover:border-zinc-700 rounded-xl transition-colors cursor-pointer"
           title="Share Beat"
         >
           <Share2 className="w-4 h-4" />
         </button>
 
+        {/* CRITICAL: Free Download button as requested by the user */}
+        {beat.freeDownload && (
+          <button
+            onClick={() => onFreeDownloadClick(beat)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-sm shadow-black/40"
+            title="Download Free Tagged Demo"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden xs:inline">FREE</span>
+          </button>
+        )}
+
+        {/* Premium Bright Blue Buy Button as shown in uploaded image */}
         <button
           onClick={() => onBuyClick(beat)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#0082ff] hover:bg-[#3399ff] text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-950/50 transition-all active:scale-95 cursor-pointer border border-blue-400/20"
         >
-          <ShoppingBag className="w-3.5 h-3.5" />
-          <span>BUY BEAT · {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}</span>
+          <ShoppingCart className="w-3.5 h-3.5 fill-current" />
+          <span>{currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}</span>
         </button>
       </div>
     </div>

@@ -135,11 +135,16 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={() => {
+              setCurrentView('player');
               if (onOpenAudioPlayer) {
                 onOpenAudioPlayer();
               }
             }}
-            className="hover:text-white transition-colors py-1 text-purple-300 font-extrabold flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-950/60 border border-purple-500/30 hover:border-purple-400/60 shadow-sm"
+            className={`transition-colors py-1 font-extrabold flex items-center gap-1.5 px-2.5 py-1 rounded-xl shadow-sm cursor-pointer ${
+              currentView === 'player'
+                ? 'bg-purple-600 text-white border border-purple-400 shadow-purple-950 ring-1 ring-purple-400/50'
+                : 'bg-purple-950/60 border border-purple-500/30 text-purple-300 hover:text-white hover:border-purple-400/60'
+            }`}
             title="Open Audio Player"
           >
             <Volume2 className="w-3.5 h-3.5 text-purple-400" />
@@ -305,12 +310,15 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={() => {
+              setCurrentView('player');
               if (onOpenAudioPlayer) {
                 onOpenAudioPlayer();
               }
               setMobileMenuOpen(false);
             }}
-            className="block w-full text-left py-2.5 text-purple-300 font-extrabold flex items-center gap-2 hover:text-white"
+            className={`block w-full text-left py-2.5 font-extrabold flex items-center gap-2 ${
+              currentView === 'player' ? 'text-purple-400' : 'text-purple-300 hover:text-white'
+            }`}
           >
             <Volume2 className="w-4 h-4 text-purple-400" />
             <span>AUDIO PLAYER</span>

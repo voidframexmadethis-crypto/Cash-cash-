@@ -56,8 +56,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     } catch {}
   }, [cart]);
 
-  if (!isOpen) return null;
-
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = promoCode.trim().toUpperCase();
@@ -201,6 +199,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       onUpdateCartItemLicense(cartItemId, newKey, newPrice);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-zinc-950/80 backdrop-blur-md animate-fadeIn">
