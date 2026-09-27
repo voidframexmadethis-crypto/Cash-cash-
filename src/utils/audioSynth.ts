@@ -183,6 +183,10 @@ class RealAudioPlayerEngine {
   public resolveStreamUrl(rawUrl?: string): string | null {
     if (!rawUrl) return null;
     
+    if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) {
+      return rawUrl;
+    }
+    
     // If it's already an absolute applet media stream URL
     if (rawUrl.startsWith('/api/media/stream')) {
       if (!rawUrl.includes('token=')) {

@@ -54,7 +54,7 @@ export interface UploadQueueItem {
   fileName: string;
   fileSizeStr: string;
   fileSizeBytes: number;
-  fileType: 'MP3' | 'M4A' | 'UNKNOWN';
+  fileType: 'MP3' | 'M4A' | 'ZIP' | 'UNKNOWN';
   status: 'pending' | 'analyzing' | 'uploading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   errorMessage?: string;
@@ -198,12 +198,14 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
         continue;
       }
 
-      if (!fileNameLower.endsWith('.mp3') && !fileNameLower.endsWith('.m4a')) {
-        showToast('Invalid File Type', `File "${file.name}" is not a supported MP3/M4A format.`, 'error');
+      if (!fileNameLower.endsWith('.mp3') && !fileNameLower.endsWith('.m4a') && !fileNameLower.endsWith('.zip')) {
+        showToast('Invalid File Type', `File "${file.name}" is not a supported MP3/M4A/ZIP format.`, 'error');
         continue;
       }
 
-      const fileType: 'MP3' | 'M4A' = fileNameLower.endsWith('.m4a') ? 'M4A' : 'MP3';
+      const fileType: 'MP3' | 'M4A' | 'ZIP' | 'UNKNOWN' = 
+        fileNameLower.endsWith('.m4a') ? 'M4A' :
+        fileNameLower.endsWith('.zip') ? 'ZIP' : 'MP3';
       const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
       const fileObjectUrl = URL.createObjectURL(file);
 
@@ -615,7 +617,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
           type="file"
           id="batchAudioInput"
           multiple
-          accept=".mp3,.m4a,audio/mpeg,audio/mp4"
+          accept=".mp3,.m4a,.zip,audio/mpeg,audio/mp4,application/zip,application/x-zip-compressed"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) handleFilesSelected(e.target.files);
@@ -631,7 +633,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
             DRAG & DROP AUDIO MASTERS OR SELECT FILES
           </h3>
           <p className="text-xs text-zinc-400 font-mono">
-            Supported formats: High-fidelity 320kbps MP3 or studio M4A files.<br />
+            Supported formats: High-fidelity 320kbps MP3, studio M4A, or ZIP files.<br />
             <span className="text-rose-400 font-bold">WAV format is strictly restricted.</span>
           </p>
         </div>

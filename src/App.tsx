@@ -64,7 +64,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter((b: Beat) => b.storageProvider === 'internet_archive' || b.iaUrl || b.uploadStatus === 'uploaded');
+          return parsed;
         }
       } catch {
         return [];

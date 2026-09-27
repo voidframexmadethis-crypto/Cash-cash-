@@ -515,11 +515,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Edit beat modal state
   const [editingBeat, setEditingBeat] = useState<Beat | null>(null);
   const [editPriceVal, setEditPriceVal] = useState<number>(29.99);
+  const [editPremiumPriceVal, setEditPremiumPriceVal] = useState<number>(79.99);
+  const [editUnlimitedPrice, setEditUnlimitedPrice] = useState<number>(199.99);
+  const [editExclusivePriceVal, setEditExclusivePriceVal] = useState<number>(999.99);
   const [editTitle, setEditTitle] = useState<string>('');
   const [editBpm, setEditBpm] = useState<number>(140);
   const [editKey, setEditKey] = useState<string>('C Minor');
   const [editGenre, setEditGenre] = useState<string>('TRAP');
-  const [editUnlimitedPrice, setEditUnlimitedPrice] = useState<number>(199.99);
   const [editFeatured, setEditFeatured] = useState<boolean>(false);
   const [editPublished, setEditPublished] = useState<boolean>(true);
   const [editArtworkUrl, setEditArtworkUrl] = useState<string>('');
@@ -682,11 +684,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const startEditingBeat = (beat: Beat) => {
     setEditingBeat(beat);
     setEditPriceVal(beat.pricing.mp3Lease);
+    setEditPremiumPriceVal(beat.pricing.premiumLease || 79.99);
+    setEditUnlimitedPrice(beat.pricing.unlimited);
+    setEditExclusivePriceVal(beat.pricing.exclusive || 999.99);
     setEditTitle(beat.title);
     setEditBpm(beat.bpm);
     setEditKey(beat.key);
     setEditGenre(beat.genre);
-    setEditUnlimitedPrice(beat.pricing.unlimited);
     setEditFeatured(!!beat.featured);
     setEditPublished(beat.published !== false);
     setEditArtworkUrl(beat.artworkUrl || '');
@@ -706,7 +710,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       pricing: {
         ...editingBeat.pricing,
         mp3Lease: editPriceVal,
+        premiumLease: editPremiumPriceVal,
         unlimited: editUnlimitedPrice,
+        exclusive: editExclusivePriceVal,
       },
     };
     onUpdateBeat(updated);
@@ -3565,20 +3571,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">MP3 Lease ($)</label>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">MP3 Lease Price ($)</label>
                   <input
                     type="number"
+                    step="0.01"
                     value={editPriceVal}
-                    onChange={(e) => setEditPriceVal(parseFloat(e.target.value) || 29.99)}
+                    onChange={(e) => setEditPriceVal(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
                   />
                 </div>
                 <div>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">M4A Premium Lease ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editPremiumPriceVal}
+                    onChange={(e) => setEditPremiumPriceVal(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Unlimited Lease ($)</label>
                   <input
                     type="number"
+                    step="0.01"
                     value={editUnlimitedPrice}
-                    onChange={(e) => setEditUnlimitedPrice(parseFloat(e.target.value) || 199.99)}
+                    onChange={(e) => setEditUnlimitedPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Exclusive Rights ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editExclusivePriceVal}
+                    onChange={(e) => setEditExclusivePriceVal(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
                   />
                 </div>
