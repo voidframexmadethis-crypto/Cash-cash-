@@ -52,7 +52,7 @@ export const INITIAL_STORE_SETTINGS: StoreSettings = {
   storeName: 'CASHMERE KID$',
   customDomain: 'cashmerekid.com',
   stripeConnected: true,
-  paypalConnected: true,
+  paypalConnected: false,
   requireEmailForFreeDownload: true,
   voiceTagFrequencySeconds: 15,
   autoSendInvoices: true,

@@ -6,9 +6,12 @@ import { FreeDownloadModal } from './components/FreeDownloadModal';
 import { ShareModal } from './components/ShareModal';
 import { BeatDetailModal } from './components/BeatDetailModal';
 import { CartDrawer } from './components/CartDrawer';
+import { DirectCheckoutModal } from './components/DirectCheckoutModal';
 import { PolicyModal } from './components/PolicyModal';
 import { NotificationModal } from './components/NotificationModal';
+import { LiveStoreModeBar } from './components/LiveStoreModeBar';
 import { showLocalNotification } from './utils/pushProvider';
+import { logAudienceEvent } from './utils/activityTracker';
 
 import { HomeView } from './views/HomeView';
 import { BrowseView } from './views/BrowseView';
@@ -136,10 +139,16 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
   const [selectedBuyBeat, setSelectedBuyBeat] = useState<Beat | null>(null);
+  const [directCheckoutBeat, setDirectCheckoutBeat] = useState<Beat | null>(null);
+  const [directCheckoutLicenseKey, setDirectCheckoutLicenseKey] = useState<LicenseTierKey>('mp3Lease');
   const [selectedFreeBeat, setSelectedFreeBeat] = useState<Beat | null>(null);
   const [selectedShareBeat, setSelectedShareBeat] = useState<Beat | null>(null);
   const [selectedDetailBeat, setSelectedDetailBeat] = useState<Beat | null>(null);
   const [activePolicyModal, setActivePolicyModal] = useState<'privacy' | 'terms' | 'licensing' | 'refunds' | null>(null);
+  
+  // Feature 49: Live Store Mode
+  const [isLiveStoreMode, setIsLiveStoreMode] = useState<boolean>(false);
+  const [liveStoreDeviceMode, setLiveStoreDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
   // Save to LocalStorage
   useEffect(() => {
@@ -183,13 +192,30 @@ export default function App() {
   }, [recentlyViewedIds]);
 
   const handleToggleFavorite = (beat: Beat) => {
-    setFavoriteIds((prev) =>
-      prev.includes(beat.id) ? prev.filter((id) => id !== beat.id) : [...prev, beat.id]
-    );
+    setFavoriteIds((prev) => {
+      const isFav = prev.includes(beat.id);
+      if (!isFav) {
+        logAudienceEvent({
+          type: 'beat_favorited',
+          title: `Beat added to Favorites`,
+          details: `${beat.title} was saved to a listener's favorites vault`,
+          beatId: beat.id,
+          beatTitle: beat.title,
+        });
+      }
+      return isFav ? prev.filter((id) => id !== beat.id) : [...prev, beat.id];
+    });
   };
 
   const handleViewDetailWithHistory = (beat: Beat) => {
     setSelectedDetailBeat(beat);
+    logAudienceEvent({
+      type: 'product_viewed',
+      title: `Beat Quick View opened`,
+      details: `${beat.title} viewed by prospective customer`,
+      beatId: beat.id,
+      beatTitle: beat.title,
+    });
     setRecentlyViewedIds((prev) => {
       const filtered = prev.filter((id) => id !== beat.id);
       return [beat.id, ...filtered].slice(0, 10);
@@ -233,6 +259,14 @@ export default function App() {
     } else {
       setCurrentBeat(beat);
       setIsPlaying(true);
+      // Log real audience play event
+      logAudienceEvent({
+        type: 'beat_played',
+        title: `Beat played on storefront`,
+        details: `${beat.title} (${beat.bpm} BPM, ${beat.key}) stream started`,
+        beatId: beat.id,
+        beatTitle: beat.title,
+      });
       // Increment real verified play count on stream
       setBeats((prev) => prev.map((b) => (b.id === beat.id ? { ...b, playCount: (b.playCount || 0) + 1 } : b)));
     }
@@ -308,6 +342,22 @@ export default function App() {
     setIsPlaying(true);
   };
 
+  const handleBuyNow = (beat: Beat, licenseKey: LicenseTierKey) => {
+    setDirectCheckoutBeat(beat);
+    setDirectCheckoutLicenseKey(licenseKey);
+  };
+
+  const handleUpdateCartItemLicense = (cartItemId: string, newLicenseKey: LicenseTierKey, newPrice: number) => {
+    const tier = LICENSE_TIERS[newLicenseKey];
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === cartItemId
+          ? { ...item, licenseKey: newLicenseKey, licenseName: tier.name, price: newPrice }
+          : item
+      )
+    );
+  };
+
   // Cart Handlers
   const handleAddToCart = (beat: Beat, licenseKey: LicenseTierKey) => {
     const tier = LICENSE_TIERS[licenseKey];
@@ -370,6 +420,15 @@ export default function App() {
 
   const handleRecordSale = (newSales: SaleRecord[]) => {
     setSalesRecords((prev) => [...newSales, ...prev]);
+    newSales.forEach((sale) => {
+      logAudienceEvent({
+        type: 'purchase_completed',
+        title: `Beat License Purchased`,
+        details: `${sale.beatTitle} (${sale.licenseType}) purchased for $${sale.amount.toFixed(2)} - Order #${sale.orderId}`,
+        beatTitle: sale.beatTitle,
+        amount: sale.amount,
+      });
+    });
   };
 
   const handleLeadCaptured = (email: string, beat: Beat) => {
@@ -382,6 +441,14 @@ export default function App() {
       ipCountry: 'United States 🇺🇸',
     };
     setLeads((prev) => [newLead, ...prev]);
+
+    logAudienceEvent({
+      type: 'free_download',
+      title: `Free Demo Downloaded`,
+      details: `${beat.title} tagged demo downloaded by ${email}`,
+      beatId: beat.id,
+      beatTitle: beat.title,
+    });
 
     setBeats((prev) =>
       prev.map((b) => (b.id === beat.id ? { ...b, downloadCount: b.downloadCount + 1 } : b))
@@ -552,19 +619,36 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
-      {/* Header Bar */}
-      <Header
-        currentView={currentView}
-        setCurrentView={(view) => handleNavigateWithGenre(view)}
-        cart={cart}
-        setIsCartOpen={setIsCartOpen}
-        currencySymbol={settings.currencySymbol}
-        onOpenAudioPlayer={() => setAudioPlayerExpandTrigger((prev) => prev + 1)}
-        onOpenNotifications={() => setIsNotificationModalOpen(true)}
-      />
+      {/* Feature 49: Live Store Mode Rendering */}
+      {isLiveStoreMode && (
+        <LiveStoreModeBar
+          deviceMode={liveStoreDeviceMode}
+          setDeviceMode={setLiveStoreDeviceMode}
+          onExitLiveMode={() => setIsLiveStoreMode(false)}
+          onEditStore={() => {
+            setCurrentView('dashboard');
+            setIsLiveStoreMode(false);
+          }}
+        />
+      )}
 
-      {/* Main View Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      {/* Main Responsive Wrapper */}
+      <div className={`flex-1 flex flex-col transition-all duration-300 ${isLiveStoreMode ? (liveStoreDeviceMode === 'mobile' ? 'max-w-[390px] border-x border-zinc-800 mx-auto w-full shadow-2xl my-4 rounded-3xl overflow-hidden' : liveStoreDeviceMode === 'tablet' ? 'max-w-[768px] border-x border-zinc-800 mx-auto w-full shadow-2xl my-4 rounded-3xl overflow-hidden' : 'w-full') : 'w-full'}`}>
+        
+        {!isLiveStoreMode && (
+          <Header
+            currentView={currentView}
+            setCurrentView={(view) => handleNavigateWithGenre(view)}
+            cart={cart}
+            setIsCartOpen={setIsCartOpen}
+            currencySymbol={settings.currencySymbol}
+            onOpenAudioPlayer={() => setAudioPlayerExpandTrigger((prev) => prev + 1)}
+            onOpenNotifications={() => setIsNotificationModalOpen(true)}
+          />
+        )}
+        
+        {/* Main View Container */}
+        <main className={`flex-1 ${!isLiveStoreMode ? 'max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8' : 'w-full'}`}>
         {currentView === 'home' && (
           <HomeView
             beats={publishedBeats}
@@ -637,9 +721,16 @@ export default function App() {
             youtubeVideos={youtubeVideos}
             onUpdateYoutubeVideos={setYoutubeVideos}
             onNavigateToProfile={() => setCurrentView('profile')}
+            onNavigateToBrowse={() => setCurrentView('browse')}
+            onOpenAudioPlayer={() => setAudioPlayerExpandTrigger((prev) => prev + 1)}
+            favoriteIds={favoriteIds}
+            currentBeat={currentBeat}
+            isPlaying={isPlaying}
+            onPlayToggle={handlePlayToggle}
             beatPacks={beatPacks}
             onUpdateBeatPacks={setBeatPacks}
             onNavigateToHallOfFame={() => handleNavigateWithGenre('hall-of-fame')}
+            onEnterLiveMode={() => setIsLiveStoreMode(true)}
           />
         )}
 
@@ -742,6 +833,7 @@ export default function App() {
           />
         )}
       </main>
+    </div>
 
       {/* Site-Wide Luxury Footer */}
       <footer className="border-t border-zinc-900 bg-black py-14 px-4 sm:px-6 lg:px-8 mt-20 mb-20 text-xs text-zinc-400">
@@ -835,6 +927,8 @@ export default function App() {
         onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
         onShareClick={(beat) => setSelectedShareBeat(beat)}
         currencySymbol={settings.currencySymbol}
+        isFavorite={selectedDetailBeat ? favoriteIds.includes(selectedDetailBeat.id) : false}
+        onToggleFavorite={handleToggleFavorite}
       />
 
       {/* License Modal */}
@@ -843,6 +937,18 @@ export default function App() {
         isOpen={!!selectedBuyBeat}
         onClose={() => setSelectedBuyBeat(null)}
         onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
+        onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
+        currencySymbol={settings.currencySymbol}
+      />
+
+      {/* Direct Buy Now Checkout Modal */}
+      <DirectCheckoutModal
+        beat={directCheckoutBeat}
+        selectedLicenseKey={directCheckoutLicenseKey}
+        isOpen={!!directCheckoutBeat}
+        onClose={() => setDirectCheckoutBeat(null)}
+        onRecordSale={handleRecordSale}
         currencySymbol={settings.currencySymbol}
       />
 
@@ -866,8 +972,10 @@ export default function App() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cart={cart}
+        beats={beats}
         onRemoveFromCart={handleRemoveFromCart}
         onClearCart={handleClearCart}
+        onUpdateCartItemLicense={handleUpdateCartItemLicense}
         onRecordSale={handleRecordSale}
         currencySymbol={settings.currencySymbol}
       />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Sparkles, Volume2, Heart } from 'lucide-react';
+import { Play, Pause, Download, ShoppingBag, Share2, CheckCircle2, Sparkles, Volume2, Heart, Zap } from 'lucide-react';
 import { Beat } from '../types';
 
 interface BeatCardProps {
@@ -33,7 +33,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
 
   return (
     <div
-      className={`group relative flex flex-col bg-zinc-950 rounded-2xl overflow-hidden border transition-all duration-300 ${
+      className={`group relative flex flex-col bg-zinc-950 rounded-2xl overflow-hidden border transition-all duration-300 text-left font-sans ${
         isCurrent
           ? 'border-purple-500 bg-purple-950/20 shadow-xl shadow-purple-950/60 ring-1 ring-purple-500/50'
           : 'border-zinc-900 hover:border-purple-500/40 hover:shadow-xl hover:shadow-purple-950/30'
@@ -52,7 +52,6 @@ export const BeatCard: React.FC<BeatCardProps> = ({
             isThisPlaying ? 'scale-105' : ''
           }`}
           onError={(e) => {
-            // Styled CSS fallback when image URL is missing or fails
             const target = e.target as HTMLImageElement;
             target.src = '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg';
           }}
@@ -69,7 +68,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
           </div>
         )}
 
-        {/* Key Badge & Heart Button */}
+        {/* Top Right: Heart & Key Badge */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
           {onToggleFavorite && (
             <button
@@ -77,7 +76,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
                 e.stopPropagation();
                 onToggleFavorite(beat);
               }}
-              className={`p-1.5 rounded-lg backdrop-blur-md border transition-all ${
+              className={`p-1.5 rounded-lg backdrop-blur-md border transition-all cursor-pointer ${
                 isFavorite
                   ? 'bg-rose-950/90 border-rose-500 text-rose-400'
                   : 'bg-black/70 border-zinc-800 text-zinc-400 hover:text-white hover:bg-black/90'
@@ -113,13 +112,20 @@ export const BeatCard: React.FC<BeatCardProps> = ({
           )}
         </button>
 
-        {/* Featured Tag */}
-        {beat.featured && (
-          <div className="absolute bottom-3 left-3 px-2 py-0.5 rounded bg-purple-950/90 border border-purple-500/40 text-purple-200 text-[9px] font-extrabold uppercase tracking-widest flex items-center gap-1">
-            <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-            <span>Featured</span>
-          </div>
-        )}
+        {/* Badges: Featured or Free Download */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+          {beat.featured && (
+            <div className="px-2 py-0.5 rounded bg-purple-950/90 border border-purple-500/40 text-purple-200 text-[9px] font-extrabold uppercase tracking-widest flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+              <span>Featured</span>
+            </div>
+          )}
+          {beat.freeDownload && (
+            <div className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[9px] font-extrabold uppercase tracking-widest">
+              FREE DOWNLOAD
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Beat Details Body */}
@@ -173,7 +179,9 @@ export const BeatCard: React.FC<BeatCardProps> = ({
         <div className="pt-3 border-t border-zinc-900 flex items-center justify-between gap-2">
           {/* Price display */}
           <div>
-            <span className="text-[10px] text-zinc-500 uppercase font-bold block">MP3 Lease</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-bold block">
+              {beat.freeDownload ? 'Free / Lease' : 'MP3 Lease'}
+            </span>
             <span className="text-sm font-black font-mono text-white">
               {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}
             </span>
@@ -184,7 +192,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
             {beat.freeDownload && (
               <button
                 onClick={() => onFreeDownloadClick(beat)}
-                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-purple-300 border border-zinc-800 transition-colors shrink-0 cursor-pointer"
+                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-purple-300 hover:text-white border border-zinc-800 transition-colors shrink-0 cursor-pointer"
                 title="Free Download"
                 aria-label="Free Download"
               >
@@ -206,7 +214,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
               className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md shadow-purple-950 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Buy</span>
+              <span>BUY BEAT</span>
             </button>
           </div>
         </div>

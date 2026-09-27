@@ -10,6 +10,7 @@ interface HeaderProps {
   currencySymbol: string;
   onOpenAudioPlayer?: () => void;
   onOpenNotifications?: () => void;
+  onOpenCustomerLibrary?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   currencySymbol,
   onOpenAudioPlayer,
   onOpenNotifications,
+  onOpenCustomerLibrary,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);

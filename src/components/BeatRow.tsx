@@ -35,7 +35,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
 
   return (
     <div
-      className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all duration-200 ${
+      className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all duration-200 text-left font-sans ${
         isCurrent
           ? 'bg-purple-950/30 border-purple-500/80 shadow-lg shadow-purple-950/50 ring-1 ring-purple-500/40'
           : 'bg-zinc-950 border-zinc-900 hover:bg-zinc-900/60 hover:border-zinc-800'
@@ -79,7 +79,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
           </button>
         </div>
 
-        {/* Title, Producer & Clean Unboxed Metadata */}
+        {/* Title, Producer & Clean Metadata */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {isThisPlaying && (
@@ -98,6 +98,11 @@ export const BeatRow: React.FC<BeatRowProps> = ({
             {beat.featured && (
               <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-purple-900/80 text-purple-200 rounded border border-purple-400/30 shrink-0">
                 Featured
+              </span>
+            )}
+            {beat.freeDownload && (
+              <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-emerald-950/80 text-emerald-300 rounded border border-emerald-500/40 shrink-0">
+                FREE
               </span>
             )}
           </div>
@@ -126,13 +131,15 @@ export const BeatRow: React.FC<BeatRowProps> = ({
           <span className="text-xs font-black font-mono text-white block">
             {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}
           </span>
-          <span className="text-[10px] text-zinc-500 font-medium">MP3 Lease</span>
+          <span className="text-[10px] text-zinc-500 font-medium">
+            {beat.freeDownload ? 'Free / Lease' : 'MP3 Lease'}
+          </span>
         </div>
 
         {onToggleFavorite && (
           <button
             onClick={() => onToggleFavorite(beat)}
-            className={`p-2.5 rounded-xl border transition-colors ${
+            className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
               isFavorite
                 ? 'bg-rose-950/80 border-rose-500 text-rose-400'
                 : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'
@@ -146,7 +153,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
         {beat.freeDownload && (
           <button
             onClick={() => onFreeDownloadClick(beat)}
-            className="p-2.5 text-zinc-300 hover:text-purple-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors"
+            className="p-2.5 text-purple-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors cursor-pointer"
             title="Free Download"
           >
             <Download className="w-4 h-4" />
@@ -155,7 +162,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
 
         <button
           onClick={() => onShareClick(beat)}
-          className="p-2.5 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors hidden sm:block"
+          className="p-2.5 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors hidden sm:block cursor-pointer"
           title="Share Beat"
         >
           <Share2 className="w-4 h-4" />
@@ -166,7 +173,7 @@ export const BeatRow: React.FC<BeatRowProps> = ({
           className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
         >
           <ShoppingBag className="w-3.5 h-3.5" />
-          <span>Buy {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}</span>
+          <span>BUY BEAT · {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}</span>
         </button>
       </div>
     </div>

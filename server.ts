@@ -1,6 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
+import AdmZip from 'adm-zip';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from "@google/genai";
 import multer from 'multer';
@@ -155,75 +157,27 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
   // PayPal Partner & Casual-Seller Onboarding Route
   app.get('/api/paypal/auth-url', (req, res) => {
-    res.json({ url: '/api/paypal/connect-page' });
-  });
+    const trackingId = `ck-pp-${Date.now()}`;
+    const email = (req.query.email as string) || '';
+    const appOrigin = getAppOrigin(req);
+    const returnUrl = `${appOrigin}/dashboard?paypal_action=callback&email=${encodeURIComponent(email)}`;
 
-  app.get('/api/paypal/connect-page', (req, res) => {
-    res.send(`
-      <!doctype html>
-      <html lang="en" class="dark">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>PayPal Personal & Casual Seller Authorization – CASHMERE KID$</title>
-          <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-          <style>
-            body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #08080a; color: #f4f4f5; margin: 0; padding: 40px 20px; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-            .card { background: #121216; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 36px; max-width: 440px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); text-align: center; }
-            .logo { font-size: 24px; font-weight: 900; color: #0070ba; margin-bottom: 24px; letter-spacing: -0.5px; }
-            h2 { font-size: 20px; font-weight: 800; color: #ffffff; margin-bottom: 8px; }
-            p { font-size: 13px; color: #a1a1aa; line-height: 1.6; margin-bottom: 24px; }
-            .account-box { background: #18181b; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; text-align: left; margin-bottom: 24px; }
-            .label { font-size: 11px; font-weight: 700; color: #71717a; text-transform: uppercase; margin-bottom: 4px; }
-            .email { font-size: 13px; font-weight: 700; color: #ffffff; }
-            .btn-primary { width: 100%; padding: 14px; background: #0070ba; color: white; border: none; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s; margin-bottom: 12px; }
-            .btn-primary:hover { background: #005ea6; }
-            .btn-secondary { width: 100%; padding: 12px; background: transparent; color: #a1a1aa; border: none; border-radius: 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
-            .btn-secondary:hover { color: #ffffff; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <div class="logo">PayPal <span style="font-weight: 400; color: #ffffff; font-size: 16px;">Personal Connect</span></div>
-            <h2>Authorize CASHMERE KID$</h2>
-            <p>Connect your existing Personal PayPal account securely via official PayPal onboarding. No business account upgrade required.</p>
-            
-            <div class="account-box">
-              <div class="label">Connected PayPal Profile</div>
-              <div class="email">cashmerekids.personal@gmail.com</div>
-              <div style="font-size: 11px; color: #10b981; font-weight: 600; margin-top: 4px;">Verified Personal Account · PayPal Checkout Ready</div>
-            </div>
-
-            <button onclick="approveConnection()" class="btn-primary">Approve & Grant Permission</button>
-            <button onclick="cancelConnection()" class="btn-secondary">Cancel / Return</button>
-          </div>
-
-          <script>
-            function approveConnection() {
-              if (window.opener) {
-                window.opener.postMessage({
-                  type: 'PAYPAL_AUTH_SUCCESS',
-                  email: 'cashmerekids.personal@gmail.com',
-                  merchantId: 'PP-PERSONAL-984210'
-                }, '*');
-                window.close();
-              } else {
-                window.location.href = '/';
-              }
-            }
-
-            function cancelConnection() {
-              if (window.opener) {
-                window.opener.postMessage({ type: 'PAYPAL_AUTH_CANCELLED' }, '*');
-                window.close();
-              } else {
-                window.location.href = '/';
-              }
-            }
-          </script>
-        </body>
-      </html>
-    `);
+    const partnerId = process.env.PAYPAL_PARTNER_ID || process.env.PAYPAL_CLIENT_ID;
+    
+    if (partnerId) {
+      const host = process.env.PAYPAL_MODE === 'live' ? 'www.paypal.com' : 'www.sandbox.paypal.com';
+      const onboardingUrl = `https://${host}/bizsignup/partner/entry?partnerId=${encodeURIComponent(partnerId)}&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
+      return res.json({ url: onboardingUrl, configured: true, returnUrl });
+    } else {
+      // Default sandbox onboarding entry point for developer sandbox testing
+      const sandboxOnboardingUrl = `https://www.sandbox.paypal.com/bizsignup/partner/entry?partnerId=CASHMERE_STUDIO&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
+      return res.json({ 
+        url: sandboxOnboardingUrl, 
+        configured: false, 
+        notice: 'No PAYPAL_CLIENT_ID or PAYPAL_PARTNER_ID variable in .env. Opening PayPal Sandbox Onboarding endpoint.',
+        returnUrl
+      });
+    }
   });
 
   // ====================================================
@@ -333,17 +287,21 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
       serverOrdersStore.set(orderId, newOrder);
 
-      const returnUrl = `${origin}/checkout/result?status=success&order_id=${orderId}`;
-      const cancelUrl = `${origin}/checkout/result?status=cancelled&order_id=${orderId}`;
+      // Mock redirection to real PayPal URL
+      const paypalUrl = `https://www.sandbox.paypal.com/checkoutnow?token=${orderId}`;
 
-      console.log(`[PayPalServer] Created verified order session ${orderId} for total $${total.toFixed(2)}.`);
+      console.log(`[PayPalServer] Created verified order session ${orderId} for total $${total.toFixed(2)}. Redirecting to ${paypalUrl}`);
+
+      const appOrigin = getAppOrigin(req);
+      const returnUrl = `${appOrigin}/api/paypal/return?order_id=${orderId}`;
+      const cancelUrl = `${appOrigin}/api/paypal/cancel?order_id=${orderId}`;
 
       res.json({
         success: true,
         orderId,
         total: total.toFixed(2),
         currency: 'USD',
-        approvalUrl: returnUrl,
+        approvalUrl: paypalUrl,
         returnUrl,
         cancelUrl,
       });
@@ -706,10 +664,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         });
       }
 
-      if (!lowerName.endsWith('.mp3') && !lowerName.endsWith('.m4a') && !lowerName.endsWith('.zip')) {
+      if (!lowerName.endsWith('.mp3') && !lowerName.endsWith('.m4a') && !lowerName.endsWith('.zip') && !lowerName.endsWith('.rar')) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid file format. Only MP3, M4A, and ZIP (for Beat Packs) are supported by Internet Archive storage.'
+          error: 'Invalid file format. Only MP3, M4A, ZIP, and RAR are supported by Internet Archive storage.'
         });
       }
 
@@ -744,6 +702,19 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const playbackUrl = `/api/media/stream?file=${cleanFileName}`;
       lastUploadedFilename = cleanFileName;
 
+      let playableFiles: string[] = [];
+      let isZip = false;
+      if (lowerName.endsWith('.zip')) {
+        isZip = true;
+        const zip = new AdmZip(fileBuffer);
+        const zipEntries = zip.getEntries();
+        zipEntries.forEach((entry) => {
+          if (!entry.isDirectory && (entry.entryName.toLowerCase().endsWith('.mp3') || entry.entryName.toLowerCase().endsWith('.m4a'))) {
+            playableFiles.push(entry.entryName);
+          }
+        });
+      }
+
       // Cache file buffer in server media memory for high-performance instant range streaming
       const mimeType = cleanFileName.toLowerCase().endsWith('.m4a') ? 'audio/mp4' : 'audio/mpeg';
       fileCache.set(cleanFileName, { buffer: fileBuffer, mimeType });
@@ -761,6 +732,8 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         iaUrl: canonicalUrl,
         playbackUrl: playbackUrl,
         checksum: checksum,
+        isZip: isZip,
+        playableFiles: playableFiles,
         updatedAt: new Date().toISOString()
       });
     } catch (err: any) {
@@ -914,7 +887,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   // ====================================================
   // GMAIL WORKSPACE INTEGRATION SECURE BACKEND
   // ====================================================
-  const fs = require('fs');
   const EMAIL_CONFIG_PATH = path.resolve('email-config.json');
 
   function loadEmailConfig() {

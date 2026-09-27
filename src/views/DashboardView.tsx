@@ -78,6 +78,14 @@ import { Beat, FreeDownloadLead, Promotion, SaleRecord, StoreSettings, ProducerP
 import { UploadModal } from '../components/UploadModal';
 import { UgcCreator } from '../components/UgcCreator';
 import { signInWithGoogleGmail, logoutGmail } from '../utils/gmailAuth';
+import { CommandCenterStats } from '../components/dashboard/CommandCenterStats';
+import { BeatPerformanceAnalytics } from '../components/dashboard/BeatPerformanceAnalytics';
+import { SalesAnalyticsSection } from '../components/dashboard/SalesAnalyticsSection';
+import { TopPerformingBeats } from '../components/dashboard/TopPerformingBeats';
+import { AudienceActivityTimeline } from '../components/dashboard/AudienceActivityTimeline';
+import { InventoryPublishingManager } from '../components/dashboard/InventoryPublishingManager';
+import { StoreHealthCheck } from '../components/dashboard/StoreHealthCheck';
+import { QuickActionsPanel } from '../components/dashboard/QuickActionsPanel';
 
 interface DashboardViewProps {
   beats: Beat[];
@@ -103,6 +111,13 @@ interface DashboardViewProps {
   beatPacks?: BeatPack[];
   onUpdateBeatPacks?: (packs: BeatPack[]) => void;
   onNavigateToHallOfFame?: () => void;
+  onOpenAudioPlayer?: () => void;
+  onNavigateToBrowse?: () => void;
+  onEnterLiveMode: () => void; // Feature 49
+  favoriteIds?: string[];
+  currentBeat?: Beat | null;
+  isPlaying?: boolean;
+  onPlayToggle?: (beat: Beat) => void;
 }
 
 interface SoundKitItem {
@@ -179,6 +194,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   beatPacks = [],
   onUpdateBeatPacks,
   onNavigateToHallOfFame,
+  onOpenAudioPlayer,
+  onNavigateToBrowse,
+  onEnterLiveMode,
+  favoriteIds = [],
+  currentBeat,
+  isPlaying = false,
+  onPlayToggle,
 }) => {
   // Navigation active tab
   const [activeTab, setActiveTab] = useState<string>('overview');
@@ -347,52 +369,104 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [newVideoDuration, setNewVideoDuration] = useState('3:00');
 
   // PayPal Connection State
-  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed'>(() => {
+  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed' | 'cancelled'>(() => {
     const saved = localStorage.getItem('voodoo_paypal_connection');
-    return saved ? JSON.parse(saved) : 'connected';
+    if (!saved) return 'not_connected';
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed === 'connecting') return 'not_connected';
+      return parsed;
+    } catch {
+      return 'not_connected';
+    }
   });
+  const [paypalEmailInput, setPaypalEmailInput] = useState('');
   const [paypalInfo, setPaypalInfo] = useState<{ email: string; merchantId: string }>(() => {
     const saved = localStorage.getItem('voodoo_paypal_info');
-    return saved ? JSON.parse(saved) : { email: 'cashmerekids.studio@business.paypal.com', merchantId: 'PP-MERCHANT-8849201' };
+    if (!saved) return { email: '', merchantId: '' };
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return { email: '', merchantId: '' };
+    }
   });
+  const [isSubmittingPayPal, setIsSubmittingPayPal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('voodoo_paypal_connection', JSON.stringify(paypalStatus));
+    const statusToSave = paypalStatus === 'connecting' ? 'not_connected' : paypalStatus;
+    localStorage.setItem('voodoo_paypal_connection', JSON.stringify(statusToSave));
     localStorage.setItem('voodoo_paypal_info', JSON.stringify(paypalInfo));
   }, [paypalStatus, paypalInfo]);
 
+  // Handle return/callback from PayPal authorization flow
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'PAYPAL_AUTH_SUCCESS') {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('paypal_action');
+    const merchantId = params.get('merchantIdInPayPal') || params.get('merchantId') || params.get('merchant_id');
+    const emailParam = params.get('email');
+    const errorParam = params.get('error') || params.get('paypal_error');
+    const statusParam = params.get('status');
+
+    if (action === 'callback' || merchantId || statusParam || errorParam) {
+      if (errorParam || statusParam === 'cancelled' || statusParam === 'cancel') {
+        setPaypalStatus('cancelled');
+      } else if (merchantId || statusParam === 'success' || action === 'callback') {
         setPaypalStatus('connected');
-        if (event.data.email) {
-          setPaypalInfo({ email: event.data.email, merchantId: event.data.merchantId || 'PP-MERCHANT-8849201' });
-        }
+        const finalEmail = emailParam || paypalEmailInput || paypalInfo.email || 'producer@cashmerekids.com';
+        setPaypalInfo({
+          email: finalEmail,
+          merchantId: merchantId || 'PP-MERCHANT-' + Math.floor(100000 + Math.random() * 900000)
+        });
         triggerSaveState('PayPal Account Connected Successfully');
-      } else if (event.data?.type === 'PAYPAL_AUTH_CANCELLED') {
-        setPaypalStatus('not_connected');
       }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+      // Clean up URL parameters without reloading
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   const handleConnectPayPal = async () => {
+    if (isSubmittingPayPal || paypalStatus === 'connecting') return;
+    if (paypalStatus === 'connected') return;
+
+    const trimmedEmail = paypalEmailInput.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      alert('Please enter a valid PayPal email address.');
+      return;
+    }
+
+    setIsSubmittingPayPal(true);
     setPaypalStatus('connecting');
+
     try {
-      const res = await fetch('/api/paypal/auth-url');
-      if (!res.ok) throw new Error('Failed to fetch auth URL');
-      const { url } = await res.json();
-      const popup = window.open(url, 'paypal_oauth', 'width=600,height=700');
-      if (!popup) {
-        setPaypalStatus('failed');
-        alert('Popup was blocked. Please allow popups for this site to connect PayPal.');
+      const res = await fetch(`/api/paypal/auth-url?email=${encodeURIComponent(trimmedEmail)}`);
+      if (!res.ok) throw new Error('Failed to fetch PayPal authorization URL');
+      const data = await res.json();
+      
+      if (!data.url || !data.url.startsWith('https://')) {
+        throw new Error('Invalid authorization URL returned from server');
       }
+
+      setPaypalInfo(prev => ({ ...prev, email: trimmedEmail }));
+      localStorage.setItem('voodoo_paypal_connection', JSON.stringify('not_connected'));
+
+      // Redirect directly to PayPal authorization page
+      window.location.href = data.url;
     } catch (err) {
       console.error('PayPal connect error:', err);
       setPaypalStatus('failed');
+      setIsSubmittingPayPal(false);
     }
+  };
+
+  const handleDisconnectPayPal = () => {
+    setPaypalStatus('not_connected');
+    setPaypalEmailInput('');
+    setPaypalInfo({ email: '', merchantId: '' });
+    localStorage.removeItem('voodoo_paypal_connection');
+    localStorage.removeItem('voodoo_paypal_info');
+    setIsSubmittingPayPal(false);
+    triggerSaveState('PayPal Disconnected');
   };
 
   // Edit beat modal state
@@ -882,114 +956,81 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* ==================== 1. OVERVIEW TAB ==================== */}
         {activeTab === 'overview' && (
           <div className="space-y-8 animate-fadeIn">
-            <div>
-              <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest block">
-                CASHMERE KID$ CONTROL CENTER
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-brand font-black text-white uppercase tracking-tight mt-1">
-                STUDIO OVERVIEW
-              </h2>
+            {/* Store Ready Banner */}
+            <div className="bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 p-4 rounded-2xl flex items-center gap-3 font-bold text-xs uppercase tracking-widest shadow-lg shadow-emerald-950/10">
+              <CheckCircle className="w-5 h-5" />
+              <span>CASHMERE KID$ PRODUCER CONTROL CENTER · REAL-TIME VAULT ENGINE ACTIVE</span>
             </div>
 
-            {/* Metrics Panel */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
-                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Gross Sales Revenue</span>
-                <div className="text-2xl font-mono font-black text-white">{currencySymbol}{totalRevenue.toFixed(2)}</div>
-                <span className="text-[10px] text-emerald-400 font-bold">100% Direct Payouts</span>
-              </div>
+            {/* FEATURE 38: DASHBOARD COMMAND CENTER */}
+            <CommandCenterStats
+              beats={beats}
+              salesRecords={salesRecords}
+              leadsCount={leads.length}
+              currencySymbol={currencySymbol}
+            />
 
-              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
-                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Published Catalog</span>
-                <div className="text-2xl font-mono font-black text-purple-300">{publishedBeats.length} Tracks</div>
-                <span className="text-[10px] text-zinc-400 font-medium">{draftBeats.length} Drafts Saved</span>
-              </div>
+            {/* FEATURE 39: BEAT PERFORMANCE ANALYTICS */}
+            <BeatPerformanceAnalytics
+              beats={beats}
+              salesRecords={salesRecords}
+              favoriteIds={favoriteIds}
+              currencySymbol={currencySymbol}
+            />
 
-              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
-                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Beat Pack Bundles</span>
-                <div className="text-2xl font-mono font-black text-white">{beatPacks.length} Packs</div>
-                <span className="text-[10px] text-purple-400 font-bold">Active Stem Bundles</span>
-              </div>
+            {/* FEATURE 40: SALES ANALYTICS */}
+            <SalesAnalyticsSection
+              salesRecords={salesRecords}
+              currencySymbol={currencySymbol}
+            />
 
-              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
-                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Captured Leads</span>
-                <div className="text-2xl font-mono font-black text-white">{leads.length} Contacts</div>
-                <span className="text-[10px] text-purple-400 font-bold">Exportable CSV</span>
-              </div>
-            </div>
+            {/* FEATURE 41: TOP-PERFORMING BEAT DETECTION */}
+            <TopPerformingBeats
+              beats={beats}
+              salesRecords={salesRecords}
+              favoriteIds={favoriteIds}
+              currencySymbol={currencySymbol}
+            />
 
-            {/* Quick Actions Shortcuts */}
-            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-              <h3 className="text-xs font-black text-white uppercase tracking-wider font-brand">QUICK WORKSPACE SHORTCUTS</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <button
-                  onClick={() => setIsUploadModalOpen(true)}
-                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-5 h-5 text-purple-400" />
-                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Upload Beat</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('beatpacks')}
-                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
-                >
-                  <Package className="w-5 h-5 text-purple-400" />
-                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Manage Beat Packs</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('collections')}
-                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
-                >
-                  <Layers className="w-5 h-5 text-purple-400" />
-                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Collections</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('profile_settings')}
-                  className="p-4 bg-zinc-900 hover:bg-zinc-850 rounded-2xl border border-zinc-800 text-center hover:border-purple-500/30 transition-all flex flex-col items-center gap-2 cursor-pointer"
-                >
-                  <User className="w-5 h-5 text-purple-400" />
-                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">Edit Profile</span>
-                </button>
-              </div>
-            </div>
+            {/* FEATURE 42: AUDIENCE ACTIVITY TIMELINE */}
+            <AudienceActivityTimeline />
 
-            {/* Recorded Sales Orders */}
-            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
-                <h3 className="font-brand font-black text-sm text-white uppercase tracking-widest">RECORDED SALES ACTIVITY</h3>
-                <span className="text-[10px] font-mono text-zinc-500 font-bold">{salesRecords.length} ORDERS TOTAL</span>
-              </div>
+            {/* FEATURE 43: INVENTORY / PUBLISHING MANAGER */}
+            <InventoryPublishingManager
+              beats={beats}
+              onUpdateBeat={onUpdateBeat}
+              onDeleteBeat={onDeleteBeat}
+              onPublishBeat={onPublishBeat}
+              onStartEditBeat={startEditingBeat}
+              onPlayToggle={onPlayToggle}
+              currencySymbol={currencySymbol}
+            />
 
-              {salesRecords.length > 0 ? (
-                <div className="space-y-3">
-                  {salesRecords.map((sale) => (
-                    <div key={sale.id} className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-bold text-white flex items-center gap-2">
-                          <span>{sale.beatTitle}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-300 border border-purple-500/20 font-mono">
-                            {sale.licenseType}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-zinc-400 mt-0.5">{sale.customerEmail} · Order #{sale.orderId}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs font-mono font-bold text-purple-300">{currencySymbol}{sale.amount.toFixed(2)}</div>
-                        <div className="text-[10px] text-emerald-400 font-semibold">{sale.status}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-10 text-center bg-zinc-900/40 border border-zinc-800/80 rounded-2xl space-y-2">
-                  <AlertTriangle className="w-8 h-8 text-zinc-600 mx-auto" />
-                  <h4 className="font-brand font-black text-white text-xs tracking-wider uppercase">NO ORDERS RECORDED YET</h4>
-                  <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                    Your store is active and connected to direct escrow payment processing.
-                  </p>
-                </div>
-              )}
-            </div>
+            {/* FEATURE 44: ARTWORK & AUDIO HEALTH CHECK */}
+            <StoreHealthCheck
+              beats={beats}
+              onStartEditBeat={startEditingBeat}
+              onOpenUploader={() => setIsUploadModalOpen(true)}
+              currencySymbol={currencySymbol}
+            />
+
+            {/* FEATURE 45: QUICK ACTIONS DASHBOARD */}
+            <QuickActionsPanel
+              onOpenUploader={() => setIsUploadModalOpen(true)}
+              onOpenCollections={() => setActiveTab('collections')}
+              onEditStore={() => setActiveTab('profile_settings')}
+              onViewSales={() => setActiveTab('sales')}
+              onOpenAudioPlayer={onOpenAudioPlayer}
+            />
+            
+            {/* Feature 49: Live Store Mode */}
+            <button
+              onClick={onEnterLiveMode}
+              className="w-full p-6 bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-3xl text-white font-black text-lg uppercase tracking-wider flex items-center justify-center gap-3 shadow-2xl shadow-purple-950/50 transition-all active:scale-98 cursor-pointer"
+            >
+              <Zap className="w-6 h-6 text-amber-300 fill-amber-300 animate-pulse" />
+              <span>Enter Live Store Mode</span>
+            </button>
           </div>
         )}
 
@@ -2733,7 +2774,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="border-b border-zinc-900 pb-4">
               <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">GOOGLE WORKSPACE INTEGRATION</span>
               <h2 className="text-2xl font-brand font-black text-white uppercase tracking-tight">EMAIL NOTIFICATIONS & SMTP</h2>
-              <p className="text-xs text-zinc-500">Configure automated notification schedules and customize client email receipts.</p>
+              <p className="text-xs text-zinc-500">Automated notification schedules and client email receipts. <span className="text-zinc-300 font-bold">Email integration is optional.</span></p>
             </div>
 
             {/* Email Status Indicator Banner */}
@@ -3043,17 +3084,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-extrabold text-sm text-white">PayPal Account</h4>
-                  {paypalStatus === 'connected' && (
+                  {paypalStatus === 'connected' ? (
                     <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">CONNECTED</span>
-                  )}
-                  {paypalStatus === 'connecting' && (
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-amber-950 text-amber-300 border border-amber-500/30 font-bold animate-pulse">CONNECTING...</span>
-                  )}
-                  {paypalStatus === 'not_connected' && (
+                  ) : (
                     <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-850 text-zinc-400 font-bold">NOT CONNECTED</span>
-                  )}
-                  {paypalStatus === 'failed' && (
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-red-950 text-red-300 border border-red-500/30 font-bold">FAILED</span>
                   )}
                 </div>
 
@@ -3061,63 +3095,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Connect your existing Personal PayPal account to receive payments from CASHMERE KID$ customers. No manual API credentials required.
                 </p>
 
-                {paypalStatus === 'not_connected' && (
-                  <button
-                    onClick={handleConnectPayPal}
-                    className="w-full py-3 bg-[#0070ba] hover:bg-[#005ea6] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>Connect PayPal</span>
-                  </button>
-                )}
-
-                {paypalStatus === 'connecting' && (
-                  <button
-                    disabled
-                    className="w-full py-3 bg-zinc-850 text-zinc-400 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <RefreshCw className="w-4 h-4 animate-spin text-yellow-400" />
-                    <span>Connecting to PayPal…</span>
-                  </button>
-                )}
-
-                {paypalStatus === 'connected' && (
+                {paypalStatus === 'connected' ? (
                   <div className="space-y-3 pt-2">
                     <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1 text-xs">
-                      <div className="text-[10px] text-zinc-500 font-mono uppercase font-bold">Verified PayPal Account</div>
+                      <div className="text-[10px] text-emerald-400 font-mono uppercase font-bold flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> ✓ PAYPAL CONNECTED
+                      </div>
                       <div className="font-bold text-white truncate">{paypalInfo.email}</div>
-                      <div className="text-[10px] text-zinc-400 font-mono">Merchant ID: {paypalInfo.merchantId}</div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowManageModal(true)}
-                        className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                      >
-                        Manage Connection
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPaypalStatus('not_connected');
-                          triggerSaveState('PayPal Disconnected');
-                        }}
-                        className="py-2.5 px-4 bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                      >
-                        Disconnect
-                      </button>
-                    </div>
+                    <button
+                      onClick={handleDisconnectPayPal}
+                      className="w-full py-2.5 bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-colors cursor-pointer font-mono uppercase tracking-wider"
+                    >
+                      DISCONNECT
+                    </button>
                   </div>
-                )}
-
-                {paypalStatus === 'failed' && (
+                ) : (
                   <div className="space-y-3 pt-2">
-                    <p className="text-xs text-red-400 bg-red-950/30 border border-red-500/20 p-2.5 rounded-xl">
-                      PayPal couldn’t be connected. PayPal connection was not completed.
-                    </p>
+                    {(paypalStatus === 'failed' || paypalStatus === 'cancelled') && (
+                      <p className="text-xs text-red-400 bg-red-950/30 border border-red-500/20 p-2.5 rounded-xl">
+                        PayPal authorization was not completed or was cancelled. Please try again.
+                      </p>
+                    )}
+                    <input
+                      type="email"
+                      value={paypalEmailInput}
+                      onChange={(e) => setPaypalEmailInput(e.target.value)}
+                      placeholder="Enter your PayPal email address"
+                      disabled={isSubmittingPayPal}
+                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-xl px-4 py-3 text-white text-xs font-mono outline-none disabled:opacity-50"
+                    />
                     <button
                       onClick={handleConnectPayPal}
-                      className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                      disabled={isSubmittingPayPal}
+                      className="w-full py-3 bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
                     >
-                      Try Again
+                      {isSubmittingPayPal ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                          <span>Redirecting to PayPal…</span>
+                        </>
+                      ) : (
+                        <span>Connect PayPal</span>
+                      )}
                     </button>
                   </div>
                 )}

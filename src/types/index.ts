@@ -7,6 +7,18 @@ export interface BeatLicensePricing {
   exclusive: number;       // Full Exclusive Rights ($899.99, $1200.00, etc.)
 }
 
+export interface BeatDNA {
+  bpm?: number;
+  key?: string;
+  mood?: string;
+  energy?: 'Low' | 'Medium' | 'High' | 'Explosive' | string;
+  texture?: string;
+  instrumentation?: string[];
+  sonicCharacter?: string;
+  genre?: string;
+  tags?: string[];
+}
+
 export interface Beat {
   id: string;
   title: string;
@@ -30,6 +42,9 @@ export interface Beat {
   collectionId?: string;
   featured: boolean;
   published?: boolean; // Separates published vs draft/unpublished
+  isArchived?: boolean; // Private Producer Vault
+  isScheduled?: boolean; // Scheduled release
+  dna?: BeatDNA; // Feature 46: Beat DNA Profile
   createdDate?: string;
   updatedDate?: string;
   releaseDate: string;

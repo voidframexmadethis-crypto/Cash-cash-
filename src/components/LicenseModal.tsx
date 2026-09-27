@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, ShieldCheck, Sparkles, ShoppingBag, LayoutGrid, Table } from 'lucide-react';
+import { X, Check, ShieldCheck, ShoppingBag, LayoutGrid, Table, Zap, Download, Sparkles, FileText } from 'lucide-react';
 import { Beat, LicenseTierKey } from '../types';
 import { LICENSE_TIERS } from '../utils/licenseInfo';
 
@@ -8,6 +8,8 @@ interface LicenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddToCart: (beat: Beat, licenseKey: LicenseTierKey) => void;
+  onBuyNow?: (beat: Beat, licenseKey: LicenseTierKey) => void;
+  onFreeDownloadClick?: (beat: Beat) => void;
   currencySymbol: string;
 }
 
@@ -16,6 +18,8 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
   isOpen,
   onClose,
   onAddToCart,
+  onBuyNow,
+  onFreeDownloadClick,
   currencySymbol,
 }) => {
   const [selectedLicenseKey, setSelectedLicenseKey] = useState<LicenseTierKey>('mp3Lease');
@@ -41,25 +45,30 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
   };
 
   const currentTierPrice = getBeatPriceForTier(selectedLicenseKey);
+  const currentTier = LICENSE_TIERS[selectedLicenseKey];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/85 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-5xl bg-zinc-900 border border-purple-500/30 rounded-3xl shadow-2xl shadow-purple-950/80 overflow-hidden max-h-[92vh] flex flex-col">
+      <div className="relative w-full max-w-5xl bg-zinc-900 border border-purple-500/30 rounded-3xl shadow-2xl shadow-purple-950/80 overflow-hidden max-h-[92vh] flex flex-col text-left font-sans">
         {/* Modal Header */}
         <div className="p-4 sm:p-5 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3 bg-zinc-950/80">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <img
               src={beat.artworkUrl}
               alt={beat.title}
               className="w-12 h-12 rounded-xl object-cover border border-purple-500/30 shadow-md shrink-0"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.src = '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg';
+              }}
             />
-            <div>
+            <div className="min-w-0">
               <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">
-                COMPARE & SELECT LICENSE
+                CHOOSE LICENSE AGREEMENT
               </span>
-              <h3 className="text-lg font-black text-white">{beat.title}</h3>
+              <h3 className="text-lg font-black text-white truncate">{beat.title}</h3>
               <div className="text-xs text-zinc-400 font-mono">
-                PROD. CASHMERE KID$ · {beat.bpm} BPM · {beat.key} · {beat.genre}
+                PROD. {beat.producerName || 'CASHMERE KID$'} · {beat.bpm} BPM · {beat.key} · {beat.genre}
               </div>
             </div>
           </div>
@@ -68,7 +77,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
             <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-1">
               <button
                 onClick={() => setViewMode('cards')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
                   viewMode === 'cards'
                     ? 'bg-purple-600 text-white shadow'
                     : 'text-zinc-400 hover:text-white'
@@ -79,7 +88,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
               </button>
               <button
                 onClick={() => setViewMode('comparison')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
                   viewMode === 'comparison'
                     ? 'bg-purple-600 text-white shadow'
                     : 'text-zinc-400 hover:text-white'
@@ -92,12 +101,34 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+              className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        {/* Free Download Notice Banner */}
+        {beat.freeDownload && (
+          <div className="bg-gradient-to-r from-purple-950/80 via-zinc-900 to-purple-950/80 border-b border-purple-500/30 px-5 py-2.5 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-purple-300 font-semibold">
+              <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>Free Non-Commercial Tagged Demo MP3 is authorized by the producer for this beat.</span>
+            </div>
+            {onFreeDownloadClick && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onFreeDownloadClick(beat);
+                }}
+                className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-[11px] rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                <Download className="w-3 h-3" />
+                <span>Download Free</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Modal Body */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 scrollbar-thin scrollbar-thumb-zinc-800">
@@ -112,7 +143,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
                   <div
                     key={key}
                     onClick={() => setSelectedLicenseKey(key)}
-                    className={`cursor-pointer p-4 rounded-2xl border transition-all relative flex flex-col justify-between ${
+                    className={`cursor-pointer p-5 rounded-2xl border transition-all relative flex flex-col justify-between ${
                       isSelected
                         ? 'bg-purple-950/40 border-purple-500 shadow-xl shadow-purple-950/60 ring-1 ring-purple-500'
                         : 'bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
@@ -239,33 +270,52 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
           <div className="mt-4 p-4 bg-zinc-950 border border-purple-500/20 rounded-2xl space-y-1.5 text-xs">
             <div className="flex items-center gap-2 text-purple-300 font-bold">
               <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
-              <span>TRANSPARENT 100% ROYALTY SPLIT & INSTANT CONTRACT DELIVERY</span>
+              <span>TRANSPARENT ROYALTY SPLITS & DIRECT PRODUCER CONTRACT DELIVERY</span>
             </div>
             <p className="text-zinc-400 leading-relaxed text-[11px]">
-              All licenses purchased through CASHMERE KID$ include instant PDF contract agreement download, zero copyright strikes guarantee, and studio master uncompressed audio files.
+              Every beat purchase grants defined digital rights according to the selected tier agreement. Audio files (tagless high-bitrate masters) and official PDF contracts are delivered immediately upon verified PayPal checkout.
             </p>
           </div>
         </div>
 
-        {/* Modal Footer */}
+        {/* Modal Footer with TWO primary actions: Buy Now (1-Click) & Add to Cart */}
         <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span className="text-xs text-zinc-400 font-medium">Selected License Total:</span>
+            <span className="text-xs text-zinc-400 font-medium">Selected Tier Total:</span>
             <div className="text-2xl font-mono font-black text-white">
               {currencySymbol}{currentTierPrice.toFixed(2)}
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              onAddToCart(beat, selectedLicenseKey);
-              onClose();
-            }}
-            className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-500 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-purple-950/80 active:scale-95 transition-all cursor-pointer"
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Add Selected License To Cart</span>
-          </button>
+          <div className="flex items-center gap-2.5">
+            {/* Action 1: Add to Cart */}
+            <button
+              onClick={() => {
+                onAddToCart(beat, selectedLicenseKey);
+                onClose();
+              }}
+              className="flex items-center gap-2 px-5 py-3.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 hover:text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              <ShoppingBag className="w-4 h-4 text-purple-400" />
+              <span>Add to Cart</span>
+            </button>
+
+            {/* Action 2: Buy Now (1-Click Direct Purchase) */}
+            <button
+              onClick={() => {
+                if (onBuyNow) {
+                  onBuyNow(beat, selectedLicenseKey);
+                } else {
+                  onAddToCart(beat, selectedLicenseKey);
+                }
+                onClose();
+              }}
+              className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-500 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-purple-950/80 active:scale-95 transition-all cursor-pointer"
+            >
+              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+              <span>Buy Now ({currencySymbol}{currentTierPrice.toFixed(2)})</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
