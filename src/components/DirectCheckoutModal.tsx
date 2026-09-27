@@ -47,6 +47,10 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
       script.onload = () => {
         setPaypalLoaded(true);
       };
+      script.onerror = () => {
+        setCheckoutStatus('failed');
+        setCheckoutError('PayPal SDK failed to load.');
+      };
       document.body.appendChild(script);
     }
   }, [usePayPalSDK, paypalLoaded]);
@@ -65,11 +69,11 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   // Render in-modal PayPal buttons
   useEffect(() => {
     if (paypalLoaded && usePayPalSDK && checkoutStatus === 'idle') {
-      const timer = setTimeout(() => {
-        const container = document.getElementById('direct-paypal-button-container');
-        if (container) {
-          container.innerHTML = '';
-          if (window.paypal && window.paypal.Buttons) {
+      const container = document.getElementById('direct-paypal-button-container');
+      if (container) {
+        container.innerHTML = '';
+        if (window.paypal && window.paypal.Buttons) {
+          try {
             window.paypal.Buttons({
               createOrder: (data: any, actions: any) => {
                 return actions.order.create({
@@ -88,14 +92,18 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                 });
               },
               onError: (err: any) => {
+                console.error('[PayPalDirect] Error:', err);
                 setCheckoutStatus('failed');
-                setCheckoutError('PayPal Secure Transaction was rejected or cancelled.');
+                setCheckoutError('PayPal Secure Transaction was rejected or failed. Please try again.');
               },
             }).render('#direct-paypal-button-container');
+          } catch (e) {
+            console.error('[PayPalDirect] Rendering error:', e);
+            setCheckoutStatus('failed');
+            setCheckoutError('PayPal button rendering failed.');
           }
         }
-      }, 100);
-      return () => clearTimeout(timer);
+      }
     }
   }, [paypalLoaded, usePayPalSDK, checkoutStatus, total, currentLicenseKey, beat]);
 
