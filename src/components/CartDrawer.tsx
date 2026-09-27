@@ -139,38 +139,47 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsCheckoutCompleted(true);
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     setCheckoutStatus('processing');
     setCheckoutError(null);
 
-    setTimeout(() => {
+    try {
       if (promoCode.trim().toUpperCase() === 'FAIL') {
-        setCheckoutStatus('failed');
-        setCheckoutError('Simulated network gateway timeout. Settle transaction rejected.');
-        return;
+        throw new Error('Simulated network gateway timeout. Settle transaction rejected.');
       }
 
-      const generatedId = `CK-${Math.floor(10000 + Math.random() * 90000)}`;
-      setOrderId(generatedId);
+      const res = await fetch('/api/paypal/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cart,
+          discount: appliedDiscount,
+          promoCode,
+        }),
+      });
 
-      // Record real sales into state / localStorage!
-      const newRecords: SaleRecord[] = cart.map((item) => ({
-        id: `sale-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        orderId: generatedId,
-        customerName: 'VIP Collector',
-        customerEmail: 'artist@cashmerekid.com',
-        beatTitle: item.beatTitle,
-        licenseType: item.licenseName,
-        amount: item.price * (1 - appliedDiscount),
-        date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        status: 'Completed',
-      }));
+      if (!res.ok) {
+        throw new Error(`Server order creation failed (HTTP ${res.status}).`);
+      }
 
-      onRecordSale(newRecords);
-      setCheckoutStatus('succeeded');
-      setIsCheckoutCompleted(true);
-    }, 1200);
+      const data = await res.json();
+      if (data.approvalUrl) {
+        window.location.href = data.approvalUrl;
+      } else {
+        throw new Error(data.message || 'Failed to retrieve checkout approval URL.');
+      }
+    } catch (err: any) {
+      console.error('[CartDrawer] Exception executing checkout:', err);
+      setCheckoutStatus('failed');
+      setCheckoutError(err.message || 'Checkout execution failed.');
+    }
   };
+
+  const handlePayPalHostedCheckout = async () => {
+    await handleCheckout();
+  };
+
+
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-zinc-950/80 backdrop-blur-md animate-fadeIn">
@@ -330,22 +339,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
 
                     <div className="space-y-4">
+
+
                       {/* PayPal Commerce Gateway */}
-                      <div className="p-4 bg-zinc-900/60 border border-zinc-805 rounded-xl space-y-3 text-left">
+                      <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3 text-left">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-zinc-200">PayPal Secure Gateway</span>
+                          <span className="text-xs font-bold text-zinc-200">PayPal Checkout</span>
                           <Wallet className="w-4 h-4 text-yellow-500 fill-yellow-500/20" />
                         </div>
                         <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">
-                          Execute standard PayPal commerce sandbox transactions. Login with your secure sandbox account.
+                          Secure PayPal hosted checkout with environment-aware return verification.
                         </p>
                         
+                        <button
+                          onClick={handlePayPalHostedCheckout}
+                          className="w-full py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <span>Proceed to PayPal Checkout</span>
+                        </button>
+
                         {!usePayPalSDK ? (
                           <button
                             onClick={() => setUsePayPalSDK(true)}
-                            className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                            className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
                           >
-                            <span>Launch PayPal Smart Buttons</span>
+                            <span>Or Use In-Page PayPal Buttons</span>
                           </button>
                         ) : !paypalLoaded ? (
                           <div className="py-2.5 flex items-center justify-center gap-2 text-xs font-mono text-zinc-500">

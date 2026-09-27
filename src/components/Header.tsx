@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Menu, X, Sparkles, User, Volume2, Search, Music, Plus } from 'lucide-react';
+import { ShoppingBag, Menu, X, Sparkles, User, Volume2, Search, Music, Plus, Bell } from 'lucide-react';
 import { CartItem } from '../types';
 
 interface HeaderProps {
@@ -9,6 +9,7 @@ interface HeaderProps {
   setIsCartOpen: (open: boolean) => void;
   currencySymbol: string;
   onOpenAudioPlayer?: () => void;
+  onOpenNotifications?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   setIsCartOpen,
   currencySymbol,
   onOpenAudioPlayer,
+  onOpenNotifications,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -121,6 +123,15 @@ export const Header: React.FC<HeaderProps> = ({
             SEARCH BY SOUND
           </button>
           <button
+            onClick={() => setCurrentView('hall-of-fame')}
+            className={`hover:text-white transition-colors py-1 ${
+              currentView === 'hall-of-fame' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : 'text-zinc-400'
+            }`}
+            title="Record Plaque Hall of Fame"
+          >
+            HALL OF FAME
+          </button>
+          <button
             onClick={() => {
               if (onOpenAudioPlayer) {
                 onOpenAudioPlayer();
@@ -157,6 +168,15 @@ export const Header: React.FC<HeaderProps> = ({
                 {cart.length}
               </span>
             )}
+          </button>
+
+          {/* Customer Notifications Opt-in */}
+          <button
+            onClick={onOpenNotifications}
+            className="p-2 text-zinc-300 hover:text-purple-400 transition-colors rounded-xl hover:bg-zinc-900/60 flex items-center"
+            title="Notifications & Opt-in"
+          >
+            <Bell className="w-4 h-4" />
           </button>
 
           {/* Upload Hub Button */}
@@ -220,6 +240,12 @@ export const Header: React.FC<HeaderProps> = ({
                 {cart.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={onOpenNotifications}
+            className="p-2 text-zinc-300 hover:text-purple-400 transition-colors"
+          >
+            <Bell className="w-5 h-5" />
           </button>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -292,6 +318,12 @@ export const Header: React.FC<HeaderProps> = ({
             className="block w-full text-left py-2 text-zinc-400 hover:text-white"
           >
             PRODUCER PROFILE
+          </button>
+          <button
+            onClick={() => { setCurrentView('hall-of-fame'); setMobileMenuOpen(false); }}
+            className="block w-full text-left py-2 text-purple-300 hover:text-white font-extrabold flex items-center gap-1.5"
+          >
+            <span>RECORD PLAQUE HALL OF FAME</span>
           </button>
           <button
             onClick={() => { setCurrentView('dashboard'); setMobileMenuOpen(false); }}

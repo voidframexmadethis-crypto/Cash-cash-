@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShoppingBag, Sparkles, ShieldCheck, ArrowRight, CheckCircle2, Star, Disc } from 'lucide-react';
+import { EmptyState } from '../components/EmptyState';
 
 interface MerchViewProps {
   onNavigateToBrowse: () => void;
@@ -18,54 +19,10 @@ interface MerchProduct {
 }
 
 export const MerchView: React.FC<MerchViewProps> = ({ onNavigateToBrowse, onAddMerchToCart }) => {
-  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({
-    'merch-1': 'M',
-    'merch-2': 'L'
-  });
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
   const [addedItemIds, setAddedItemIds] = useState<string[]>([]);
 
-  const products: MerchProduct[] = [
-    {
-      id: 'merch-1',
-      title: 'CASHMERE 450GSM SILK-SCREEN HOODIE',
-      price: 120.0,
-      description: 'Ultra-heavyweight organic French terry cotton. Features bespoke silk-screened Cashmere Kid$ chest logo, structured custom hood with thick drawstrings, and tailored crop-streetwear fit engineered for studio longevity.',
-      artworkUrl: '/src/assets/images/cashmere_hero_runway_1790419818906.jpg',
-      hasSizes: true,
-      tag: 'Bespoke Garment',
-      specs: ['450 GSM Organic Cotton', 'Silk-Screen Chest Graphics', 'Double-Stitched Seams', 'Bespoke Streetwear Silhouette']
-    },
-    {
-      id: 'merch-2',
-      title: '"BLACK VAULT" STEMS NFC BEANIE & CAP',
-      price: 65.0,
-      description: 'Heavyweight cotton twill unstructured cap with custom metallic front adjustments. Embedded with a tap-to-listen NFC microchip, allowing you to launch the exclusive Cashmere Kid$ VIP audio stems vault player on any smartphone instantly with a single tap.',
-      artworkUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-      hasSizes: true,
-      tag: 'Audio Technology',
-      specs: ['Integrated Tap NFC NXP Chip', 'Heavyweight Premium Cotton Twill', 'Matte Metal Clasp', 'Exclusive Vault Playlist Access Included']
-    },
-    {
-      id: 'merch-3',
-      title: '"VELVET VINYL" 12" STEMS DOUBLE LP',
-      price: 85.0,
-      description: 'Collector\'s physical edition opaque black double 12" 180g heavyweight vinyl containing high-definition digital audio stems, vocal tracks, and instrumentals from the Cashmere Kid$ Platinum catalog. Includes download coupon.',
-      artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-      hasSizes: false,
-      tag: 'Vinyl / Collector',
-      specs: ['Double 12" 180g Audiophile Vinyl', 'Gatefold Heavy Cardboard Jacket', 'Full Stem-Slices Digital Download Pack', 'Limited Edition (Only 100 Units Pressed)']
-    },
-    {
-      id: 'merch-4',
-      title: 'CASHMERE EXECUTIVE STUDIO CONTROL MAT',
-      price: 45.0,
-      description: 'Professional-grade acoustic counterweight mat for synth controllers, laptops, and keyboards. Textured rubber back prevents slipping, while the high-density micro-woven polyester front allows flawless mouse response.',
-      artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-      hasSizes: false,
-      tag: 'Studio Accessory',
-      specs: ['900x400mm Executive Desktop Size', '4mm High-Density Cushioning', 'Anti-Fray Stitched Gold Borders', 'Anti-Slip Textured Poly-Rubber Back']
-    }
-  ];
+  const products: MerchProduct[] = [];
 
   const handleSizeChange = (productId: string, size: string) => {
     setSelectedSizes((prev) => ({ ...prev, [productId]: size }));
@@ -111,105 +68,115 @@ export const MerchView: React.FC<MerchViewProps> = ({ onNavigateToBrowse, onAddM
       </div>
 
       {/* Boutique Product Showcase Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
-        {products.map((product) => {
-          const isAdded = addedItemIds.includes(product.id);
-          return (
-            <div
-              key={product.id}
-              className="bg-zinc-900/60 border border-zinc-800/80 rounded-3xl overflow-hidden hover:border-purple-500/30 transition-all duration-300 flex flex-col group shadow-xl"
-            >
-              {/* Product Artwork Block */}
-              <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-950 border-b border-zinc-800/80">
-                <img
-                  src={product.artworkUrl}
-                  alt={product.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                
-                {/* Premium Badge */}
-                <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-zinc-800 text-[10px] font-bold uppercase text-purple-300 tracking-wider">
-                  {product.tag}
-                </div>
-
-                {/* Price Display */}
-                <div className="absolute bottom-4 right-4 bg-purple-600/90 backdrop-blur-md text-white font-mono font-black text-lg px-4 py-1.5 rounded-xl shadow-lg border border-purple-400/30">
-                  ${product.price.toFixed(2)}
-                </div>
-              </div>
-
-              {/* Product Details Block */}
-              <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between space-y-6">
-                <div className="space-y-4">
-                  <h3 className="font-brand font-black text-xl text-white group-hover:text-purple-300 transition-colors tracking-tight leading-snug">
-                    {product.title}
-                  </h3>
+      {products.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
+          {products.map((product) => {
+            const isAdded = addedItemIds.includes(product.id);
+            return (
+              <div
+                key={product.id}
+                className="bg-zinc-900/60 border border-zinc-800/80 rounded-3xl overflow-hidden hover:border-purple-500/30 transition-all duration-300 flex flex-col group shadow-xl"
+              >
+                {/* Product Artwork Block */}
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-950 border-b border-zinc-800/80">
+                  <img
+                    src={product.artworkUrl}
+                    alt={product.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                   
-                  <p className="text-xs text-zinc-400 leading-relaxed font-medium">
-                    {product.description}
-                  </p>
+                  {/* Premium Badge */}
+                  <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-zinc-800 text-[10px] font-bold uppercase text-purple-300 tracking-wider">
+                    {product.tag}
+                  </div>
 
-                  {/* Specs Bullets */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800/60">
-                    {product.specs.map((spec, i) => (
-                      <div key={i} className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                        <span className="truncate">{spec}</span>
-                      </div>
-                    ))}
+                  {/* Price Display */}
+                  <div className="absolute bottom-4 right-4 bg-purple-600/90 backdrop-blur-md text-white font-mono font-black text-lg px-4 py-1.5 rounded-xl shadow-lg border border-purple-400/30">
+                    ${product.price.toFixed(2)}
                   </div>
                 </div>
 
-                {/* Interactive Selectors & Cart CTA */}
-                <div className="space-y-4 pt-4 border-t border-zinc-800/60">
-                  {product.hasSizes && (
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-zinc-500 font-bold uppercase">Select Size</span>
-                      <div className="flex gap-2 font-mono">
-                        {['S', 'M', 'L', 'XL'].map((sz) => (
-                          <button
-                            key={sz}
-                            onClick={() => handleSizeChange(product.id, sz)}
-                            className={`w-9 h-9 rounded-xl border font-bold text-xs flex items-center justify-center transition-all ${
-                              selectedSizes[product.id] === sz
-                                ? 'bg-purple-600 text-white border-purple-400 font-black scale-105'
-                                : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
-                            }`}
-                          >
-                            {sz}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                {/* Product Details Block */}
+                <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between space-y-6">
+                  <div className="space-y-4">
+                    <h3 className="font-brand font-black text-xl text-white group-hover:text-purple-300 transition-colors tracking-tight leading-snug">
+                      {product.title}
+                    </h3>
+                    
+                    <p className="text-xs text-zinc-400 leading-relaxed font-medium">
+                      {product.description}
+                    </p>
 
-                  <button
-                    onClick={() => handleAddToCart(product)}
-                    className={`w-full py-3.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-                      isAdded
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white hover:bg-zinc-200 text-black shadow-lg hover:shadow-xl'
-                    }`}
-                  >
-                    {isAdded ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>ADDED TO VAULT CART</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingBag className="w-4 h-4" />
-                        <span>ADD TO CART · ${product.price.toFixed(2)}</span>
-                      </>
+                    {/* Specs Bullets */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800/60">
+                      {product.specs.map((spec, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                          <span className="truncate">{spec}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Interactive Selectors & Cart CTA */}
+                  <div className="space-y-4 pt-4 border-t border-zinc-800/60">
+                    {product.hasSizes && (
+                      <div className="flex items-center justify-between text-xs font-semibold">
+                        <span className="text-zinc-500 font-bold uppercase">Select Size</span>
+                        <div className="flex gap-2 font-mono">
+                          {['S', 'M', 'L', 'XL'].map((sz) => (
+                            <button
+                              key={sz}
+                              onClick={() => handleSizeChange(product.id, sz)}
+                              className={`w-9 h-9 rounded-xl border font-bold text-xs flex items-center justify-center transition-all ${
+                                selectedSizes[product.id] === sz
+                                  ? 'bg-purple-600 text-white border-purple-400 font-black scale-105'
+                                  : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
+                              }`}
+                            >
+                              {sz}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </button>
+
+                    <button
+                      onClick={() => handleAddToCart(product)}
+                      className={`w-full py-3.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                        isAdded
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white hover:bg-zinc-200 text-black shadow-lg hover:shadow-xl'
+                      }`}
+                    >
+                      {isAdded ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>ADDED TO VAULT CART</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-4 h-4" />
+                          <span>ADD TO CART · ${product.price.toFixed(2)}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          icon={ShoppingBag}
+          title="NO MERCHANDISE AVAILABLE YET"
+          description="Cashmere Kid$ has not published any physical apparel or vinyl pressings to the boutique yet."
+          actionLabel="Return to Beats Catalog"
+          onAction={onNavigateToBrowse}
+        />
+      )}
 
       {/* Trust Badges */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6">

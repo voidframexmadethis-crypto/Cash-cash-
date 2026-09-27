@@ -36,6 +36,13 @@ export interface Beat {
   description: string;
   voiceTag: boolean;
   isNew?: boolean;
+  // Internet Archive persistent storage fields
+  storageProvider?: string;
+  iaItemIdentifier?: string;
+  iaUrl?: string;
+  fileSize?: string;
+  checksum?: string;
+  uploadStatus?: string;
 }
 
 export interface Collection {
@@ -90,6 +97,9 @@ export interface BeatPack {
   freeDownload: boolean;
   published: boolean;
   createdDate?: string;
+  storageProvider?: string;
+  iaItemIdentifier?: string;
+  iaUrl?: string;
 }
 
 export interface Promotion {

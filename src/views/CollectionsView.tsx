@@ -81,60 +81,14 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
     'vault',
   ];
 
-  // Built-in curated collections for CASHMERE KID$ subgenres
-  const presetCollections = [
-    {
-      id: 'col-freestyle',
-      name: 'FREESTYLE TRAP BOUNCE VOL. 1',
-      genreTag: 'freestyle trap',
-      description: 'Ultra-bouncy 145-155 BPM freestyle canvasses engineered for non-stop vocal flows and fast cadences.',
-      artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-      price: 49.00,
-      beatIds: beats.filter(b => b.genre === 'FREESTYLE TRAP' || b.tags.includes('freestyle')).map(b => b.id),
-    },
-    {
-      id: 'col-dark',
-      name: 'DARK TRAP DEMONIA BUNDLE',
-      genreTag: 'dark trap',
-      description: 'Cinematic minor-key bell pads, aggressive sub glides, and gothic dark synth arrangements.',
-      artworkUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-      price: 49.99,
-      beatIds: beats.filter(b => b.genre === 'DARK SYNTH' || b.tags.includes('darktrap')).map(b => b.id),
-    },
-    {
-      id: 'col-banger',
-      name: 'BANGER TRAP ANTHEMS 2026',
-      genreTag: 'banger trap',
-      description: 'Heavy stadium-ready brass stabs, distorted 808 snaps, and high-energy club anthems.',
-      artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-      price: 59.99,
-      beatIds: beats.filter(b => b.genre === 'TRAP' || b.genre === 'HARD TRAP').map(b => b.id),
-    },
-    {
-      id: 'col-evil',
-      name: 'EVIL TRAP NIGHTMARES PACK',
-      genreTag: 'evil trap',
-      description: 'Gritty East Coast drill patterns, pitch-shifted horror synths, and demonic sub bass frequencies.',
-      artworkUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-      price: 49.00,
-      beatIds: beats.filter(b => b.genre === 'DRILL' || b.genre === 'HYPER TRAP').map(b => b.id),
-    },
-  ];
-
-  // Merge dynamic collections
-  const displayCollections = presetCollections.filter((col) => {
-    const matchesCategory =
-      selectedGenreCategory === 'ALL' ||
-      col.genreTag === selectedGenreCategory ||
-      (selectedGenreCategory === 'under50' && col.price <= 50);
-
+  // Filter real collections from props
+  const displayCollections = collections.filter((col) => {
     const matchesTag =
       searchTag === '' ||
       col.name.toLowerCase().includes(searchTag.toLowerCase()) ||
-      col.genreTag.toLowerCase().includes(searchTag.toLowerCase()) ||
-      col.description.toLowerCase().includes(searchTag.toLowerCase());
+      (col.description && col.description.toLowerCase().includes(searchTag.toLowerCase()));
 
-    return matchesCategory && matchesTag;
+    return matchesTag;
   });
 
   return (
@@ -279,8 +233,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
       ) : (
         <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6' : 'space-y-4'}>
           {displayCollections.map((col) => {
-            // Find beats belonging to this collection
-            const colBeats = beats.filter((b) => col.beatIds.includes(b.id) || b.genre.toLowerCase() === col.genreTag.toLowerCase());
+            const colBeats = beats.filter((b) => b.collectionId === col.id);
             const sampleBeat = colBeats[0] || beats[0];
             const isPlayingThisCol = currentBeat && colBeats.some((b) => b.id === currentBeat.id) && isPlaying;
 
@@ -289,7 +242,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 key={col.id}
                 className="group relative bg-zinc-950/80 border border-zinc-900 hover:border-purple-500/50 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-950/50 flex flex-col justify-between"
               >
-                {/* Album Art Stack Top Folder Rim Effect (Matches BeatStars screenshot folder top effect!) */}
+                {/* Album Art Stack Top Folder Rim Effect */}
                 <div className="relative pt-2 px-3">
                   <div className="w-full h-2 bg-zinc-800/60 rounded-t-lg mx-auto transform -translate-y-1 scale-95" />
                   <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 shadow-xl group-hover:scale-[1.02] transition-transform">
@@ -318,7 +271,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                     {/* Track Count Pill */}
                     <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-white/10 text-white font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                       <Music className="w-3 h-3 text-purple-400" />
-                      <span>{colBeats.length > 0 ? colBeats.length : 4} Tracks</span>
+                      <span>{col.beatCount || colBeats.length} Tracks</span>
                     </div>
                   </div>
                 </div>
@@ -338,26 +291,6 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                     <p className="text-xs text-zinc-400 line-clamp-2 pt-1 font-medium leading-relaxed">
                       {col.description}
                     </p>
-                  </div>
-
-                  {/* Price Button & Purchase Action */}
-                  <div className="pt-3 border-t border-zinc-900 flex items-center justify-between gap-2">
-                    <div className="text-left">
-                      <span className="text-[10px] text-zinc-500 uppercase font-bold block">Bundle Lease</span>
-                      <span className="text-sm font-black text-white">
-                        {currencySymbol}{col.price.toFixed(2)}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (sampleBeat) onBuyClick(sampleBeat);
-                      }}
-                      className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-purple-600 border border-zinc-800 hover:border-purple-500 text-white text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-md"
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>{currencySymbol}{col.price.toFixed(2)}</span>
-                    </button>
                   </div>
                 </div>
               </div>

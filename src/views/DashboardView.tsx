@@ -68,10 +68,16 @@ import {
   Save,
   CheckCircle,
   RotateCcw,
-  Sliders as SlidersIcon
+  VolumeX,
+  Sliders as SlidersIcon,
+  ArrowRight,
+  Bell,
+  Video
 } from 'lucide-react';
 import { Beat, FreeDownloadLead, Promotion, SaleRecord, StoreSettings, ProducerProfile, BeatPack } from '../types';
 import { UploadModal } from '../components/UploadModal';
+import { UgcCreator } from '../components/UgcCreator';
+import { signInWithGoogleGmail, logoutGmail } from '../utils/gmailAuth';
 
 interface DashboardViewProps {
   beats: Beat[];
@@ -96,6 +102,7 @@ interface DashboardViewProps {
   onNavigateToProfile: () => void;
   beatPacks?: BeatPack[];
   onUpdateBeatPacks?: (packs: BeatPack[]) => void;
+  onNavigateToHallOfFame?: () => void;
 }
 
 interface SoundKitItem {
@@ -171,10 +178,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToProfile,
   beatPacks = [],
   onUpdateBeatPacks,
+  onNavigateToHallOfFame,
 }) => {
   // Navigation active tab
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+
+  // Gmail Workspace Integration Settings States
+  const [gmailEmail, setGmailEmail] = useState('cashmerekid7@gmail.com');
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailTemplates, setGmailTemplates] = useState<any>(null);
+  const [activeTemplateTab, setActiveTemplateTab] = useState<'welcome' | 'receipt' | 'notification' | 'adminAlert'>('welcome');
+  const [templateSubject, setTemplateSubject] = useState('');
+  const [templateBody, setTemplateBody] = useState('');
+  const [testEmailAddress, setTestEmailAddress] = useState('cashmerekid7@gmail.com');
+  const [emailStatusMsg, setEmailStatusMsg] = useState<{ type: 'success' | 'error' | 'loading'; text: string } | null>(null);
 
   // Upload modal state & page mode
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -211,34 +229,87 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (saved) {
       try { return JSON.parse(saved); } catch { return []; }
     }
-    return [
-      {
-        id: 'col-1',
-        title: 'Runway Dark Trap Collection',
-        description: 'Boutique 808 glides and high-fashion synth textures.',
-        artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-        beatIds: beats.slice(0, 3).map((b) => b.id),
-        published: true,
-      },
-      {
-        id: 'col-2',
-        title: 'Tokyo Nighthawk Collection',
-        description: 'Ambient nocturnal freestyle trap instrumentals.',
-        artworkUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-        beatIds: beats.slice(2, 5).map((b) => b.id),
-        published: true,
-      },
-    ];
+    return [];
   });
 
   useEffect(() => {
     localStorage.setItem('voodoo_collections', JSON.stringify(collections));
   }, [collections]);
 
+  // Push Notifications Announcements State
+  const [announcements, setAnnouncements] = useState<any[]>(() => {
+    const saved = localStorage.getItem('voodoo_announcements');
+    if (saved) {
+      try { return JSON.parse(saved); } catch { return []; }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('voodoo_announcements', JSON.stringify(announcements));
+  }, [announcements]);
+
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTitle, setComposerTitle] = useState('');
+  const [composerMessage, setComposerMessage] = useState('');
+  const [composerImage, setComposerImage] = useState('');
+  const [composerDest, setComposerDestination] = useState('');
+  const [composerConfirm, setComposerConfirm] = useState(false);
+
   // Collection creation modal / form
   const [newColTitle, setNewColTitle] = useState('');
   const [newColDesc, setNewColDesc] = useState('');
   const [showAddCollection, setShowAddCollection] = useState(false);
+
+  // Paper Trail local states
+  const [paperTrailEntries, setPaperTrailEntries] = useState<any[]>([]);
+  const [paperTrailProductFilter, setPaperTrailProductFilter] = useState<string>('ALL');
+
+  // Flash Sale local states
+  const [serverFlashSales, setServerFlashSales] = useState<any[]>([]);
+  const [activeFlashSaleComposer, setActiveFlashSaleComposer] = useState<boolean>(false);
+  const [flashSaleTitle, setFlashSaleTitle] = useState<string>('');
+  const [flashSaleMessage, setFlashSaleMessage] = useState<string>('');
+  const [flashSaleDiscType, setFlashSaleDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [flashSaleDiscAmount, setFlashSaleDiscountAmount] = useState<number>(20);
+  const [flashSaleStart, setFlashSaleStartDate] = useState<string>('');
+  const [flashSaleEnd, setFlashSaleEndDate] = useState<string>('');
+  const [flashSaleEligibleProducts, setFlashSaleEligibleProducts] = useState<string[]>(['ALL']);
+  const [flashSaleIncludePacks, setFlashSaleIncludePacks] = useState<boolean>(true);
+  const [flashSaleIncludeBeats, setFlashSaleIncludeBeats] = useState<boolean>(true);
+  const [flashSaleBanner, setFlashSaleBannerText] = useState<string>('');
+  const [flashSaleCTA, setFlashSaleCTAText] = useState<string>('');
+  const [flashSaleStatus, setFlashSaleStatus] = useState<'active' | 'inactive'>('active');
+  const [flashSalePreview, setFlashSalePreviewMode] = useState<boolean>(false);
+
+  // Fetch Paper Trail and Flash Sales from server upon mounting or activeTab shifts
+  useEffect(() => {
+    if (activeTab === 'paper_trail') {
+      fetch('/api/papertrail/logs')
+        .then(res => res.json())
+        .then(data => setPaperTrailEntries(data))
+        .catch(err => console.error('[DashboardView] Fetch paper trail logs error:', err));
+    }
+    if (activeTab === 'flash_sales') {
+      fetch('/api/flash-sales')
+        .then(res => res.json())
+        .then(data => setServerFlashSales(data))
+        .catch(err => console.error('[DashboardView] Fetch flash sales error:', err));
+    }
+    // Load Gmail Workspace Integration Settings
+    fetch('/api/gmail/settings')
+      .then(res => res.json())
+      .then(data => {
+        setGmailEmail(data.email);
+        setGmailConnected(data.isConnected);
+        setGmailTemplates(data.templates);
+        if (data.templates) {
+          setTemplateSubject(data.templates[activeTemplateTab]?.subject || '');
+          setTemplateBody(data.templates[activeTemplateTab]?.body || '');
+        }
+      })
+      .catch(err => console.error('[DashboardView] Fetch gmail settings error:', err));
+  }, [activeTab, activeTemplateTab]);
 
   // Audio Mastering local states
   const [eqLow, setEqLow] = useState<number>(3.0);
@@ -275,6 +346,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [newVideoDesc, setNewVideoDesc] = useState('');
   const [newVideoDuration, setNewVideoDuration] = useState('3:00');
 
+  // PayPal Connection State
+  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed'>(() => {
+    const saved = localStorage.getItem('voodoo_paypal_connection');
+    return saved ? JSON.parse(saved) : 'connected';
+  });
+  const [paypalInfo, setPaypalInfo] = useState<{ email: string; merchantId: string }>(() => {
+    const saved = localStorage.getItem('voodoo_paypal_info');
+    return saved ? JSON.parse(saved) : { email: 'cashmerekids.studio@business.paypal.com', merchantId: 'PP-MERCHANT-8849201' };
+  });
+  const [showManageModal, setShowManageModal] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('voodoo_paypal_connection', JSON.stringify(paypalStatus));
+    localStorage.setItem('voodoo_paypal_info', JSON.stringify(paypalInfo));
+  }, [paypalStatus, paypalInfo]);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PAYPAL_AUTH_SUCCESS') {
+        setPaypalStatus('connected');
+        if (event.data.email) {
+          setPaypalInfo({ email: event.data.email, merchantId: event.data.merchantId || 'PP-MERCHANT-8849201' });
+        }
+        triggerSaveState('PayPal Account Connected Successfully');
+      } else if (event.data?.type === 'PAYPAL_AUTH_CANCELLED') {
+        setPaypalStatus('not_connected');
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const handleConnectPayPal = async () => {
+    setPaypalStatus('connecting');
+    try {
+      const res = await fetch('/api/paypal/auth-url');
+      if (!res.ok) throw new Error('Failed to fetch auth URL');
+      const { url } = await res.json();
+      const popup = window.open(url, 'paypal_oauth', 'width=600,height=700');
+      if (!popup) {
+        setPaypalStatus('failed');
+        alert('Popup was blocked. Please allow popups for this site to connect PayPal.');
+      }
+    } catch (err) {
+      console.error('PayPal connect error:', err);
+      setPaypalStatus('failed');
+    }
+  };
+
   // Edit beat modal state
   const [editingBeat, setEditingBeat] = useState<Beat | null>(null);
   const [editPriceVal, setEditPriceVal] = useState<number>(29.99);
@@ -299,71 +419,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [bogoDealType, setBogoDealType] = useState<'buy2get1' | 'buy3get2'>('buy2get1');
 
   // SoundKits list
-  const [soundKits, setSoundKits] = useState<SoundKitItem[]>([
-    {
-      id: 'sk-1',
-      title: 'VOODOO VAULT Vol. 1 (808s & Drums)',
-      price: 34.99,
-      salesCount: 14,
-      type: 'Drum Kit',
-      coverUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-    },
-    {
-      id: 'sk-2',
-      title: 'ANALOG VOODOO SYNTH PRESETS',
-      price: 24.99,
-      salesCount: 8,
-      type: 'Serum Presets',
-      coverUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-    },
-  ]);
+  const [soundKits, setSoundKits] = useState<SoundKitItem[]>([]);
 
   // Services list
-  const [services, setServices] = useState<ServiceItem[]>([
-    {
-      id: 'srv-1',
-      title: 'Vocal Mixing & Mastering',
-      price: 149.99,
-      deliveryDays: 3,
-      description: 'Industry standard vocal tuning, analog warmth EQ, compression and mastering.',
-    },
-    {
-      id: 'srv-2',
-      title: 'Exclusive Custom Beat Production',
-      price: 499.99,
-      deliveryDays: 5,
-      description: 'Tailored 1-on-1 production built exclusively for your album release.',
-    },
-  ]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
 
   // CRM Inbox Messages
-  const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([
-    {
-      id: 'msg-101',
-      customerName: 'Marcus Vance',
-      customerEmail: 'marcus.vance@soundcloud.com',
-      subject: 'Custom stems request for "VOODOO NIGHTS"',
-      type: 'Inquiry',
-      date: '2026-09-25 14:32',
-      status: 'Open',
-      messages: [
-        { sender: 'customer', text: 'Hey Cashmere! Love the 808s on VOODOO NIGHTS. Do you offer track stems for vocal arrangements?', time: '14:32' },
-      ],
-    },
-    {
-      id: 'msg-102',
-      customerName: 'Elena Rostova',
-      customerEmail: 'elena.rostova@warner.com',
-      subject: 'Exclusive License Negotiation - "VELVET DRIP"',
-      type: 'Negotiation',
-      date: '2026-09-24 19:10',
-      status: 'Replied',
-      messages: [
-        { sender: 'customer', text: 'We would like to make a counter offer of $750 for full Exclusive Rights on VELVET DRIP.', time: '19:10' },
-        { sender: 'producer', text: 'Hi Elena, our floor threshold for Exclusive Rights is $899.99. I can meet you at $850 with full WAV stems.', time: '20:15' },
-      ],
-    },
-  ]);
+  const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>([]);
 
   // Pixel Settings
   const [googleAnalyticsId, setGoogleAnalyticsId] = useState('G-882390192X');
@@ -390,9 +452,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       section: 'CATALOG',
       items: [
         { id: 'catalog', label: 'Beats Library', icon: Radio },
+        { id: 'remove_beats', label: 'Remove Beats from Player', icon: Trash2 },
         { id: 'beatpacks', label: 'Beat Packs', icon: Package },
         { id: 'collections', label: 'Collections', icon: Layers },
         { id: 'soundkits', label: 'Merch & Kits', icon: ShoppingBag },
+      ],
+    },
+    {
+      section: 'LEGACY & AWARDS',
+      items: [
+        { id: 'hall_of_fame_link', label: 'Record Plaque Hall of Fame', icon: Award },
       ],
     },
     {
@@ -414,6 +483,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         { id: 'sales', label: 'Sales & Orders', icon: DollarSign },
         { id: 'downloads', label: 'Artist Leads', icon: Download },
         { id: 'crm', label: 'Customer CRM', icon: MessageSquare },
+        { id: 'push_notifications', label: 'Push Notifications', icon: Send },
+        { id: 'flash_sales', label: 'Flash Sales Campaigns', icon: Zap },
+        { id: 'ugc_ad_creator', label: 'UGC Ad Creator', icon: Video },
         { id: 'promotions', label: 'Coupon Campaigns', icon: Tag },
         { id: 'services', label: 'Bespoke Services', icon: Mic2 },
       ],
@@ -435,6 +507,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       section: 'SETTINGS',
       items: [
         { id: 'settings', label: 'Store Settings', icon: Settings },
+        { id: 'email_settings', label: 'Email Notifications', icon: Mail },
+        { id: 'paper_trail', label: 'Paper Trail Security', icon: Shield },
         { id: 'integrations', label: 'Payment Settings', icon: DollarSign },
         { id: 'legal_services', label: 'Legal Contracts', icon: FileText },
         { id: 'splits_copyright', label: 'Splits & Copyright', icon: Shield },
@@ -547,6 +621,105 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     onUpdateProfile(updatedProfile);
   };
 
+  const handleGoogleGmailLogin = async () => {
+    setEmailStatusMsg({ type: 'loading', text: 'Authorizing through Google Workspace...' });
+    try {
+      const result = await signInWithGoogleGmail();
+      if (result) {
+        const saveRes = await fetch('/api/gmail/save-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: result.user.email,
+            accessToken: result.accessToken
+          })
+        });
+        const saveData = await saveRes.json();
+        if (saveData.success) {
+          setGmailEmail(saveData.email);
+          setGmailConnected(true);
+          setEmailStatusMsg({ type: 'success', text: `Gmail account successfully authorized: ${saveData.email}` });
+          triggerSaveState('Gmail account connected');
+        } else {
+          throw new Error(saveData.error || 'Server failed to save secure token.');
+        }
+      }
+    } catch (err: any) {
+      setEmailStatusMsg({ type: 'error', text: `Authorization failed: ${err.message || 'Unknown error'}. Please try again.` });
+    }
+  };
+
+  const handleLogoutGmail = async () => {
+    try {
+      await logoutGmail();
+      const saveRes = await fetch('/api/gmail/save-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'cashmerekid7@gmail.com',
+          accessToken: ''
+        })
+      });
+      const saveData = await saveRes.json();
+      setGmailConnected(false);
+      setEmailStatusMsg({ type: 'success', text: 'Gmail account authorization revoked.' });
+      triggerSaveState('Gmail account disconnected');
+    } catch (err: any) {
+      setEmailStatusMsg({ type: 'error', text: `Failed to revoke: ${err.message}` });
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress.trim()) {
+      setEmailStatusMsg({ type: 'error', text: 'Please enter a valid recipient email address.' });
+      return;
+    }
+    setEmailStatusMsg({ type: 'loading', text: 'Dispatching secure verification email...' });
+    try {
+      const res = await fetch('/api/gmail/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toEmail: testEmailAddress })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailStatusMsg({ type: 'success', text: `Verification email successfully dispatched to ${testEmailAddress}!` });
+      } else {
+        setEmailStatusMsg({ type: 'error', text: data.error || 'Failed to dispatch test email.' });
+      }
+    } catch (err: any) {
+      setEmailStatusMsg({ type: 'error', text: `Exception: ${err.message || 'Failed to dispatch test email.'}` });
+    }
+  };
+
+  const handleSaveTemplates = async () => {
+    setEmailStatusMsg({ type: 'loading', text: 'Saving updated templates on server...' });
+    try {
+      const updated = {
+        ...gmailTemplates,
+        [activeTemplateTab]: {
+          subject: templateSubject,
+          body: templateBody
+        }
+      };
+      const res = await fetch('/api/gmail/update-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: updated })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGmailTemplates(data.templates);
+        setEmailStatusMsg({ type: 'success', text: 'Templates saved successfully on server!' });
+        triggerSaveState('Email templates updated');
+      } else {
+        setEmailStatusMsg({ type: 'error', text: data.error || 'Failed to update templates.' });
+      }
+    } catch (err: any) {
+      setEmailStatusMsg({ type: 'error', text: `Exception: ${err.message}` });
+    }
+  };
+
   const handleAddVideo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newVideoTitle.trim() || !newVideoId.trim()) return;
@@ -653,6 +826,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       onClick={() => {
                         if (item.id === 'upload_beat' || item.id === 'upload_pack') {
                           setIsUploadModalOpen(true);
+                        } else if (item.id === 'hall_of_fame_link') {
+                          if (onNavigateToHallOfFame) {
+                            onNavigateToHallOfFame();
+                          } else {
+                            setActiveTab('hall_of_fame_link');
+                          }
                         } else {
                           setActiveTab(item.id);
                         }
@@ -1008,6 +1187,235 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== REMOVE BEATS FROM PLAYER & STOREFRONT TAB ==================== */}
+        {activeTab === 'remove_beats' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-4">
+              <div>
+                <span className="text-xs font-mono font-bold text-rose-400 uppercase tracking-widest block">
+                  AUDIO PLAYER & STOREFRONT CONTROLLER
+                </span>
+                <h2 className="text-xl sm:text-2xl font-brand font-black text-white uppercase tracking-tight mt-0.5 flex items-center gap-2">
+                  <Trash2 className="w-6 h-6 text-rose-400" />
+                  <span>REMOVE BEATS FROM PLAYER & STOREFRONT</span>
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
+                  Instantly remove any beat track from the active audio player queue or storefront catalog. Removed tracks stop playback immediately and are hidden from visitors until re-enabled.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const publishedList = beats.filter((b) => b.published !== false);
+                    if (publishedList.length === 0) {
+                      alert('No active beats in player queue to remove.');
+                      return;
+                    }
+                    if (confirm(`Remove ALL ${publishedList.length} active beat(s) from the audio player and storefront?`)) {
+                      publishedList.forEach((b) => {
+                        if (onUpdateBeat) onUpdateBeat({ ...b, published: false });
+                      });
+                      triggerSaveState(`Removed ${publishedList.length} beat(s) from audio player`);
+                    }
+                  }}
+                  className="px-4 py-2.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow flex items-center gap-1.5 cursor-pointer"
+                >
+                  <VolumeX className="w-4 h-4 text-rose-400" />
+                  <span>Remove All Active Beats</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Metrics Overview Pill */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-zinc-950 border border-zinc-900 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider block">Total Library</span>
+                  <span className="text-xl font-mono font-black text-white">{beats.length} Beats</span>
+                </div>
+                <Radio className="w-6 h-6 text-zinc-600" />
+              </div>
+
+              <div className="p-4 bg-zinc-950 border border-emerald-950/80 rounded-2xl flex items-center justify-between bg-emerald-950/10">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider block">Active in Audio Player</span>
+                  <span className="text-xl font-mono font-black text-emerald-300">{beats.filter((b) => b.published !== false).length} Beats</span>
+                </div>
+                <Play className="w-6 h-6 text-emerald-400 animate-pulse" />
+              </div>
+
+              <div className="p-4 bg-zinc-950 border border-rose-950/80 rounded-2xl flex items-center justify-between bg-rose-950/10">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-wider block">Removed from Player</span>
+                  <span className="text-xl font-mono font-black text-rose-300">{beats.filter((b) => b.published === false).length} Beats</span>
+                </div>
+                <Trash2 className="w-6 h-6 text-rose-400" />
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-950 p-4 rounded-2xl border border-zinc-900">
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="Filter beats to remove by title, key, BPM, genre..."
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl py-2 pl-9 pr-3 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+                <button
+                  onClick={() => setCatalogStatusFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer ${
+                    catalogStatusFilter === 'ALL' ? 'bg-purple-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  All Beats ({beats.length})
+                </button>
+                <button
+                  onClick={() => setCatalogStatusFilter('PUBLISHED')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer ${
+                    catalogStatusFilter === 'PUBLISHED' ? 'bg-emerald-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Active in Player ({beats.filter((b) => b.published !== false).length})
+                </button>
+                <button
+                  onClick={() => setCatalogStatusFilter('UNPUBLISHED')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer ${
+                    catalogStatusFilter === 'UNPUBLISHED' || catalogStatusFilter === 'DRAFT' ? 'bg-rose-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Removed ({beats.filter((b) => b.published === false).length})
+                </button>
+              </div>
+            </div>
+
+            {/* Beats List */}
+            <div className="space-y-3">
+              {beats.length === 0 ? (
+                <div className="p-8 text-center bg-zinc-950 border border-zinc-900 rounded-2xl text-zinc-500 text-xs font-mono">
+                  No beats found in catalog library. Upload a beat to manage audio player removal.
+                </div>
+              ) : (
+                beats
+                  .filter((beat) => {
+                    const matchSearch =
+                      beat.title.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                      beat.genre.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                      beat.key.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                      beat.bpm.toString().includes(catalogSearch);
+                    if (!matchSearch) return false;
+
+                    if (catalogStatusFilter === 'PUBLISHED') return beat.published !== false;
+                    if (catalogStatusFilter === 'UNPUBLISHED' || catalogStatusFilter === 'DRAFT') return beat.published === false;
+                    return true;
+                  })
+                  .map((beat) => {
+                    const isPlayable = beat.published !== false;
+                    return (
+                      <div
+                        key={beat.id}
+                        className={`p-4 bg-zinc-950 border rounded-2xl flex flex-wrap items-center justify-between gap-4 transition-all ${
+                          isPlayable ? 'border-zinc-900 hover:border-purple-500/30' : 'border-rose-950/60 bg-rose-950/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <img
+                            src={beat.artworkUrl}
+                            alt={beat.title}
+                            className="w-12 h-12 rounded-xl object-cover border border-purple-500/20 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-extrabold text-sm text-white truncate">{beat.title}</h4>
+                              {isPlayable ? (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-950 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  <span>LIVE IN PLAYER QUEUE</span>
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-950 text-rose-300 border border-rose-500/40 flex items-center gap-1 shrink-0">
+                                  <VolumeX className="w-3 h-3 text-rose-400" />
+                                  <span>REMOVED FROM PLAYER</span>
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-zinc-400 font-mono mt-0.5 flex flex-wrap items-center gap-2">
+                              <span>{beat.bpm} BPM</span>
+                              <span>·</span>
+                              <span>{beat.key}</span>
+                              <span>·</span>
+                              <span>{beat.genre}</span>
+                              <span>·</span>
+                              <span className="text-purple-300">{currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-auto">
+                          {isPlayable ? (
+                            <button
+                              onClick={() => {
+                                if (onUpdateBeat) {
+                                  onUpdateBeat({ ...beat, published: false });
+                                  triggerSaveState(`Removed "${beat.title}" from player & storefront`);
+                                }
+                              }}
+                              className="px-3.5 py-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                              title="Remove this beat from active audio player queue & storefront"
+                            >
+                              <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Remove from Player</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (onUpdateBeat) {
+                                  onUpdateBeat({ ...beat, published: true });
+                                  triggerSaveState(`Restored "${beat.title}" to audio player & storefront`);
+                                }
+                              }}
+                              className="px-3.5 py-2 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                              title="Re-add beat back to active audio player queue & storefront"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Re-add to Player</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setConfirmModalData({
+                                isOpen: true,
+                                title: `Delete "${beat.title}" permanently?`,
+                                message: 'Are you sure you want to delete this beat track permanently from the library and storage? This action cannot be undone.',
+                                confirmLabel: 'Delete Permanently',
+                                onConfirm: () => {
+                                  onDeleteBeat(beat.id);
+                                  setConfirmModalData((prev) => ({ ...prev, isOpen: false }));
+                                  triggerSaveState(`Permanently deleted "${beat.title}"`);
+                                },
+                              });
+                            }}
+                            className="p-2 text-zinc-500 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 rounded-xl transition-colors cursor-pointer"
+                            title="Delete beat permanently"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
             </div>
           </div>
         )}
@@ -1525,6 +1933,777 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
 
+        {/* ==================== Push Notifications: Customer Alerts Hub ==================== */}
+        {activeTab === 'push_notifications' && (
+          <div className="space-y-6 animate-fadeIn text-left">
+            <div className="border-b border-zinc-900 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest block">CUSTOMER MARKETING & ENGAGEMENT</span>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight mt-1">PUSH NOTIFICATIONS DISPATCH HUB</h2>
+                <p className="text-xs text-zinc-500">Deliver highly personalized system alert messages straight to subscribers' mobile lock screens.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setComposerTitle('');
+                  setComposerMessage('');
+                  setComposerImage('');
+                  setComposerDestination('');
+                  setComposerConfirm(false);
+                  setComposerOpen(true);
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-purple-950 flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Announcement</span>
+              </button>
+            </div>
+
+            {/* Previous Announcements History Table */}
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider font-brand">SENT ANNOUNCEMENT LOGS</h3>
+              {announcements.length === 0 ? (
+                <div className="py-12 text-center text-zinc-500 text-xs">
+                  No announcements yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-zinc-400 font-sans border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-900 text-zinc-500 font-mono text-[10px] uppercase tracking-wider">
+                        <th className="py-3 px-4 font-bold">Date & Time</th>
+                        <th className="py-3 px-4 font-bold">Title</th>
+                        <th className="py-3 px-4 font-bold">Message</th>
+                        <th className="py-3 px-4 font-bold">Target Audience</th>
+                        <th className="py-3 px-4 font-bold">Destination URL</th>
+                        <th className="py-3 px-4 font-bold text-right">Delivery Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-900/40">
+                      {announcements.map((item) => (
+                        <tr key={item.id} className="hover:bg-zinc-900/20 transition-colors">
+                          <td className="py-3.5 px-4 font-mono font-bold text-zinc-500">{item.date}</td>
+                          <td className="py-3.5 px-4 font-bold text-white uppercase tracking-wide">{item.title}</td>
+                          <td className="py-3.5 px-4 max-w-xs truncate">{item.message}</td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/60 text-purple-300 border border-purple-500/10">
+                              {item.audience}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[10px] text-zinc-500 truncate max-w-[120px]">{item.destination || '/'}</td>
+                          <td className="py-3.5 px-4 text-right">
+                            <span className="px-2.5 py-0.5 rounded font-mono text-[9px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/25 uppercase">
+                              {item.deliveryStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Announcement Composer Modal */}
+            {composerOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto">
+                <div className="w-full max-w-4xl bg-zinc-950 border border-zinc-900 rounded-3xl p-6 sm:p-8 shadow-2xl relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-start animate-fadeIn max-h-[90vh] overflow-y-auto">
+                  <button
+                    onClick={() => setComposerOpen(false)}
+                    className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors absolute top-4 right-4"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+
+                  {/* Form Side */}
+                  <div className="space-y-5 text-left">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">CREATION HUB</span>
+                      <h3 className="text-xl font-brand font-black text-white uppercase tracking-tight">ANNOUNCEMENT WIZARD</h3>
+                    </div>
+
+                    {!composerConfirm ? (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-xs font-bold text-zinc-400 block mb-1">Notification Title *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. NEW BEAT DROP"
+                            value={composerTitle}
+                            onChange={(e) => setComposerTitle(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-purple-500/50 rounded-xl text-xs text-white uppercase"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-zinc-400 block mb-1">Body Message *</label>
+                          <textarea
+                            rows={3}
+                            required
+                            placeholder="A new CASHMERE KID$ beat just landed."
+                            value={composerMessage}
+                            onChange={(e) => setComposerMessage(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-purple-500/50 rounded-xl text-xs text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-zinc-400 block mb-1">Optional Banner Image URL</label>
+                          <input
+                            type="text"
+                            placeholder="https://unsplash.com/..."
+                            value={composerImage}
+                            onChange={(e) => setComposerImage(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-purple-500/50 rounded-xl text-xs text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-zinc-400 block mb-1">Destination URL / Route</label>
+                          <select
+                            value={composerDest}
+                            onChange={(e) => setComposerDestination(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-purple-500/50 rounded-xl text-xs text-white"
+                          >
+                            <option value="">Storefront Homepage</option>
+                            <option value="/browse">Beats Catalog</option>
+                            {beats.slice(0, 10).map(b => (
+                              <option key={b.id} value={`/?beat=${b.id}`}>Beat Page: {b.title}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (!composerTitle.trim() || !composerMessage.trim()) {
+                              alert('Please complete the required title and message fields.');
+                              return;
+                            }
+                            setComposerConfirm(true);
+                          }}
+                          className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <span>Preview Announcement</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-5">
+                        <div className="p-4 bg-purple-950/20 border border-purple-500/20 rounded-2xl text-xs space-y-2 leading-relaxed">
+                          <h4 className="font-bold text-purple-300">Push Delivery Notice</h4>
+                          <p className="text-zinc-400 text-[11px]">
+                            Confirming this dispatch will instantly broadcast visible push notifications securely to all active, opted-in customer devices through our Standards-Based Web Push delivery infrastructure.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => setComposerConfirm(false)}
+                            className="py-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs uppercase rounded-xl transition-all cursor-pointer text-center"
+                          >
+                            ← Back
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const newAnn = {
+                                  id: `ann-${Date.now()}`,
+                                  title: composerTitle.toUpperCase().trim(),
+                                  message: composerMessage.trim(),
+                                  date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                                  deliveryStatus: 'Delivered',
+                                  audience: 'Opted-In Devices',
+                                  destination: composerDest || '/',
+                                  imageUrl: composerImage.trim() || undefined
+                                };
+
+                                // Secure server-side push notification broadcast endpoint trigger
+                                await fetch('/api/onesignal/send-announcement', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify(newAnn)
+                                });
+
+                                setAnnouncements((prev) => [newAnn, ...prev]);
+                                setComposerOpen(false);
+                                triggerSaveState('Global push announcement dispatched successfully!');
+                              } catch (e) {
+                                console.error('Dispatch error:', e);
+                                alert('Error broadcasting push: Delivery offline.');
+                              }
+                            }}
+                            className="py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase rounded-xl transition-all cursor-pointer text-center"
+                          >
+                            Confirm & Send
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Device Lock-Screen Live Mockup Preview */}
+                  <div className="space-y-4 flex flex-col items-center">
+                    <h4 className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest text-left w-full">LOCK SCREEN LIVE MOCKUP</h4>
+                    
+                    <div className="w-full max-w-[280px] h-[500px] rounded-[40px] border-4 border-zinc-800 bg-zinc-950 p-3 shadow-2xl relative flex flex-col justify-between overflow-hidden">
+                      
+                      {/* Top notch */}
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-4 bg-zinc-800 rounded-b-2xl z-10" />
+
+                      {/* Header clock */}
+                      <div className="text-center pt-8 space-y-1">
+                        <div className="text-3xl font-light text-zinc-200 tracking-wide font-mono">13:37</div>
+                        <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Saturday, Sept 26</div>
+                      </div>
+
+                      {/* Visually stunning Notification Alert Bubble */}
+                      <div className="space-y-3.5 my-auto">
+                        <div className="bg-zinc-900/90 border border-zinc-800/80 backdrop-blur-xl p-3.5 rounded-2xl text-left shadow-lg space-y-2 animate-fadeIn">
+                          <div className="flex items-center justify-between text-[9px] font-bold text-zinc-500">
+                            <div className="flex items-center gap-1.5 text-purple-400">
+                              <Bell className="w-3 h-3 text-purple-400" />
+                              <span>CASHMERE KID$</span>
+                            </div>
+                            <span>now</span>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-[11px] font-extrabold text-white uppercase tracking-wide">
+                              {composerTitle || 'ANNOUNCEMENT TITLE'}
+                            </div>
+                            <div className="text-[10px] text-zinc-400 leading-normal line-clamp-3">
+                              {composerMessage || 'Broadcast message preview appears right here.'}
+                            </div>
+                          </div>
+                          {composerImage && (
+                            <img
+                              src={composerImage}
+                              alt="Banner"
+                              className="w-full h-16 object-cover rounded-lg border border-zinc-800/40 mt-1"
+                              onError={(e) => { (e.target as any).style.display = 'none'; }}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Swipe up guide */}
+                      <div className="text-center pb-2 text-[9px] text-zinc-500 font-bold uppercase tracking-widest">
+                        Swipe up to unlock
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================== PAPER TRAIL SECURITY AND LICENSE AUDITING ==================== */}
+        {activeTab === 'paper_trail' && (
+          <div className="space-y-6 animate-fadeIn text-left">
+            <div className="border-b border-zinc-900 pb-4">
+              <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest block">SECURITY & LICENSING AUDIT</span>
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight mt-1">PAPER TRAIL AUDIT NETWORK</h2>
+              <p className="text-xs text-zinc-500">Track authorized media streams, verified buyer downloads, and blocked extraction attempts in real-time.</p>
+            </div>
+
+            {/* Audit KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Licensed Downloads</span>
+                <div className="text-2xl font-mono font-black text-emerald-400">
+                  {paperTrailEntries.filter(e => e.type === 'PAID_PURCHASE').length} Files
+                </div>
+                <span className="text-[10px] text-zinc-400 font-medium">Verified checkouts</span>
+              </div>
+
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Media Access Streams</span>
+                <div className="text-2xl font-mono font-black text-purple-300">
+                  {paperTrailEntries.filter(e => e.type === 'MEDIA_ACCESS').length} Streams
+                </div>
+                <span className="text-[10px] text-zinc-400 font-medium">Authorized preview plays</span>
+              </div>
+
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Blocked Access Scrapes</span>
+                <div className="text-2xl font-mono font-black text-red-400">
+                  {paperTrailEntries.filter(e => e.type === 'UNAUTHORIZED_ATTEMPT').length} Blocks
+                </div>
+                <span className="text-[10px] text-zinc-500 font-bold">Unauthorized extraction blocks</span>
+              </div>
+
+              <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl space-y-1">
+                <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Suspicious Bot Requests</span>
+                <div className="text-2xl font-mono font-black text-amber-500">
+                  {paperTrailEntries.filter(e => e.type === 'SUSPICIOUS_REQUEST').length} Blocks
+                </div>
+                <span className="text-[10px] text-zinc-500 font-bold">Converter crawlers detected</span>
+              </div>
+            </div>
+
+            {/* Filter and Table Panel */}
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h3 className="text-xs font-black text-white uppercase tracking-wider font-brand">SECURITY & ACCESS LOGS</h3>
+                
+                {/* Product-Level Detail Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-zinc-500 font-sans shrink-0">Product Filter:</span>
+                  <select
+                    value={paperTrailProductFilter}
+                    onChange={(e) => setPaperTrailProductFilter(e.target.value)}
+                    className="px-3.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                  >
+                    <option value="ALL">All Beats & Packs</option>
+                    {beats.map(b => (
+                      <option key={b.id} value={b.audioUrl || b.iaUrl || b.id}>{b.title}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {paperTrailEntries.length === 0 ? (
+                <div className="py-12 text-center text-zinc-500 text-xs">
+                  No notification history yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-zinc-400 font-sans border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-900 text-zinc-500 font-mono text-[10px] uppercase tracking-wider">
+                        <th className="py-3 px-4 font-bold">Timestamp</th>
+                        <th className="py-3 px-4 font-bold">Event Type</th>
+                        <th className="py-3 px-4 font-bold">Target File</th>
+                        <th className="py-3 px-4 font-bold">IP & Client metadata</th>
+                        <th className="py-3 px-4 font-bold">Reference ID</th>
+                        <th className="py-3 px-4 font-bold text-right">Access Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-900/40">
+                      {paperTrailEntries
+                        .filter(e => paperTrailProductFilter === 'ALL' || e.productId === paperTrailProductFilter || e.productId.includes(paperTrailProductFilter))
+                        .map((item) => (
+                          <tr key={item.id} className="hover:bg-zinc-900/20 transition-colors">
+                            <td className="py-3.5 px-4 font-mono font-bold text-zinc-500">{item.timestamp}</td>
+                            <td className="py-3.5 px-4">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                                item.type === 'PAID_PURCHASE' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/10' :
+                                item.type === 'FREE_DOWNLOAD' ? 'bg-sky-950/60 text-sky-400 border border-sky-500/10' :
+                                item.type === 'MEDIA_ACCESS' ? 'bg-purple-950/60 text-purple-300 border border-purple-500/10' :
+                                item.type === 'SUSPICIOUS_REQUEST' ? 'bg-amber-950/60 text-amber-500 border border-amber-500/10' :
+                                'bg-red-950/60 text-red-400 border border-red-500/10'
+                              }`}>
+                                {item.type}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 max-w-[120px] truncate text-white uppercase font-bold">{item.productTitle || item.productId}</td>
+                            <td className="py-3.5 px-4 space-y-0.5 max-w-[180px]">
+                              <div className="font-mono text-[10px] text-zinc-400">{item.ipAddress}</div>
+                              <div className="text-[9px] text-zinc-600 truncate" title={item.userAgent}>{item.userAgent}</div>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-[10px] text-zinc-500">{item.orderId || 'Direct Query'}</td>
+                            <td className="py-3.5 px-4 text-right">
+                              <span className={`px-2.5 py-0.5 rounded font-mono text-[9px] font-bold uppercase ${
+                                item.status === 'ALLOWED' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/20' : 'bg-red-950 text-red-400 border border-red-500/20'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== FLASH SALES CAMPAIGNS CREATOR ==================== */}
+        {activeTab === 'flash_sales' && (
+          <div className="space-y-6 animate-fadeIn text-left">
+            <div className="border-b border-zinc-900 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest block">URGENCY CAMPAIGNS CREATOR</span>
+                <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight mt-1">FLASH SALES DASHBOARD</h2>
+                <p className="text-xs text-zinc-500">Create, preview, activate and schedule secure flash discount events that validate seamlessly at checkout.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setFlashSaleTitle('');
+                  setFlashSaleMessage('');
+                  setFlashSaleDiscountAmount(25);
+                  setFlashSaleBannerText('');
+                  setFlashSaleCTAText('');
+                  setFlashSaleEligibleProducts(['ALL']);
+                  setFlashSalePreviewMode(false);
+                  setActiveFlashSaleComposer(true);
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-purple-950 flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Flash Sale</span>
+              </button>
+            </div>
+
+            {/* Configured Campaigns Table */}
+            <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider font-brand">CAMPAIGN LOGS</h3>
+              {serverFlashSales.length === 0 ? (
+                <div className="py-12 text-center text-zinc-500 text-xs">
+                  No announcements yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-zinc-400 font-sans border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-900 text-zinc-500 font-mono text-[10px] uppercase tracking-wider">
+                        <th className="py-3 px-4 font-bold">Campaign Name</th>
+                        <th className="py-3 px-4 font-bold">Announcement</th>
+                        <th className="py-3 px-4 font-bold">Discount</th>
+                        <th className="py-3 px-4 font-bold">Active Dates</th>
+                        <th className="py-3 px-4 font-bold">Eligible Items</th>
+                        <th className="py-3 px-4 font-bold">Status</th>
+                        <th className="py-3 px-4 font-bold text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-900/40">
+                      {serverFlashSales.map((item) => (
+                        <tr key={item.id} className="hover:bg-zinc-900/20 transition-colors">
+                          <td className="py-3.5 px-4 font-bold text-white uppercase tracking-wide">{item.title}</td>
+                          <td className="py-3.5 px-4 max-w-xs truncate">{item.announcement}</td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-purple-300">
+                            {item.discountType === 'percentage' ? `${item.discountAmount}% OFF` : `$${item.discountAmount} OFF`}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[10px] space-y-0.5 text-zinc-500">
+                            <div>Start: {item.startDate?.replace('T', ' ')}</div>
+                            <div>End: {item.endDate?.replace('T', ' ')}</div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 font-mono text-[10px]">
+                              {item.eligibleProducts?.includes('ALL') ? 'All Catalog' : `${item.eligibleProducts?.length} selected`}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2 py-0.5 rounded font-mono text-[9px] font-bold uppercase ${
+                              item.status === 'active' ? 'bg-emerald-950 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-2 shrink-0">
+                            <button
+                              onClick={async () => {
+                                const toggled = { ...item, status: item.status === 'active' ? 'inactive' : 'active' };
+                                const res = await fetch('/api/flash-sales', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify(toggled)
+                                });
+                                if (res.ok) {
+                                  const refetched = await fetch('/api/flash-sales').then(r => r.json());
+                                  setServerFlashSales(refetched);
+                                  triggerSaveState('Campaign status updated!');
+                                }
+                              }}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded transition-colors"
+                            >
+                              Toggle
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const res = await fetch(`/api/flash-sales/${item.id}`, { method: 'DELETE' });
+                                if (res.ok) {
+                                  setServerFlashSales((prev) => prev.filter(s => s.id !== item.id));
+                                  triggerSaveState('Campaign deleted.');
+                                }
+                              }}
+                              className="px-2.5 py-1 text-[10px] font-bold bg-red-950/60 hover:bg-red-900/60 text-red-300 rounded transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Flash Sale Composer Modal */}
+            {activeFlashSaleComposer && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto">
+                <div className="w-full max-w-5xl bg-zinc-950 border border-zinc-900 rounded-3xl p-6 sm:p-8 shadow-2xl relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-start animate-fadeIn max-h-[90vh] overflow-y-auto">
+                  <button
+                    onClick={() => setActiveFlashSaleComposer(false)}
+                    className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors absolute top-4 right-4"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+
+                  {/* Form Side */}
+                  <div className="space-y-4 text-left">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">LAUNCH CONTROL</span>
+                      <h3 className="text-xl font-brand font-black text-white uppercase tracking-tight">CAMPAIGN CONSTRUCTOR</h3>
+                    </div>
+
+                    {!flashSalePreview ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">Campaign Title *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. VIP BLACK FRIDAY"
+                              value={flashSaleTitle}
+                              onChange={(e) => setFlashSaleTitle(e.target.value.toUpperCase())}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 focus:border-purple-500/50 rounded-xl text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">Status</label>
+                            <select
+                              value={flashSaleStatus}
+                              onChange={(e: any) => setFlashSaleStatus(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                            >
+                              <option value="active">Active & Visible</option>
+                              <option value="inactive">Inactive / Draft</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-zinc-400 block mb-1">Announcement Tagline Message *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Get 50% discount on all premium lease stems this weekend only."
+                            value={flashSaleMessage}
+                            onChange={(e) => setFlashSaleMessage(e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">Discount Type</label>
+                            <select
+                              value={flashSaleDiscType}
+                              onChange={(e: any) => setFlashSaleDiscountType(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                            >
+                              <option value="percentage">Percentage Discount (%)</option>
+                              <option value="fixed">Fixed Currency Amount ($)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">Discount Value *</label>
+                            <input
+                              type="number"
+                              required
+                              min={1}
+                              value={flashSaleDiscAmount}
+                              onChange={(e) => setFlashSaleDiscountAmount(Number(e.target.value))}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">Start Date & Time *</label>
+                            <input
+                              type="datetime-local"
+                              required
+                              value={flashSaleStart}
+                              onChange={(e) => setFlashSaleStartDate(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">End Date & Time *</label>
+                            <input
+                              type="datetime-local"
+                              required
+                              value={flashSaleEnd}
+                              onChange={(e) => setFlashSaleEndDate(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <label className="flex items-center gap-2 p-2 hover:bg-zinc-900 rounded-xl cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={flashSaleIncludeBeats}
+                              onChange={(e) => setFlashSaleIncludeBeats(e.target.checked)}
+                              className="accent-purple-500"
+                            />
+                            <span className="text-xs font-bold text-zinc-400">Include Beats</span>
+                          </label>
+                          <label className="flex items-center gap-2 p-2 hover:bg-zinc-900 rounded-xl cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={flashSaleIncludePacks}
+                              onChange={(e) => setFlashSaleIncludePacks(e.target.checked)}
+                              className="accent-purple-500"
+                            />
+                            <span className="text-xs font-bold text-zinc-400">Include Beat Packs</span>
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">Banner Display Text</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. ULTRA HOLIDAY DROP DISCOUNTS LIVE"
+                              value={flashSaleBanner}
+                              onChange={(e) => setFlashSaleBannerText(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">CTA Button Text</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. SHOP VAULT"
+                              value={flashSaleCTA}
+                              onChange={(e) => setFlashSaleCTAText(e.target.value)}
+                              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (!flashSaleTitle.trim() || !flashSaleMessage.trim() || !flashSaleStart || !flashSaleEnd) {
+                              alert('Please complete the required constructor fields.');
+                              return;
+                            }
+                            setFlashSalePreviewMode(true);
+                          }}
+                          className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <span>Preview Flash Sale</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="p-4 bg-purple-950/20 border border-purple-500/20 rounded-2xl text-xs space-y-2 leading-relaxed">
+                          <h4 className="font-bold text-purple-300">Campaign Schedule Notice</h4>
+                          <p className="text-zinc-400 text-[11px]">
+                            Dispatches this campaign into the storefront database. When the current time falls inside the campaign dates, the luxury banner and popup appear on the storefront.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => setFlashSalePreviewMode(false)}
+                            className="py-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs uppercase rounded-xl transition-all cursor-pointer text-center"
+                          >
+                            ← Back
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const newCampaign = {
+                                  id: `sale-${Date.now()}`,
+                                  title: flashSaleTitle,
+                                  announcement: flashSaleMessage,
+                                  discountType: flashSaleDiscType,
+                                  discountAmount: flashSaleDiscAmount,
+                                  startDate: flashSaleStart,
+                                  endDate: flashSaleEnd,
+                                  eligibleProducts: flashSaleEligibleProducts,
+                                  includeBeatPacks: flashSaleIncludePacks,
+                                  includeSingleBeats: flashSaleIncludeBeats,
+                                  bannerText: flashSaleBanner || `${flashSaleTitle} DROPS NOW`,
+                                  ctaText: flashSaleCTA || 'SHOP SALE',
+                                  status: flashSaleStatus
+                                };
+
+                                const res = await fetch('/api/flash-sales', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify(newCampaign)
+                                });
+
+                                if (res.ok) {
+                                  const refetched = await fetch('/api/flash-sales').then(r => r.json());
+                                  setServerFlashSales(refetched);
+                                  setActiveFlashSaleComposer(false);
+                                  triggerSaveState('Campaign deployed successfully!');
+                                }
+                              } catch (e) {
+                                alert('Failed to deploy campaign.');
+                              }
+                            }}
+                            className="py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase rounded-xl transition-all cursor-pointer text-center"
+                          >
+                            Confirm & Deploy
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Campaign Preview Mockup */}
+                  <div className="space-y-4 flex flex-col items-center">
+                    <h4 className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest text-left w-full">STOREFRONT ACTIVE BANNER PREVIEW</h4>
+                    
+                    <div className="w-full p-4 bg-zinc-900 border border-purple-500/30 rounded-2xl text-left space-y-3 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-purple-600/10 rounded-full blur-xl pointer-events-none" />
+                      
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="space-y-1">
+                          <span className="px-2.5 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[9px] font-bold border border-purple-500/20 uppercase tracking-widest">
+                            {flashSaleBanner || 'LIMITED TIME FLASH SALE'}
+                          </span>
+                          <h4 className="text-md font-brand font-black text-white uppercase tracking-tight">{flashSaleTitle || 'VIP BLACK FRIDAY'}</h4>
+                          <p className="text-[11px] text-zinc-400 leading-normal">{flashSaleMessage || 'Secure platinum lease stems at huge discounts this weekend.'}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-mono font-black text-purple-300 uppercase block">
+                            {flashSaleDiscType === 'percentage' ? `${flashSaleDiscAmount}% OFF` : `$${flashSaleDiscAmount} OFF`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2.5 border-t border-zinc-800/80 gap-3">
+                        <div className="space-y-0.5 shrink-0">
+                          <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider block">CAMPAIGN ENDS IN:</span>
+                          <div className="text-xs font-mono font-black text-white tracking-widest uppercase">02h : 41m : 15s</div>
+                        </div>
+                        <button className="px-4 py-2 bg-purple-600 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-lg shadow-md shrink-0">
+                          {flashSaleCTA || 'SHOP SALE'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================== PRIVATE UGC AD CREATOR FOR PRODUCERS ==================== */}
+        {activeTab === 'ugc_ad_creator' && (
+          <UgcCreator
+            beats={beats}
+            beatPacks={beatPacks}
+            currencySymbol={currencySymbol}
+          />
+        )}
+
         {/* ==================== 15. SETTINGS: STORE CONFIGURATION ==================== */}
         {activeTab === 'settings' && (
           <div className="space-y-6 animate-fadeIn">
@@ -1548,33 +2727,449 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
 
+        {/* ==================== GMAIL WORKSPACE INTEGRATION SETTINGS ==================== */}
+        {activeTab === 'email_settings' && (
+          <div className="space-y-6 animate-fadeIn text-white">
+            <div className="border-b border-zinc-900 pb-4">
+              <span className="text-[10px] font-mono font-bold text-purple-400 uppercase tracking-widest block">GOOGLE WORKSPACE INTEGRATION</span>
+              <h2 className="text-2xl font-brand font-black text-white uppercase tracking-tight">EMAIL NOTIFICATIONS & SMTP</h2>
+              <p className="text-xs text-zinc-500">Configure automated notification schedules and customize client email receipts.</p>
+            </div>
+
+            {/* Email Status Indicator Banner */}
+            {emailStatusMsg && (
+              <div className={`p-4 border rounded-2xl flex items-center justify-between text-xs animate-fadeIn ${
+                emailStatusMsg.type === 'success' ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400' :
+                emailStatusMsg.type === 'error' ? 'bg-red-950/40 border-red-500/30 text-red-400' :
+                'bg-purple-950/40 border-purple-500/30 text-purple-300'
+              }`}>
+                <div className="flex items-center gap-3">
+                  {emailStatusMsg.type === 'loading' && (
+                    <div className="w-4 h-4 border-2 border-purple-500/20 border-t-purple-500 rounded-full animate-spin shrink-0" />
+                  )}
+                  <p className="font-semibold">{emailStatusMsg.text}</p>
+                </div>
+                <button onClick={() => setEmailStatusMsg(null)} className="text-zinc-500 hover:text-white shrink-0 ml-4 font-mono font-bold">dismiss</button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Left Side: Status and Connection Control */}
+              <div className="lg:col-span-1 space-y-6">
+                
+                {/* Authorization Status Card */}
+                <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-5 relative overflow-hidden shadow-2xl shadow-purple-950/10">
+                  <div className="absolute -top-10 -right-10 w-24 h-24 bg-gradient-to-br from-purple-600/10 to-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+                  
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-extrabold text-sm uppercase tracking-wider text-white">Gmail authorization</h3>
+                    <span className={`px-2.5 py-0.5 rounded-full font-mono text-[9px] font-bold border ${
+                      gmailConnected 
+                        ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-400' 
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                    }`}>
+                      {gmailConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-4 bg-zinc-900/60 border border-zinc-900 rounded-2xl space-y-2.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-zinc-500">Sender Account:</span>
+                        <span className="font-mono font-bold text-white text-[11px] truncate max-w-[150px]">{gmailEmail}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-zinc-500">Workspace Auth:</span>
+                        <span className="font-mono font-bold text-[11px]">{gmailConnected ? 'Active Token cached' : 'None'}</span>
+                      </div>
+                    </div>
+
+                    {/* Google Workspace authorization buttons */}
+                    {!gmailConnected ? (
+                      <button
+                        onClick={handleGoogleGmailLogin}
+                        className="w-full py-3 bg-white hover:bg-zinc-100 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2.5 cursor-pointer border-0"
+                      >
+                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                        </svg>
+                        <span>Authorize with Gmail</span>
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          onClick={handleGoogleGmailLogin}
+                          className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <span>Reconnect Account</span>
+                        </button>
+                        <button
+                          onClick={handleLogoutGmail}
+                          className="w-full py-2.5 bg-red-950/20 hover:bg-red-900/30 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center"
+                        >
+                          Revoke Permission
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Connection Test Form */}
+                <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+                  <h3 className="font-extrabold text-sm uppercase tracking-wider text-white">Gmail Connection Test</h3>
+                  <p className="text-[11px] text-zinc-500 leading-normal">Dispatch a simple, real-time diagnostic verification email to any inbox to confirm permission validity.</p>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Diagnostic Recipient</label>
+                      <input
+                        type="email"
+                        placeholder="e.g. artist@domain.com"
+                        value={testEmailAddress}
+                        onChange={(e) => setTestEmailAddress(e.target.value)}
+                        className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl text-xs text-white focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleSendTestEmail}
+                      disabled={!gmailConnected}
+                      className={`w-full py-2.5 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 border-0 ${
+                        gmailConnected
+                          ? 'bg-purple-600 hover:bg-purple-500 text-white cursor-pointer'
+                          : 'bg-zinc-900 text-zinc-600 cursor-not-allowed border border-zinc-850'
+                      }`}
+                    >
+                      <span>Send Diagnostic Mail</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Right Side: Template Editor Workspace */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-5">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-zinc-900">
+                    <h3 className="font-extrabold text-sm uppercase tracking-wider text-white">Automation Template Constructor</h3>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => setActiveTemplateTab('welcome')}
+                        className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase transition-all ${
+                          activeTemplateTab === 'welcome' ? 'bg-purple-950 text-purple-300 border border-purple-500/30' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Artist welcome
+                      </button>
+                      <button
+                        onClick={() => setActiveTemplateTab('receipt')}
+                        className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase transition-all ${
+                          activeTemplateTab === 'receipt' ? 'bg-purple-950 text-purple-300 border border-purple-500/30' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Receipt/Stems
+                      </button>
+                      <button
+                        onClick={() => setActiveTemplateTab('notification')}
+                        className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase transition-all ${
+                          activeTemplateTab === 'notification' ? 'bg-purple-950 text-purple-300 border border-purple-500/30' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Notification
+                      </button>
+                      <button
+                        onClick={() => setActiveTemplateTab('adminAlert')}
+                        className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase transition-all ${
+                          activeTemplateTab === 'adminAlert' ? 'bg-purple-950 text-purple-300 border border-purple-500/30' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Admin Alerts
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Subject Line */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Email Subject line</label>
+                      <input
+                        type="text"
+                        placeholder="Template Subject"
+                        value={templateSubject}
+                        onChange={(e) => setTemplateSubject(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl text-xs text-white focus:outline-none font-bold"
+                      />
+                    </div>
+
+                    {/* Editor Body */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Email Body Message (HTML Supported)</label>
+                        <span className="text-[9px] font-mono text-purple-400 font-bold uppercase">Dynamic Placeholders enabled</span>
+                      </div>
+                      <textarea
+                        rows={12}
+                        placeholder="Write dynamic content here..."
+                        value={templateBody}
+                        onChange={(e) => setTemplateBody(e.target.value)}
+                        className="w-full px-3.5 py-3 bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-2xl text-xs text-white focus:outline-none font-mono leading-relaxed resize-none"
+                      />
+                    </div>
+
+                    {/* Variables Tip list */}
+                    <div className="p-4 bg-zinc-900/60 border border-zinc-900 rounded-2xl space-y-2">
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Available Placeholders Context</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-[10px] text-zinc-400">
+                        {activeTemplateTab === 'welcome' && (
+                          <div className="space-y-1">
+                            <span className="text-purple-300 font-bold block">{`{artist_name}`}</span>
+                            <span className="text-[9px] text-zinc-500">Artist Name</span>
+                          </div>
+                        )}
+                        {activeTemplateTab === 'receipt' && (
+                          <>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{artist_name}`}</span>
+                              <span className="text-[9px] text-zinc-500">Artist Name</span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{product_title}`}</span>
+                              <span className="text-[9px] text-zinc-500">Product/Beat title</span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{download_url}`}</span>
+                              <span className="text-[9px] text-zinc-500">Secure Download Link</span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{license_terms}`}</span>
+                              <span className="text-[9px] text-zinc-500">License detail text</span>
+                            </div>
+                          </>
+                        )}
+                        {activeTemplateTab === 'notification' && (
+                          <div className="space-y-1">
+                            <span className="text-purple-300 font-bold block">{`{artist_name}`}</span>
+                            <span className="text-[9px] text-zinc-500">Artist Name</span>
+                          </div>
+                        )}
+                        {activeTemplateTab === 'adminAlert' && (
+                          <>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{event_type}`}</span>
+                              <span className="text-[9px] text-zinc-500">Type of notice</span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{event_details}`}</span>
+                              <span className="text-[9px] text-zinc-500">Log payload details</span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-purple-300 font-bold block">{`{timestamp}`}</span>
+                              <span className="text-[9px] text-zinc-500">Date/Time stamp</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <button
+                      onClick={handleSaveTemplates}
+                      className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer shadow-lg shadow-purple-950/20"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>Save Template Parameters</span>
+                    </button>
+
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
         {/* ==================== 16. SETTINGS: PAYMENT INTEGRATIONS ==================== */}
         {activeTab === 'integrations' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="border-b border-zinc-900 pb-4">
-              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">DIRECT ESCROW PAYMENT GATEWAYS</h2>
-              <p className="text-xs text-zinc-500">Connect Stripe and PayPal account credentials for automated payouts.</p>
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">PAYMENTS & MERCHANT SETTINGS</h2>
+              <p className="text-xs text-zinc-500">Connect your payment accounts to receive direct payouts from CASHMERE KID$ customers.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+              {/* Internet Archive Storage Card */}
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-extrabold text-sm text-white">Stripe Express Payouts</h4>
-                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 font-bold">CONNECTED</span>
+                  <h4 className="font-extrabold text-sm text-white">Persistent Media Storage</h4>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">CONNECTED</span>
                 </div>
-                <p className="text-xs text-zinc-400">Accept Credit Cards, Apple Pay, and Google Pay with zero extra platform fees.</p>
+                <div className="space-y-1.5 text-xs text-zinc-400">
+                  <div className="flex justify-between">
+                    <span>Storage:</span>
+                    <span className="font-mono text-white font-bold">Connected</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Provider:</span>
+                    <span className="font-mono text-purple-300 font-bold">Internet Archive</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Status:</span>
+                    <span className="font-mono text-emerald-400 font-bold">Ready</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Master Item:</span>
+                    <span className="font-mono text-zinc-400 truncate max-w-[180px]">cashmerekids_vault_master_item</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
+                  All master MP3 and M4A beat audio files are securely stored on Internet Archive infrastructure with zero producer credential configuration required.
+                </p>
               </div>
 
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-3">
+              {/* Stripe Card */}
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-extrabold text-sm text-white">PayPal Business API</h4>
-                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 font-bold">CONNECTED</span>
+                  <h4 className="font-extrabold text-sm text-white">Stripe Express Payouts</h4>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">CONNECTED</span>
                 </div>
-                <p className="text-xs text-zinc-400">Instant client payouts and buyer protection for international beat licensing.</p>
+                <p className="text-xs text-zinc-400">Accept Credit Cards, Apple Pay, and Google Pay with zero platform commissions.</p>
+              </div>
+
+              {/* PayPal Card */}
+              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-extrabold text-sm text-white">PayPal Account</h4>
+                  {paypalStatus === 'connected' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">CONNECTED</span>
+                  )}
+                  {paypalStatus === 'connecting' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-amber-950 text-amber-300 border border-amber-500/30 font-bold animate-pulse">CONNECTING...</span>
+                  )}
+                  {paypalStatus === 'not_connected' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-850 text-zinc-400 font-bold">NOT CONNECTED</span>
+                  )}
+                  {paypalStatus === 'failed' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-red-950 text-red-300 border border-red-500/30 font-bold">FAILED</span>
+                  )}
+                </div>
+
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Connect your existing Personal PayPal account to receive payments from CASHMERE KID$ customers. No manual API credentials required.
+                </p>
+
+                {paypalStatus === 'not_connected' && (
+                  <button
+                    onClick={handleConnectPayPal}
+                    className="w-full py-3 bg-[#0070ba] hover:bg-[#005ea6] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Connect PayPal</span>
+                  </button>
+                )}
+
+                {paypalStatus === 'connecting' && (
+                  <button
+                    disabled
+                    className="w-full py-3 bg-zinc-850 text-zinc-400 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4 animate-spin text-yellow-400" />
+                    <span>Connecting to PayPal…</span>
+                  </button>
+                )}
+
+                {paypalStatus === 'connected' && (
+                  <div className="space-y-3 pt-2">
+                    <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1 text-xs">
+                      <div className="text-[10px] text-zinc-500 font-mono uppercase font-bold">Verified PayPal Account</div>
+                      <div className="font-bold text-white truncate">{paypalInfo.email}</div>
+                      <div className="text-[10px] text-zinc-400 font-mono">Merchant ID: {paypalInfo.merchantId}</div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowManageModal(true)}
+                        className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                      >
+                        Manage Connection
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPaypalStatus('not_connected');
+                          triggerSaveState('PayPal Disconnected');
+                        }}
+                        className="py-2.5 px-4 bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {paypalStatus === 'failed' && (
+                  <div className="space-y-3 pt-2">
+                    <p className="text-xs text-red-400 bg-red-950/30 border border-red-500/20 p-2.5 rounded-xl">
+                      PayPal couldn’t be connected. PayPal connection was not completed.
+                    </p>
+                    <button
+                      onClick={handleConnectPayPal}
+                      className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
+
+      {/* Manage PayPal Connection Modal */}
+      {showManageModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+            <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+              <h3 className="font-brand font-black text-sm text-white uppercase tracking-wider">MANAGE PAYPAL CONNECTION</h3>
+              <button onClick={() => setShowManageModal(false)} className="text-zinc-500 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-zinc-300">
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1">
+                <div className="text-[10px] text-zinc-500 font-mono uppercase font-bold">Authorized Account</div>
+                <div className="font-bold text-white">{paypalInfo.email}</div>
+                <div className="text-[10px] text-zinc-400 font-mono">Merchant ID: {paypalInfo.merchantId}</div>
+                <div className="text-[10px] text-emerald-400 font-semibold pt-1">Status: Active & Direct Escrow Enabled</div>
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                Your CASHMERE KID$ store is securely linked to PayPal via official partner onboarding. All customer license fees deposit directly into your merchant balance with zero manual API keys.
+              </p>
+            </div>
+
+            <div className="pt-2 flex gap-3">
+              <button
+                onClick={() => setShowManageModal(false)}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setPaypalStatus('not_connected');
+                  setShowManageModal(false);
+                  triggerSaveState('PayPal Disconnected');
+                }}
+                className="py-2.5 px-4 bg-zinc-900 hover:bg-red-950/40 text-red-400 font-bold text-xs rounded-xl border border-zinc-800 cursor-pointer"
+              >
+                Disconnect PayPal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* ==================== 17. SETTINGS: LEGAL CONTRACTS ==================== */}
         {activeTab === 'legal_services' && (

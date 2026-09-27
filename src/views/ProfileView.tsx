@@ -65,6 +65,7 @@ interface ProfileViewProps {
   promotions?: Promotion[];
   onAddToCart?: (beat: Beat, licenseKey: LicenseTierKey) => void;
   onAddMerchToCart?: (item: any) => void;
+  onNavigateToHallOfFame?: () => void;
 }
 
 interface GuestbookPost {
@@ -103,6 +104,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   promotions = [],
   onAddToCart,
   onAddMerchToCart,
+  onNavigateToHallOfFame,
 }) => {
   // Theme Color State
   const [themeColor, setThemeColor] = useState<'purple' | 'emerald' | 'amber' | 'cyber'>('purple');
@@ -460,6 +462,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               >
                 <QrCode className="w-4 h-4" />
               </button>
+
+              {onNavigateToHallOfFame && (
+                <button
+                  onClick={onNavigateToHallOfFame}
+                  className="px-4 py-2.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-200 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="Record Plaque Hall of Fame"
+                >
+                  <Award className="w-4 h-4 text-purple-400" />
+                  <span>Record Plaque Hall of Fame</span>
+                </button>
+              )}
             </div>
           </div>
 

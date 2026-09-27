@@ -64,30 +64,30 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
   const [packTitle, setPackTitle] = useState<string>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packTitle || 'CASHMERE VAULT EDITION'; } catch { return 'CASHMERE VAULT EDITION'; }
+      try { return JSON.parse(saved).packTitle || ''; } catch { return ''; }
     }
-    return 'CASHMERE VAULT EDITION';
+    return '';
   });
   const [packDescription, setPackDescription] = useState<string>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packDescription || 'Ultra premium multi-audio stem package including uncompressed audio vectors.'; } catch { return 'Ultra premium multi-audio stem package including uncompressed audio vectors.'; }
+      try { return JSON.parse(saved).packDescription || ''; } catch { return ''; }
     }
-    return 'Ultra premium multi-audio stem package including uncompressed audio vectors.';
+    return '';
   });
   const [packPrice, setPackPrice] = useState<number>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packPrice || 59.99; } catch { return 59.99; }
+      try { return JSON.parse(saved).packPrice || 49.99; } catch { return 49.99; }
     }
-    return 59.99;
+    return 49.99;
   });
   const [packArtworkUrl, setPackArtworkUrl] = useState<string>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packArtworkUrl || '/src/assets/images/cashmere_cover_vault_1790419848357.jpg'; } catch { return '/src/assets/images/cashmere_cover_vault_1790419848357.jpg'; }
+      try { return JSON.parse(saved).packArtworkUrl || ''; } catch { return ''; }
     }
-    return '/src/assets/images/cashmere_cover_vault_1790419848357.jpg';
+    return '';
   });
   const [packFreeDownload, setPackFreeDownload] = useState<boolean>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
@@ -106,23 +106,23 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
   const [packZipFileName, setPackZipFileName] = useState<string>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packZipFileName || 'voodoo_pack_stems_master.zip'; } catch { return 'voodoo_pack_stems_master.zip'; }
+      try { return JSON.parse(saved).packZipFileName || ''; } catch { return ''; }
     }
-    return 'voodoo_pack_stems_master.zip';
+    return '';
   });
   const [packZipFileSize, setPackZipFileSize] = useState<string>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packZipFileSize || '145.20 MB'; } catch { return '145.20 MB'; }
+      try { return JSON.parse(saved).packZipFileSize || ''; } catch { return ''; }
     }
-    return '145.20 MB';
+    return '';
   });
   const [packZipUploaded, setPackZipUploaded] = useState<boolean>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return !!JSON.parse(saved).packZipUploaded; } catch { return true; }
+      try { return !!JSON.parse(saved).packZipUploaded; } catch { return false; }
     }
-    return true;
+    return false;
   });
   const [packIsUploadingZip, setPackIsUploadingZip] = useState<boolean>(false);
   const [packZipProgress, setPackZipProgress] = useState<number>(0);
@@ -132,9 +132,9 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
   const [packDetectedFiles, setPackDetectedFiles] = useState<string[]>(() => {
     const saved = localStorage.getItem('voodoo_pack_uploader_draft');
     if (saved) {
-      try { return JSON.parse(saved).packDetectedFiles || ['01_OBSIDIAN_RIFF_142BPM_Fmin.mp3', '02_VALENTINO_VELVET_142BPM_Fmin.mp3', '03_TOKYO_NIGHTHAWK_140BPM_Cmin.mp3', 'stems_multitrack_raw_master.zip']; } catch { return ['01_OBSIDIAN_RIFF_142BPM_Fmin.mp3', '02_VALENTINO_VELVET_142BPM_Fmin.mp3', '03_TOKYO_NIGHTHAWK_140BPM_Cmin.mp3', 'stems_multitrack_raw_master.zip']; }
+      try { return JSON.parse(saved).packDetectedFiles || []; } catch { return []; }
     }
-    return ['01_OBSIDIAN_RIFF_142BPM_Fmin.mp3', '02_VALENTINO_VELVET_142BPM_Fmin.mp3', '03_TOKYO_NIGHTHAWK_140BPM_Cmin.mp3', 'stems_multitrack_raw_master.zip'];
+    return [];
   });
 
   useEffect(() => {
@@ -245,32 +245,51 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
     }, 150);
   };
 
-  const handlePublishBeatPackLocal = () => {
-    const finalPack: BeatPack = {
-      id: `pack-${Date.now()}`,
-      name: packTitle.trim() || 'UNTITLED BEAT PACK',
-      description: packDescription,
-      price: packPrice,
-      artworkUrl: packArtworkUrl,
-      beatIds: ['beat-1', 'beat-2'], // default references
-      freeDownload: packFreeDownload,
-      published: packVisibility === 'published',
-      createdDate: new Date().toISOString().split('T')[0],
-    };
+  const handlePublishBeatPackLocal = async () => {
+    try {
+      const res = await fetch('/api/storage/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: packZipFileName || 'stems_multitrack_master.zip',
+          mediaType: 'application/zip',
+          fileSize: packZipFileSize || '145.20 MB'
+        })
+      });
+      const storageResult = await res.json();
+      if (!res.ok || !storageResult.success) {
+        throw new Error(storageResult.error || 'Internet Archive ZIP upload failed');
+      }
 
-    if (onPublishBeatPack) {
-      onPublishBeatPack(finalPack);
-    } else {
-      // Direct localStorage push fallback if no callback
-      const existing = localStorage.getItem('voodoo_beat_packs');
-      const list = existing ? JSON.parse(existing) : [];
-      localStorage.setItem('voodoo_beat_packs', JSON.stringify([finalPack, ...list]));
+      const finalPack: BeatPack & { storageProvider?: string; iaUrl?: string; iaItemIdentifier?: string } = {
+        id: `pack-${Date.now()}`,
+        name: packTitle.trim() || 'UNTITLED BEAT PACK',
+        description: packDescription,
+        price: packPrice,
+        artworkUrl: packArtworkUrl,
+        beatIds: ['beat-1', 'beat-2'], // default references
+        freeDownload: packFreeDownload,
+        published: packVisibility === 'published',
+        createdDate: new Date().toISOString().split('T')[0],
+        storageProvider: storageResult.storageProvider,
+        iaItemIdentifier: storageResult.iaItemIdentifier,
+        iaUrl: storageResult.iaUrl,
+      };
+
+      if (onPublishBeatPack) {
+        onPublishBeatPack(finalPack as BeatPack);
+      } else {
+        const existing = localStorage.getItem('voodoo_beat_packs');
+        const list = existing ? JSON.parse(existing) : [];
+        localStorage.setItem('voodoo_beat_packs', JSON.stringify([finalPack, ...list]));
+      }
+
+      localStorage.removeItem('voodoo_pack_uploader_draft');
+      onNavigateToBrowse();
+    } catch (err: any) {
+      console.error('Beat Pack upload error:', err);
+      alert('Internet Archive storage upload failed for Beat Pack: ' + (err.message || 'Unknown error'));
     }
-
-    localStorage.removeItem('voodoo_pack_uploader_draft');
-    
-    // Direct Browse view exit
-    onNavigateToBrowse();
   };
 
   const getPageClass = (pageType: 'single' | 'pack') => {
@@ -386,9 +405,7 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
   const [trackVisibility, setTrackVisibility] = useState<'public' | 'unlisted' | 'private'>('public');
 
   // New Collaboration & Splits
-  const [collaborators, setCollaborators] = useState<Array<{ name: string; role: string; salesSplit: number; contentIdSplit: number }>>([
-    { name: 'BOOMIN JR', role: 'Co-Producer', salesSplit: 50, contentIdSplit: 50 }
-  ]);
+  const [collaborators, setCollaborators] = useState<Array<{ name: string; role: string; salesSplit: number; contentIdSplit: number }>>([]);
   const [collabNameInput, setCollabNameInput] = useState<string>('');
   const [collabRoleInput, setCollabRoleInput] = useState<string>('Co-Producer');
   const [collabSalesSplitInput, setCollabSalesSplitInput] = useState<number>(50);
@@ -396,7 +413,7 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
   const [defaultContractTemplate, setDefaultContractTemplate] = useState<string>('50/50_standard');
 
   // New Monetization & Content ID
-  const [contentIdRegistered, setContentIdRegistered] = useState<boolean>(true);
+  const [contentIdRegistered, setContentIdRegistered] = useState<boolean>(false);
   const [monetizePlatforms, setMonetizePlatforms] = useState({
     youtube: true,
     tiktok: true,
@@ -409,13 +426,13 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
   // New Preferences & Extra Fields
   const [studioPreferenceTemplate, setStudioPreferenceTemplate] = useState<string>('default_trap');
   const [voiceTagPreset, setVoiceTagPreset] = useState<string>('cashmere_signature');
-  const [analyticsId, setAnalyticsId] = useState<string>('UA-284901-44');
-  const [charityDonationPct, setCharityDonationPct] = useState<number>(5);
-  const [charityPartner, setCharityPartner] = useState<string>('MusiCares');
-  const [isrcCode, setIsrcCode] = useState<string>('US-C1K-26-17904');
-  const [publisherName, setPublisherName] = useState<string>('CASHMERE KIDS PUBLISHING');
-  const [socialEmbedUrl, setSocialEmbedUrl] = useState<string>('https://youtube.com/watch?v=M6fF8q-1S8o');
-  const [beatIdFingerprint, setBeatIdFingerprint] = useState<string>('REGISTERED_VECT_9013');
+  const [analyticsId, setAnalyticsId] = useState<string>('');
+  const [charityDonationPct, setCharityDonationPct] = useState<number>(0);
+  const [charityPartner, setCharityPartner] = useState<string>('');
+  const [isrcCode, setIsrcCode] = useState<string>('');
+  const [publisherName, setPublisherName] = useState<string>('');
+  const [socialEmbedUrl, setSocialEmbedUrl] = useState<string>('');
+  const [beatIdFingerprint, setBeatIdFingerprint] = useState<string>('');
 
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
@@ -671,6 +688,8 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
     setDetectedDraftPresent(false);
   };
 
+  const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
+
   // Simulate premium uploading and compiling engine
   const handleAudioFileSelection = (file: File) => {
     setAudioError('');
@@ -682,6 +701,7 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
       return;
     }
 
+    setSelectedAudioFile(file);
     setHasChanges(true);
     setFileName(file.name);
     setFileSize(`${(file.size / (1024 * 1024)).toFixed(2)} MB`);
@@ -766,44 +786,81 @@ export const UploaderView: React.FC<UploaderViewProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handlePublish = (publishStatus: 'published' | 'draft' | 'hidden') => {
-    const finalBeat: Beat = {
-      id: stableBeatId,
-      title: title.trim() || 'UNTITLED INSTRUMENTAL',
-      producerName: 'CASHMERE KID$',
-      bpm: bpm || 140,
-      key: key || 'C Minor',
-      duration: audioDuration,
-      durationSeconds: 174,
-      pricing: {
-        mp3Lease: mp3Price,
-        premiumLease: premiumPrice,
-        unlimited: unlimitedPrice,
-        exclusive: exclusivePrice,
-      },
-      freeDownload: allowFreeDownload,
-      freeDownloadType: freeDownloadType === 'email_required' ? 'email_required' : 'tagged',
-      genre: genre,
-      subGenres: ['Dark Trap', 'Runway Trap'],
-      moods: moods.split(',').map((m) => m.trim()).filter(Boolean),
-      tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-      artworkUrl: artworkUrl,
-      playCount: 0,
-      downloadCount: 0,
-      likeCount: 0,
-      featured: featured,
-      published: publishStatus === 'published',
-      createdDate: new Date().toISOString().split('T')[0],
-      updatedDate: new Date().toISOString().split('T')[0],
-      releaseDate: new Date().toISOString().split('T')[0],
-      description: description,
-      voiceTag: true,
-      isNew: true,
-    };
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
-    onPublishBeat(finalBeat);
-    localStorage.removeItem('voodoo_view_uploader_draft');
-    onNavigateToBrowse();
+  const handlePublish = async (publishStatus: 'published' | 'draft' | 'hidden') => {
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      const formData = new FormData();
+      if (selectedAudioFile) {
+        formData.append('audioFile', selectedAudioFile);
+      }
+      formData.append('fileName', fileName || 'voodoo_synth_master_320k.mp3');
+      formData.append('fileSize', fileSize || '6.85 MB');
+      formData.append('mediaType', 'audio/mpeg');
+
+      const res = await fetch('/api/storage/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const storageResult = await res.json();
+      if (!res.ok || !storageResult.success) {
+        throw new Error(storageResult.error || 'Internet Archive upload failed');
+      }
+
+      const finalBeat: Beat = {
+        id: stableBeatId,
+        title: title.trim() || 'UNTITLED INSTRUMENTAL',
+        producerName: 'CASHMERE KID$',
+        bpm: bpm || 140,
+        key: key || 'C Minor',
+        duration: audioDuration,
+        durationSeconds: 174,
+        pricing: {
+          mp3Lease: mp3Price,
+          premiumLease: premiumPrice,
+          unlimited: unlimitedPrice,
+          exclusive: exclusivePrice,
+        },
+        freeDownload: allowFreeDownload,
+        freeDownloadType: freeDownloadType === 'email_required' ? 'email_required' : 'tagged',
+        genre: genre,
+        subGenres: ['Dark Trap', 'Runway Trap'],
+        moods: moods.split(',').map((m) => m.trim()).filter(Boolean),
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        artworkUrl: artworkUrl,
+        playCount: 0,
+        downloadCount: 0,
+        likeCount: 0,
+        featured: featured,
+        published: publishStatus === 'published',
+        createdDate: new Date().toISOString().split('T')[0],
+        updatedDate: new Date().toISOString().split('T')[0],
+        releaseDate: new Date().toISOString().split('T')[0],
+        description: description,
+        voiceTag: true,
+        isNew: true,
+        // Internet Archive persistent storage & media streaming fields
+        storageProvider: storageResult.storageProvider,
+        iaItemIdentifier: storageResult.iaItemIdentifier,
+        iaUrl: storageResult.iaUrl,
+        audioUrl: storageResult.playbackUrl || storageResult.iaUrl,
+        fileSize: storageResult.fileSize,
+        checksum: storageResult.checksum,
+        uploadStatus: storageResult.uploadStatus,
+      };
+
+      onPublishBeat(finalBeat);
+      localStorage.removeItem('voodoo_view_uploader_draft');
+      onNavigateToBrowse();
+    } catch (err: any) {
+      console.error('Publishing upload error:', err);
+      setPublishError(err.message || 'Internet Archive storage upload failed. Beat draft preserved.');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const isDuplicateTitle = beats.some(

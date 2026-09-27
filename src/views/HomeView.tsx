@@ -39,6 +39,7 @@ import {
 import { Beat, Collection, ProducerProfile, BeatPack } from '../types';
 import { BeatCard } from '../components/BeatCard';
 import { EmptyState } from '../components/EmptyState';
+import { StorefrontPicker } from '../components/StorefrontPicker';
 
 interface HomeViewProps {
   beats: Beat[];
@@ -59,6 +60,7 @@ interface HomeViewProps {
   favoriteIds?: string[];
   onToggleFavorite?: (beat: Beat) => void;
   recentlyViewedBeats?: Beat[];
+  beatPacks?: BeatPack[];
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -80,6 +82,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   favoriteIds = [],
   onToggleFavorite,
   recentlyViewedBeats = [],
+  beatPacks = [],
 }) => {
   // Hero Video / Image and Mask States
   const [videoBgActive, setVideoBgActive] = useState<boolean>(true);
@@ -95,9 +98,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [newsletterEmail, setNewsletterEmail] = useState<string>('');
   const [newsletterSubscribed, setNewsletterSubscribed] = useState<boolean>(false);
 
-  // Section Order Swapping State (Modular Rows)
+  // Modular rows
   const [sectionOrder, setSectionOrder] = useState<string[]>([
     'featured',
+    'beat_picker',
     'latest',
     'vault',
     'soundkits',
@@ -109,20 +113,53 @@ export const HomeView: React.FC<HomeViewProps> = ({
     'brand',
   ]);
 
-  // Flash Sale Countdown Clock
-  const [timeLeft, setTimeLeft] = useState({ hours: 3, minutes: 42, seconds: 18 });
+  // Real Flash Sale state
+  const [activeCampaign, setActiveCampaign] = useState<any | null>(null);
+  const [campaignTimeLeft, setCampaignTimeLeft] = useState<string>('');
+  const [dismissPopup, setDismissPopup] = useState<boolean>(false);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
-        if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
-        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return prev;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
+    fetch('/api/flash-sales')
+      .then(res => res.json())
+      .then((sales: any[]) => {
+        const now = new Date();
+        const active = sales.find(s => {
+          const start = new Date(s.startDate);
+          const end = new Date(s.endDate);
+          return s.status === 'active' && now >= start && now <= end;
+        });
+        if (active) {
+          setActiveCampaign(active);
+        }
+      })
+      .catch(err => console.error('[HomeView] Load flash sales error:', err));
   }, []);
+
+  // Update countdown clock dynamically based on endDate
+  useEffect(() => {
+    if (!activeCampaign) return;
+
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const end = new Date(activeCampaign.endDate).getTime();
+      const diff = end - now;
+
+      if (diff <= 0) {
+        setActiveCampaign(null);
+        setCampaignTimeLeft('');
+        clearInterval(timer);
+        return;
+      }
+
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setCampaignTimeLeft(`${h < 10 ? '0' : ''}${h}h : ${m < 10 ? '0' : ''}${m}m : ${s < 10 ? '0' : ''}${s}s`);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeCampaign]);
 
   // Filtered Beats from catalog
   const filteredBeats = beats.filter((beat) => {
@@ -156,6 +193,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const handleNewsletterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newsletterEmail.trim()) return;
+
+    // Dispatch automated welcome email
+    fetch('/api/gmail/send-automated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType: 'welcome',
+        recipient: newsletterEmail,
+        payload: {
+          artist_name: newsletterEmail.split('@')[0]
+        }
+      })
+    }).catch(err => console.error('Automated welcome email error:', err));
+
     setNewsletterSubscribed(true);
     setTimeout(() => setNewsletterSubscribed(false), 4000);
     setNewsletterEmail('');
@@ -180,110 +231,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   // Sound Kits Data
-  const sampleSoundKits = [
-    {
-      id: 'sk-1',
-      title: 'VOODOO VAULT Vol. 1 (808s & Drum Kit)',
-      price: 34.99,
-      coverUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-      inStock: 8,
-      isSoldOut: false,
-    },
-    {
-      id: 'sk-2',
-      title: 'ANALOG SYNTH PRESETS (Serum & Pigments)',
-      price: 24.99,
-      coverUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-      inStock: 15,
-      isSoldOut: false,
-    },
-    {
-      id: 'sk-3',
-      title: 'CASHMERE LOOPS & MELODIC STEMS',
-      price: 29.99,
-      coverUrl: '/src/assets/images/cashmere_hero_runway_1790419818906.jpg',
-      inStock: 0,
-      isSoldOut: true,
-    },
-  ];
+  const sampleSoundKits: any[] = [];
 
   // Freelance Services Data
-  const sampleServices = [
-    {
-      id: 'srv-1',
-      title: 'Vocal Mixing & Mastering',
-      price: 149.99,
-      turnaround: '24-48 Hours',
-      description: 'Analog outboard compression, de-essing, harmonic warmth, and peak loudness optimization for streaming platforms.',
-    },
-    {
-      id: 'srv-2',
-      title: 'Bespoke Custom Beat Production',
-      price: 499.99,
-      turnaround: '3-5 Days',
-      description: 'Exclusive 1-on-1 production session tailored to your vocal style. Unlocks full stems & multi-platinum arrangement.',
-    },
-    {
-      id: 'srv-3',
-      title: 'Executive Vocal Tuning & Alignment',
-      price: 99.99,
-      turnaround: '24 Hours',
-      description: 'Transparent Auto-Tune & Melodyne vocal pitch correction, micro-timing alignment, and doubled harmony layers.',
-    },
-  ];
+  const sampleServices: any[] = [];
 
   // Physical Merch Data
-  const sampleMerch = [
-    {
-      id: 'm-1',
-      title: 'CASHMERE KID$ Heavyweight Studio Hoodie',
-      price: 75.0,
-      artworkUrl: '/src/assets/images/cashmere_hero_runway_1790419818906.jpg',
-      stockText: '3 left in stock',
-      isSoldOut: false,
-    },
-    {
-      id: 'm-2',
-      title: 'VAULT ARCHIVE Vinyl Beat Tape (Limited Edition)',
-      price: 45.0,
-      artworkUrl: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg',
-      stockText: 'Sold Out',
-      isSoldOut: true,
-    },
-    {
-      id: 'm-3',
-      title: 'AURA Sound Architecture Embroidered Cap',
-      price: 35.0,
-      artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg',
-      stockText: '12 in stock',
-      isSoldOut: false,
-    },
-  ];
+  const sampleMerch: any[] = [];
 
   // Testimonials
-  const testimonials = [
-    {
-      id: 't-1',
-      quote: "Cashmere's 808 glides and analog synth pads completely elevated my track. Signed my first major sync deal 2 weeks after leasing!",
-      author: "Kaelen R.",
-      role: "RCA Recording Artist",
-      rating: 5,
-    },
-    {
-      id: 't-2',
-      quote: "Best producer vault on the web. Lossless M4A stems were pristine, fully untagged, and customer support was instant.",
-      author: "Marcus Vance",
-      role: "Executive A&R / Producer",
-      rating: 5,
-    },
-    {
-      id: 't-3',
-      quote: "The custom beat production process was seamless. The low-end sub frequencies hit with absurd clarity on club sound systems.",
-      author: "Jordan B.",
-      role: "Independent Recording Artist",
-      rating: 5,
-    },
-  ];
+  const testimonials: any[] = [];
 
   // Theme Accent Styling Mappings
   const getThemeAccentClass = () => {
@@ -315,6 +272,102 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="space-y-24 sm:space-y-32 pb-32 text-left animate-fadeIn relative font-sans max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
       
+      {/* ==================== ACTIVE FLASH SALE STOREFRONT BANNER ==================== */}
+      {activeCampaign && (
+        <div className="w-full bg-black border border-purple-500/30 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden shadow-2xl animate-fadeIn">
+          {/* Cyan/purple ambient light */}
+          <div className="absolute top-0 right-0 w-48 h-48 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+          <div className="space-y-2 relative z-10 text-left">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-500/20 text-purple-300 text-[10px] font-mono font-bold uppercase tracking-widest">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+              <span>{activeCampaign.bannerText || 'LIMITED TIME FLASH SALE LIVE'}</span>
+            </div>
+            <h3 className="text-xl sm:text-2xl font-brand font-black text-white uppercase tracking-tight">
+              {activeCampaign.title}
+            </h3>
+            <p className="text-xs text-zinc-300 max-w-xl font-medium leading-relaxed">
+              {activeCampaign.announcement} — Original items are discounted by{' '}
+              <span className="text-purple-300 font-extrabold font-mono">
+                {activeCampaign.discountType === 'percentage'
+                  ? `${activeCampaign.discountAmount}%`
+                  : `$${activeCampaign.discountAmount}`}
+              </span>{' '}
+              automatically at checkout.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-6 relative z-10 w-full md:w-auto shrink-0">
+            <div className="space-y-1 bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 rounded-2xl shrink-0 text-left min-w-[140px]">
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">CAMPAIGN ENDS IN:</span>
+              <div className="text-sm font-mono font-black text-white tracking-widest uppercase">
+                {campaignTimeLeft || '00h : 00m : 00s'}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const pickerSection = document.getElementById('beat-picker-anchor');
+                if (pickerSection) pickerSection.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-6 py-4 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-purple-950 transition-all text-center cursor-pointer"
+            >
+              {activeCampaign.ctaText || 'VIEW SALE'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ACTIVE FLASH SALE PORTABLE POPUP ==================== */}
+      {activeCampaign && !dismissPopup && (
+        <div className="fixed bottom-6 right-4 sm:right-6 z-50 max-w-sm w-full bg-zinc-950/95 border border-purple-500/30 backdrop-blur-xl rounded-3xl p-6 shadow-2xl flex flex-col justify-between gap-4 animate-slideUp text-left">
+          {/* Close button */}
+          <button
+            onClick={() => setDismissPopup(true)}
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 absolute top-4 right-4"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="space-y-2">
+            <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[9px] font-bold border border-purple-500/20 uppercase tracking-widest">
+              EXCLUSIVE OFFERS ACTIVE
+            </span>
+            <h4 className="text-md font-brand font-black text-white uppercase tracking-tight">
+              {activeCampaign.title}
+            </h4>
+            <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+              Save{' '}
+              <span className="text-purple-300 font-extrabold font-mono">
+                {activeCampaign.discountType === 'percentage'
+                  ? `${activeCampaign.discountAmount}%`
+                  : `$${activeCampaign.discountAmount}`}
+              </span>{' '}
+              on your entire production licenses. Dynamic pricing has been automatically applied to all eligible vault items.
+            </p>
+          </div>
+
+          <div className="flex justify-between items-center pt-2.5 border-t border-zinc-900/60">
+            <div className="space-y-0.5">
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">SECURE NOW:</span>
+              <div className="text-xs font-mono font-black text-purple-300 tracking-wider">
+                {campaignTimeLeft || '00h : 00m : 00s'}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setDismissPopup(true);
+                const pickerSection = document.getElementById('beat-picker-anchor');
+                if (pickerSection) pickerSection.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-4 py-2 bg-white text-black font-extrabold text-[10px] uppercase tracking-wider rounded-xl shadow cursor-pointer hover:bg-zinc-100"
+            >
+              Unlock Offer
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 0. CUSTOM ANNOUNCEMENT RIBBON */}
       <div className="bg-gradient-to-r from-purple-950 via-zinc-900 to-purple-950 border border-purple-500/30 px-6 py-3 text-xs font-mono text-white flex flex-wrap items-center justify-between gap-3 shadow-2xl rounded-2xl">
         <div className="flex items-center gap-2 font-bold">
@@ -479,13 +532,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
             ) : null}
 
             {/* Flash Sale Countdown Clock */}
-            <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-purple-950/60 border border-purple-500/30 text-purple-200 text-xs font-mono font-bold shadow">
-              <Clock className="w-4 h-4 text-purple-400 animate-pulse" />
-              <span>FLASH SALE: </span>
-              <span className="text-white font-mono tracking-wider font-extrabold">
-                {String(timeLeft.hours).padStart(2, '0')}:{String(timeLeft.minutes).padStart(2, '0')}:{String(timeLeft.seconds).padStart(2, '0')}
-              </span>
-            </div>
+            {activeCampaign && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-purple-950/60 border border-purple-500/30 text-purple-200 text-xs font-mono font-bold shadow animate-pulse">
+                <Clock className="w-4 h-4 text-purple-400" />
+                <span>FLASH SALE ACTIVE: </span>
+                <span className="text-white font-mono tracking-wider font-extrabold">
+                  {campaignTimeLeft || '00:00:00'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -697,6 +752,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
           );
         }
 
+        if (sectionKey === 'beat_picker') {
+          return (
+            <div id="beat-picker-anchor" key={sectionKey}>
+              <StorefrontPicker
+                beats={beats}
+                beatPacks={beatPacks}
+                currencySymbol={currencySymbol}
+                onBuyClick={onBuyClick}
+                onAddBeatPackToCart={onAddBeatPackToCart}
+              />
+            </div>
+          );
+        }
+
         if (sectionKey === 'latest') {
           return (
             <section key={sectionKey} className="space-y-8">
@@ -790,6 +859,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }
 
         if (sectionKey === 'soundkits') {
+          if (sampleSoundKits.length === 0) return null;
           return (
             <section key={sectionKey} className="space-y-8">
               {renderReorderHandle('SOUND KITS & LOOP LIBRARIES', 'Downloadable drum kits, serum synth banks, and sample stems.')}
@@ -806,33 +876,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           alt={kit.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
-                        {kit.isSoldOut && (
-                          <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center">
-                            <span className="px-3 py-1 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-lg">
-                              SOLD OUT
-                            </span>
-                          </div>
-                        )}
-                        {!kit.isSoldOut && (
-                          <span className="absolute top-3 right-3 px-2.5 py-1 bg-zinc-900/90 text-purple-300 border border-purple-500/20 font-mono text-[10px] font-bold rounded-lg shadow">
-                            {kit.inStock} LEFT
-                          </span>
-                        )}
                       </div>
-
                       <div>
                         <h4 className="font-extrabold text-sm text-white uppercase">{kit.title}</h4>
                         <div className="font-mono text-sm font-black text-purple-300 mt-1">${kit.price.toFixed(2)}</div>
                       </div>
                     </div>
-
-                    <button
-                      disabled={kit.isSoldOut}
-                      onClick={() => onAddMerchToCart && onAddMerchToCart({ title: kit.title, price: kit.price, artworkUrl: kit.coverUrl })}
-                      className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow transition-all cursor-pointer"
-                    >
-                      {kit.isSoldOut ? 'Sold Out' : 'Download Kit'}
-                    </button>
                   </div>
                 ))}
               </div>
@@ -841,27 +890,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }
 
         if (sectionKey === 'services') {
+          if (sampleServices.length === 0) return null;
           return (
             <section key={sectionKey} className="space-y-8">
               {renderReorderHandle('BESPOKE FREELANCE SERVICES', 'Commission vocal mixing, executive mastering, and exclusive beat production.')}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {sampleServices.map((srv) => (
-                  <div key={srv.id} className="p-8 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4 hover:border-purple-500/30 transition-all flex flex-col justify-between shadow-xl">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start gap-2">
-                        <h4 className="font-black text-base text-white uppercase">{srv.title}</h4>
-                        <span className="font-mono text-base font-black text-purple-300">${srv.price.toFixed(2)}</span>
-                      </div>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{srv.description}</p>
-                      <div className="text-[10px] font-mono text-zinc-500">Turnaround: {srv.turnaround}</div>
-                    </div>
-
-                    <button
-                      onClick={() => onAddMerchToCart && onAddMerchToCart({ title: srv.title, price: srv.price, artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg' })}
-                      className="w-full py-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer"
-                    >
-                      Book Service
-                    </button>
+                  <div key={srv.id} className="p-8 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4 shadow-xl">
+                    <h4 className="font-black text-base text-white uppercase">{srv.title}</h4>
                   </div>
                 ))}
               </div>
@@ -870,35 +906,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }
 
         if (sectionKey === 'merch') {
+          if (sampleMerch.length === 0) return null;
           return (
             <section key={sectionKey} className="space-y-8">
               {renderReorderHandle('PHYSICAL MERCHANDISE & VINYL', 'Limited studio apparel and physical vinyl beat tape pressings.')}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {sampleMerch.map((item) => (
-                  <div key={item.id} className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4 flex flex-col justify-between shadow-xl">
-                    <div className="space-y-3">
-                      <img src={item.artworkUrl} alt={item.title} className="w-full aspect-square rounded-2xl object-cover border border-zinc-800" />
-                      <div>
-                        <h4 className="font-extrabold text-sm text-white uppercase">{item.title}</h4>
-                        <span className="font-mono text-sm font-black text-purple-300">${item.price.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    <button
-                      disabled={item.isSoldOut}
-                      onClick={() => onAddMerchToCart && onAddMerchToCart({ title: item.title, price: item.price, artworkUrl: item.artworkUrl })}
-                      className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow cursor-pointer"
-                    >
-                      {item.isSoldOut ? 'Sold Out' : 'Order Merch'}
-                    </button>
-                  </div>
-                ))}
-              </div>
             </section>
           );
         }
 
         if (sectionKey === 'collections') {
+          if (collections.length === 0) return null;
           return (
             <section key={sectionKey} className="space-y-8">
               {renderReorderHandle('CURATED GENRE COLLECTIONS', 'Browse instrumentals grouped by mood, vibe, and artist style.')}
@@ -922,6 +939,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }
 
         if (sectionKey === 'youtube') {
+          if (youtubeVideos.length === 0) return null;
           return (
             <section key={sectionKey} className="space-y-8">
               {renderReorderHandle('STUDIO VISUALIZERS & YOUTUBE VAULT', 'Stream official cookup videos and beat visualizers.')}
@@ -945,20 +963,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }
 
         if (sectionKey === 'testimonials') {
+          if (testimonials.length === 0) return null;
           return (
             <section key={sectionKey} className="space-y-8">
               {renderReorderHandle('ARTIST TESTIMONIALS & REVIEWS', 'Feedback from verified recording talent and A&Rs.')}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {testimonials.map((t) => (
-                  <div key={t.id} className="p-8 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4 shadow-xl">
-                    <p className="text-xs text-zinc-300 leading-relaxed italic">"{t.quote}"</p>
-                    <div>
-                      <div className="font-black text-xs text-white uppercase">{t.author}</div>
-                      <div className="text-[10px] font-mono text-purple-400">{t.role}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </section>
           );
         }

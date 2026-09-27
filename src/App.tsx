@@ -7,6 +7,8 @@ import { ShareModal } from './components/ShareModal';
 import { BeatDetailModal } from './components/BeatDetailModal';
 import { CartDrawer } from './components/CartDrawer';
 import { PolicyModal } from './components/PolicyModal';
+import { NotificationModal } from './components/NotificationModal';
+import { showLocalNotification } from './utils/pushProvider';
 
 import { HomeView } from './views/HomeView';
 import { BrowseView } from './views/BrowseView';
@@ -18,6 +20,8 @@ import { TopChartsView } from './views/TopChartsView';
 import { CollectionsView } from './views/CollectionsView';
 import { MerchView } from './views/MerchView';
 import { BeatPacksView } from './views/BeatPacksView';
+import { HallOfFameView } from './views/HallOfFameView';
+import { CheckoutResultView } from './views/CheckoutResultView';
 
 import {
   Beat,
@@ -51,7 +55,17 @@ export default function App() {
   // LocalStorage Persistence Hooks
   const [beats, setBeats] = useState<Beat[]>(() => {
     const saved = localStorage.getItem('voodoo_beats');
-    return saved ? JSON.parse(saved) : INITIAL_BEATS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((b: Beat) => b.storageProvider === 'internet_archive' || b.iaUrl || b.uploadStatus === 'uploaded');
+        }
+      } catch {
+        return [];
+      }
+    }
+    return INITIAL_BEATS;
   });
 
   const [collections] = useState<Collection[]>(() => {
@@ -66,35 +80,7 @@ export default function App() {
 
   const [youtubeVideos, setYoutubeVideos] = useState(() => {
     const saved = localStorage.getItem('voodoo_youtube_videos');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: 'video-1',
-        youtubeId: 'M6fF8q-1S8o',
-        title: 'VALENTINO VELVET — BEAT VISUALIZER (4K EDITORIAL)',
-        category: 'OFFICIAL VISUALIZER',
-        duration: '2:48',
-        description: 'The cinematic visual companion to Valentino Velvet. Experience the custom lighting sequences and modular synth layers in ultra high definition.',
-        thumbnail: '/src/assets/images/cashmere_hero_runway_1790419818906.jpg'
-      },
-      {
-        id: 'video-2',
-        youtubeId: 'PZJ5xU7_XGg',
-        title: 'ANALOG DRUM MACHINE & MODULAR SYNTH SESSION',
-        category: 'STUDIO LIVE',
-        duration: '4:15',
-        description: 'Watch Cashmere Kid$ build the core melodic pads and aggressive sliding bass sequences live in the Los Angeles warehouse studio.',
-        thumbnail: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg'
-      },
-      {
-        id: 'video-3',
-        youtubeId: '5N6g9C8mSdg',
-        title: 'TOKYO NIGHTHAWK — PRODUCER WALKTHROUGH',
-        category: 'EXECUTIVE SCORE Deep Dive',
-        duration: '3:30',
-        description: 'An executive deep-dive into the master MIDI layers, sound design, vocal tags, and sub-bass templates powering Tokyo Nighthawk.',
-        thumbnail: '/src/assets/images/cashmere_cover_vault_1790419848357.jpg'
-      }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [salesRecords, setSalesRecords] = useState<SaleRecord[]>(() => {
@@ -141,9 +127,14 @@ export default function App() {
   const [currentBeat, setCurrentBeat] = useState<Beat | null>(() => beats[0] || null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
+  // Beat Pack Sampler Radio Mode State (Continuous 45s Album Sampler)
+  const [activeBeatPack, setActiveBeatPack] = useState<BeatPack | null>(null);
+  const [beatPackTrackIndex, setBeatPackTrackIndex] = useState<number>(0);
+
   // Modals & Drawers State
   const [audioPlayerExpandTrigger, setAudioPlayerExpandTrigger] = useState<number>(0);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
   const [selectedBuyBeat, setSelectedBuyBeat] = useState<Beat | null>(null);
   const [selectedFreeBeat, setSelectedFreeBeat] = useState<Beat | null>(null);
   const [selectedShareBeat, setSelectedShareBeat] = useState<Beat | null>(null);
@@ -205,29 +196,99 @@ export default function App() {
     });
   };
 
-  // Deep-linking parsing on mount
+  // Deep-linking parsing and routing on mount + popstate
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const queryBeatId = params.get('beat');
-    if (queryBeatId) {
-      const matchedBeat = beats.find((b) => b.id === queryBeatId);
-      if (matchedBeat) {
-        setSelectedDetailBeat(matchedBeat);
+    const handleRouting = () => {
+      const params = new URLSearchParams(window.location.search);
+      const queryBeatId = params.get('beat');
+      if (queryBeatId) {
+        const matchedBeat = beats.find((b) => b.id === queryBeatId);
+        if (matchedBeat) {
+          setSelectedDetailBeat(matchedBeat);
+        }
       }
-    }
+
+      // Check if we are on a checkout return or cancel flow
+      const isCheckoutPath = window.location.pathname.startsWith('/checkout');
+      const hasCheckoutParams = params.has('status') || params.has('paypal_success') || params.has('order_id') || params.has('token');
+
+      if (isCheckoutPath || hasCheckoutParams) {
+        setCurrentView('checkout-result');
+      }
+    };
+
+    handleRouting();
+    window.addEventListener('popstate', handleRouting);
+    return () => window.removeEventListener('popstate', handleRouting);
   }, [beats]);
 
   // Audio Controls
   const handlePlayToggle = (beat: Beat) => {
+    // Playing a single beat exits Beat Pack sampler radio mode
+    if (activeBeatPack) {
+      setActiveBeatPack(null);
+    }
     if (currentBeat?.id === beat.id) {
       setIsPlaying(!isPlaying);
     } else {
       setCurrentBeat(beat);
       setIsPlaying(true);
+      // Increment real verified play count on stream
+      setBeats((prev) => prev.map((b) => (b.id === beat.id ? { ...b, playCount: (b.playCount || 0) + 1 } : b)));
     }
   };
 
+  const handlePlayBeatPack = (pack: BeatPack, startIndex: number = 0) => {
+    const packBeats = pack.beatIds
+      .map((id) => beats.find((b) => b.id === id))
+      .filter((b): b is Beat => !!b);
+
+    if (packBeats.length === 0) return;
+
+    const validIndex = Math.max(0, Math.min(startIndex, packBeats.length - 1));
+    setActiveBeatPack(pack);
+    setBeatPackTrackIndex(validIndex);
+    setCurrentBeat(packBeats[validIndex]);
+    setIsPlaying(true);
+  };
+
+  const handleNextBeatPackTrack = () => {
+    if (!activeBeatPack) return;
+    const packBeats = activeBeatPack.beatIds
+      .map((id) => beats.find((b) => b.id === id))
+      .filter((b): b is Beat => !!b);
+
+    if (packBeats.length === 0) return;
+
+    const nextIdx = (beatPackTrackIndex + 1) % packBeats.length;
+    setBeatPackTrackIndex(nextIdx);
+    setCurrentBeat(packBeats[nextIdx]);
+    setIsPlaying(true);
+  };
+
+  const handlePrevBeatPackTrack = () => {
+    if (!activeBeatPack) return;
+    const packBeats = activeBeatPack.beatIds
+      .map((id) => beats.find((b) => b.id === id))
+      .filter((b): b is Beat => !!b);
+
+    if (packBeats.length === 0) return;
+
+    const prevIdx = (beatPackTrackIndex - 1 + packBeats.length) % packBeats.length;
+    setBeatPackTrackIndex(prevIdx);
+    setCurrentBeat(packBeats[prevIdx]);
+    setIsPlaying(true);
+  };
+
+  const handleExitBeatPackMode = () => {
+    setActiveBeatPack(null);
+  };
+
   const handlePrevBeat = () => {
+    if (activeBeatPack) {
+      handlePrevBeatPackTrack();
+      return;
+    }
     if (!currentBeat) return;
     const currentIndex = beats.findIndex((b) => b.id === currentBeat.id);
     const prevIndex = (currentIndex - 1 + beats.length) % beats.length;
@@ -236,6 +297,10 @@ export default function App() {
   };
 
   const handleNextBeat = () => {
+    if (activeBeatPack) {
+      handleNextBeatPackTrack();
+      return;
+    }
     if (!currentBeat) return;
     const currentIndex = beats.findIndex((b) => b.id === currentBeat.id);
     const nextIndex = (currentIndex + 1) % beats.length;
@@ -321,6 +386,22 @@ export default function App() {
     setBeats((prev) =>
       prev.map((b) => (b.id === beat.id ? { ...b, downloadCount: b.downloadCount + 1 } : b))
     );
+
+    // Dispatch automated download receipt email
+    fetch('/api/gmail/send-automated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType: 'receipt',
+        recipient: email,
+        payload: {
+          artist_name: email.split('@')[0],
+          product_title: beat.title,
+          download_url: beat.iaUrl || beat.audioUrl || `${window.location.origin}/api/media/${beat.id}?token=CK-LEAD-${Date.now()}`,
+          license_terms: 'Free Non-Commercial Lease'
+        }
+      })
+    }).catch(err => console.error('Automated download receipt error:', err));
   };
 
   // Dashboard catalog management
@@ -441,6 +522,21 @@ export default function App() {
 
   const handlePublishBeat = (newBeat: Beat) => {
     setBeats((prev) => [newBeat, ...prev]);
+
+    // Send visible customer notification if preferences allow
+    try {
+      const savedPrefs = localStorage.getItem('voodoo_notification_prefs');
+      const prefs = savedPrefs ? JSON.parse(savedPrefs) : { newBeats: true, beatPurchases: true, beatPacks: true, announcements: true };
+      if (prefs.newBeats) {
+        showLocalNotification(
+          'NEW CASHMERE KID$ BEAT',
+          `A new beat just dropped: ${newBeat.title}`,
+          `/?beat=${newBeat.id}`
+        );
+      }
+    } catch (e) {
+      console.error('[App] New beat notification exception:', e);
+    }
   };
 
   const handleNavigateWithGenre = (view: string, genreFilter?: string) => {
@@ -451,6 +547,7 @@ export default function App() {
   };
 
   const publishedBeats = beats.filter((b) => b.published !== false);
+  const producerTotalStreams = beats.reduce((sum, b) => sum + (b.playCount || 0), 0);
   const recentlyViewedBeats = publishedBeats.filter((b) => recentlyViewedIds.includes(b.id));
 
   return (
@@ -463,6 +560,7 @@ export default function App() {
         setIsCartOpen={setIsCartOpen}
         currencySymbol={settings.currencySymbol}
         onOpenAudioPlayer={() => setAudioPlayerExpandTrigger((prev) => prev + 1)}
+        onOpenNotifications={() => setIsNotificationModalOpen(true)}
       />
 
       {/* Main View Container */}
@@ -487,6 +585,7 @@ export default function App() {
             favoriteIds={favoriteIds}
             onToggleFavorite={handleToggleFavorite}
             recentlyViewedBeats={recentlyViewedBeats}
+            beatPacks={beatPacks}
           />
         )}
 
@@ -512,6 +611,7 @@ export default function App() {
             profile={profile}
             salesRecords={salesRecords}
             currencySymbol={settings.currencySymbol}
+            onNavigateToHallOfFame={() => handleNavigateWithGenre('hall-of-fame')}
           />
         )}
 
@@ -539,6 +639,14 @@ export default function App() {
             onNavigateToProfile={() => setCurrentView('profile')}
             beatPacks={beatPacks}
             onUpdateBeatPacks={setBeatPacks}
+            onNavigateToHallOfFame={() => handleNavigateWithGenre('hall-of-fame')}
+          />
+        )}
+
+        {currentView === 'hall-of-fame' && (
+          <HallOfFameView
+            producerTotalStreams={producerTotalStreams}
+            onNavigateToBrowse={() => handleNavigateWithGenre('browse')}
           />
         )}
 
@@ -617,6 +725,20 @@ export default function App() {
             onAddBeatPackToCart={handleAddBeatPackToCart}
             currencySymbol={settings.currencySymbol}
             onLeadCaptured={handleLeadCaptured}
+            onPlayBeatPack={handlePlayBeatPack}
+            activeBeatPack={activeBeatPack}
+          />
+        )}
+
+        {currentView === 'checkout-result' && (
+          <CheckoutResultView
+            onClearCart={() => setCart([])}
+            onRecordSale={(records) => setSalesRecords((prev) => [...records, ...prev])}
+            onNavigateToStore={() => {
+              window.history.pushState({}, '', '/');
+              setCurrentView('browse');
+            }}
+            currencySymbol={settings.currencySymbol}
           />
         )}
       </main>
@@ -653,6 +775,7 @@ export default function App() {
             <h4 className="font-extrabold text-white uppercase text-[11px] tracking-wider text-purple-300">Brand & Studio</h4>
             <ul className="space-y-1.5 font-medium text-xs">
               <li><button onClick={() => handleNavigateWithGenre('profile')} className="hover:text-white transition-colors">Producer Profile & Vision</button></li>
+              <li><button onClick={() => handleNavigateWithGenre('hall-of-fame')} className="text-purple-300 hover:text-white transition-colors font-bold">Record Plaque Hall of Fame</button></li>
               <li><button onClick={() => handleNavigateWithGenre('profile')} className="hover:text-white transition-colors">Book Custom Production</button></li>
               <li><button onClick={() => handleNavigateWithGenre('dashboard')} className="text-purple-400 hover:text-purple-300 font-bold transition-colors">Producer Studio Portal</button></li>
             </ul>
@@ -693,6 +816,10 @@ export default function App() {
         beats={publishedBeats}
         onPlayToggle={handlePlayToggle}
         externalExpandTrigger={audioPlayerExpandTrigger}
+        activeBeatPack={activeBeatPack}
+        beatPackTrackIndex={beatPackTrackIndex}
+        onNextBeatPackTrack={handleNextBeatPackTrack}
+        onExitBeatPackMode={handleExitBeatPackMode}
       />
 
       {/* Beat Product Detail Modal */}
@@ -743,6 +870,12 @@ export default function App() {
         onClearCart={handleClearCart}
         onRecordSale={handleRecordSale}
         currencySymbol={settings.currencySymbol}
+      />
+
+      {/* Customer Notification Opt-in Modal */}
+      <NotificationModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
       />
     </div>
   );

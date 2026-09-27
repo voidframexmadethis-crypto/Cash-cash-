@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, Play, Pause, Download, ShoppingBag, ShieldCheck, CheckCircle2, Mail, ArrowRight, Music, Sliders } from 'lucide-react';
+import { Package, Play, Pause, Download, ShoppingBag, ShieldCheck, CheckCircle2, Mail, ArrowRight, Music, Sliders, Radio } from 'lucide-react';
 import { Beat, BeatPack } from '../types';
 
 interface BeatPacksViewProps {
@@ -11,6 +11,8 @@ interface BeatPacksViewProps {
   onAddBeatPackToCart: (pack: BeatPack) => void;
   currencySymbol: string;
   onLeadCaptured?: (email: string, beat: Beat) => void;
+  onPlayBeatPack?: (pack: BeatPack, startIndex?: number) => void;
+  activeBeatPack?: BeatPack | null;
 }
 
 export const BeatPacksView: React.FC<BeatPacksViewProps> = ({
@@ -22,6 +24,8 @@ export const BeatPacksView: React.FC<BeatPacksViewProps> = ({
   onAddBeatPackToCart,
   currencySymbol,
   onLeadCaptured,
+  onPlayBeatPack,
+  activeBeatPack = null,
 }) => {
   const [downloadEmails, setDownloadEmails] = useState<{ [packId: string]: string }>({});
   const [downloadSuccess, setDownloadSuccess] = useState<{ [packId: string]: boolean }>({});
@@ -141,13 +145,29 @@ export const BeatPacksView: React.FC<BeatPacksViewProps> = ({
 
                 {/* Right Column: Dynamic Editorial Details & Audio Previews */}
                 <div className="lg:col-span-7 space-y-8 text-left">
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <span className="text-[10px] font-mono font-bold text-purple-300 uppercase tracking-widest block">
                       MASTER BUNDLE COMPILATION
                     </span>
-                    <h2 className="text-2xl sm:text-3xl font-brand font-black text-white uppercase tracking-tight">
-                      {pack.name}
-                    </h2>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <h2 className="text-2xl sm:text-3xl font-brand font-black text-white uppercase tracking-tight">
+                        {pack.name}
+                      </h2>
+
+                      {onPlayBeatPack && (
+                        <button
+                          onClick={() => onPlayBeatPack(pack, 0)}
+                          className={`px-4 py-2.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shrink-0 ${
+                            activeBeatPack?.id === pack.id && isPlaying
+                              ? 'bg-purple-600 text-white border border-purple-400 shadow-purple-950/80 animate-pulse'
+                              : 'bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white border border-purple-400/40'
+                          }`}
+                        >
+                          <Radio className="w-4 h-4 text-purple-200" />
+                          <span>{activeBeatPack?.id === pack.id && isPlaying ? 'SAMPLER PLAYING (45s Radio)' : 'PLAY PACK SAMPLER (45s Radio)'}</span>
+                        </button>
+                      )}
+                    </div>
                     <p className="text-zinc-400 text-xs sm:text-sm leading-relaxed font-sans font-medium max-w-xl">
                       {pack.description}
                     </p>

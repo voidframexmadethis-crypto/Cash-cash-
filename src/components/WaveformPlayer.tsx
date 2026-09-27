@@ -21,9 +21,10 @@ import {
   Mic,
   AlertCircle,
   ShieldCheck,
-  Zap
+  Zap,
+  Radio
 } from 'lucide-react';
-import { Beat } from '../types';
+import { Beat, BeatPack } from '../types';
 import { audioSynth } from '../utils/audioSynth';
 
 interface WaveformPlayerProps {
@@ -39,6 +40,10 @@ interface WaveformPlayerProps {
   beats: Beat[];
   onPlayToggle: (beat: Beat) => void;
   externalExpandTrigger?: number;
+  activeBeatPack?: BeatPack | null;
+  beatPackTrackIndex?: number;
+  onNextBeatPackTrack?: () => void;
+  onExitBeatPackMode?: () => void;
 }
 
 export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
@@ -54,6 +59,10 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   beats = [],
   onPlayToggle,
   externalExpandTrigger,
+  activeBeatPack = null,
+  beatPackTrackIndex = 0,
+  onNextBeatPackTrack,
+  onExitBeatPackMode,
 }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(165);
@@ -124,7 +133,17 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       audioSynth.setCallbacks(
         (time, dur) => {
           setCurrentTime(time);
-          setDuration(dur || 165);
+          if (dur && !isNaN(dur) && dur > 0) {
+            setDuration(dur);
+          }
+
+          // Handle Beat Pack Sampler Radio 45s Auto-Transition
+          if (activeBeatPack && isPlaying && time >= 45) {
+            if (onNextBeatPackTrack) {
+              onNextBeatPackTrack();
+            }
+            return;
+          }
 
           // Handle Write A Verse Loop
           if (writeVerseMode && isPlaying && time >= loopOutTime) {
@@ -133,12 +152,14 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
             return;
           }
 
-          if (time >= (dur || 165) && !isLooping && !writeVerseMode) {
+          if (dur && time >= dur && !isLooping && !writeVerseMode) {
             setPlayerState('finished');
           }
         },
         () => {
-          if (isLooping && currentBeat) {
+          if (activeBeatPack && onNextBeatPackTrack) {
+            onNextBeatPackTrack();
+          } else if (isLooping && currentBeat) {
             audioSynth.seek(0);
             setCurrentTime(0);
           } else if (!writeVerseMode) {
@@ -146,6 +167,13 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
             setCurrentTime(0);
             onNext();
           }
+        },
+        (errorMsg) => {
+          setPlayerState('error');
+          setErrorMessage(errorMsg);
+        },
+        (state) => {
+          setPlayerState(state);
         }
       );
     } catch (err) {
@@ -156,28 +184,36 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
   useEffect(() => {
     if (currentBeat) {
-      setPlayerState('loading');
+      const audioUrl = currentBeat.iaUrl || currentBeat.audioUrl;
       setErrorMessage(null);
+
+      if (!audioUrl) {
+        setPlayerState('unavailable');
+        setErrorMessage('No real audio stream URL found for this beat product. Upload an MP3/M4A master in Producer Studio.');
+        return;
+      }
+
+      setPlayerState('loading');
 
       const timer = setTimeout(() => {
         try {
           if (isPlaying) {
-            setPlayerState('playing');
             audioSynth.playBeat(
               currentBeat.id,
               currentBeat.bpm,
               currentBeat.key,
-              currentBeat.durationSeconds || 165
+              currentBeat.durationSeconds || 165,
+              audioUrl
             );
           } else {
-            setPlayerState('paused');
             audioSynth.pauseBeat();
+            setPlayerState('paused');
           }
-        } catch (err) {
+        } catch (err: any) {
           setPlayerState('error');
-          setErrorMessage('Playback stream error. Please try again.');
+          setErrorMessage(err.message || 'Playback stream error. Please try again.');
         }
-      }, 120);
+      }, 100);
       return () => clearTimeout(timer);
     } else {
       setPlayerState('idle');
@@ -734,6 +770,47 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
       {/* Persistent Bottom Bar Mini Player */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-black/95 border-t border-purple-500/30 backdrop-blur-xl shadow-2xl transition-all">
+        {/* Pandora-Style Beat Pack 45s Sampler Radio Banner */}
+        {activeBeatPack && (
+          <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-black px-4 py-2 border-b border-purple-500/40 flex flex-wrap items-center justify-between text-xs font-mono text-purple-200 animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <Radio className="w-4 h-4 text-purple-400 animate-pulse shrink-0" />
+              <span className="font-extrabold text-white uppercase tracking-wider">BEAT PACK SAMPLER RADIO:</span>
+              <span className="text-purple-300 font-bold underline decoration-purple-500/50">{activeBeatPack.name}</span>
+              <span className="text-zinc-300 font-bold bg-purple-950/80 px-2 py-0.5 rounded border border-purple-500/30">
+                TRACK {beatPackTrackIndex + 1} OF {activeBeatPack.beatIds.length} · 45s SAMPLER PREVIEW
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-purple-300 font-extrabold uppercase tracking-widest">
+                AUTO-ADVANCING IN {Math.max(0, 45 - Math.floor(currentTime))}s
+              </span>
+              {onExitBeatPackMode && (
+                <button
+                  onClick={onExitBeatPackMode}
+                  className="text-zinc-400 hover:text-white p-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-800 hover:border-purple-500/50 rounded px-2 cursor-pointer transition-all"
+                >
+                  Exit Sampler Mode
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {/* Real Audio Stream Error / Unavailable Alert Banner */}
+        {(playerState === 'error' || playerState === 'unavailable' || errorMessage) && (
+          <div className="bg-red-950/90 border-b border-red-500/40 px-4 py-2 text-xs font-mono text-red-200 flex items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 animate-pulse" />
+              <span className="font-bold">{errorMessage || 'Audio stream error. Unable to stream master file.'}</span>
+            </div>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="text-red-400 hover:text-white p-1 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {/* Top Accent Gradient Line */}
         <div className="h-0.5 bg-gradient-to-r from-purple-600 via-indigo-400 to-purple-800" />
 
