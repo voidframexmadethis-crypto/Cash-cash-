@@ -80,6 +80,8 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const handleProceedToPayPal = async () => {
     setCheckoutStatus('processing');
     setCheckoutError(null);
+    const status = document.getElementById("paypal-status");
+    if (status) status.textContent = "Loading checkout...";
 
     // Load PayPal script only when Buy is clicked
     const script = document.createElement('script');
@@ -94,26 +96,31 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            cart: [{ id: beat.id, beatTitle: beat.title, price: total, licenseName: tier.name }],
-                            total: total
+                            beatId: beat.id,
+                            price: total
                         }),
                     });
                     if (!res.ok) throw new Error('Failed to create order');
                     const data = await res.json();
-                    return data.orderId;
+                    if (!data.id) throw new Error("PayPal did not return an order ID");
+                    return data.id;
                 },
                 onApprove: async (data: any) => {
-                    const res = await fetch('/api/paypal/verify-order', {
+                    if (status) status.textContent = "Completing payment...";
+                    const res = await fetch('/api/paypal/capture-order', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderId: data.orderID }),
+                        body: JSON.stringify({ orderID: data.orderID, beatId: beat.id }),
                     });
-                    if (!res.ok) throw new Error('Capture failed');
-                    const captureData = await res.json();
-                    handlePayPalDirectSuccess(captureData);
+                    const result = await res.json();
+                    if (!res.ok || !result.success) throw new Error(result.error || 'Payment capture failed');
+                    
+                    if (status) status.textContent = "Payment successful. Your beat is ready.";
+                    handlePayPalDirectSuccess(result);
                 },
                 onError: (err: any) => {
                     setCheckoutStatus('failed');
+                    if (status) status.textContent = "PayPal checkout could not be completed.";
                     setCheckoutError('Payment failed. Please try again.');
                 }
             }).render(paypalContainerRef.current);
@@ -121,6 +128,7 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     };
     script.onerror = () => {
         setCheckoutStatus('failed');
+        if (status) status.textContent = "Checkout could not be loaded.";
         setCheckoutError('PayPal SDK failed to load.');
     };
     document.body.appendChild(script);
@@ -276,6 +284,7 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
               )}
               <span>Complete Payment with PayPal ({currencySymbol}{total.toFixed(2)})</span>
             </button>
+            <div id="paypal-status" className="text-xs text-zinc-400 font-mono my-2 text-center"></div>
             <div ref={paypalContainerRef} className="w-full pt-1" />
           </div>
 

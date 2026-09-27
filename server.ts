@@ -190,6 +190,112 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
   });
 
+  // PayPal Auth Helpers
+  async function getPayPalAccessToken() {
+    const clientId = process.env.PAYPAL_CLIENT_ID;
+    const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+    
+    if (!clientId || !clientSecret) {
+      throw new Error("PayPal credentials not configured");
+    }
+
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
+    const response = await fetch(
+      "https://api-m.paypal.com/v1/oauth2/token",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "grant_type=client_credentials"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("PayPal authentication failed");
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  }
+
+  // PayPal Order Creation
+  async function createPayPalOrder(price: number, beatId: string) {
+    const accessToken = await getPayPalAccessToken();
+
+    const response = await fetch(
+      "https://api-m.paypal.com/v2/checkout/orders",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          intent: "CAPTURE",
+          purchase_units: [
+            {
+              reference_id: beatId,
+              amount: {
+                currency_code: "USD",
+                value: Number(price).toFixed(2)
+              }
+            }
+          ]
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`PayPal order creation failed: ${error}`);
+    }
+
+    return response.json();
+  }
+
+  // PayPal Order Capture
+  async function capturePayPalOrder(orderID: string) {
+    const accessToken = await getPayPalAccessToken();
+
+    const response = await fetch(
+      `https://api-m.paypal.com/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "PayPal capture failed");
+    }
+
+    return data;
+  }
+
+
+
+
+
+  // API endpoint to fetch token
+  app.get('/api/paypal/token', async (req, res) => {
+    try {
+      const token = await getPayPalAccessToken();
+      res.json({ access_token: token });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+
+
   // ====================================================
   // PAPER TRAIL & FLASH SALES SECURE DATABASE (IN-MEMORY)
   // ====================================================
