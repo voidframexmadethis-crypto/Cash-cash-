@@ -30,21 +30,9 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
   currencySymbol = '$',
 }) => {
   // Connection States
-  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed' | 'cancelled'>(() => {
-    const saved = localStorage.getItem('cashmere_paypal_connection_state');
-    return saved ? JSON.parse(saved) : 'not_connected';
-  });
-
-  const [paypalEmail, setPaypalEmail] = useState<string>(() => {
-    const saved = localStorage.getItem('cashmere_paypal_email');
-    return saved ? JSON.parse(saved) : '';
-  });
-
-  const [merchantId, setMerchantId] = useState<string>(() => {
-    const saved = localStorage.getItem('cashmere_paypal_merchant_id');
-    return saved ? JSON.parse(saved) : '';
-  });
-
+  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed' | 'cancelled'>('not_connected');
+  const [paypalEmail, setPaypalEmail] = useState<string>('');
+  const [merchantId, setMerchantId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Completed' | 'Pending' | 'Refunded' | 'Cancelled' | 'Failed'>('ALL');
@@ -54,87 +42,90 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
   const [refundReason, setRefundReason] = useState<string>('Customer requested license cancellation');
   const [isProcessingRefund, setIsProcessingRefund] = useState<boolean>(false);
 
-  // Sync state to localStorage
+  // Initial status fetch
   useEffect(() => {
-    localStorage.setItem('cashmere_paypal_connection_state', JSON.stringify(paypalStatus));
-    localStorage.setItem('cashmere_paypal_email', JSON.stringify(paypalEmail));
-    localStorage.setItem('cashmere_paypal_merchant_id', JSON.stringify(merchantId));
-  }, [paypalStatus, paypalEmail, merchantId]);
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/producer/account');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.paypal_connected) {
+            setPaypalStatus('connected');
+            setMerchantId(data.paypal_merchant_id || '');
+            setPaypalEmail(data.paypal_email || '');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch account status:', err);
+      }
+    };
+    fetchStatus();
+  }, []);
 
   // Handle return/callback from real PayPal onboarding flow
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const action = params.get('paypal_action');
-    const returnedMerchantId = params.get('merchantIdInPayPal') || params.get('merchantId') || params.get('merchant_id');
-    const emailParam = params.get('email') || params.get('paypal_email');
-    const errorParam = params.get('error') || params.get('paypal_error');
+    const success = params.get('payout_success');
+    const error = params.get('payout_error');
 
-    if (action === 'callback' || returnedMerchantId) {
-      if (errorParam) {
-        setPaypalStatus('failed');
-        setErrorMessage(`PayPal Error: ${errorParam}`);
-      } else {
-        const finalEmail = emailParam || paypalEmail || 'producer@cashmerekids.com';
-        const finalMerchant = returnedMerchantId || `MERCHANT-${Date.now()}`;
-        setPaypalStatus('connected');
-        setPaypalEmail(finalEmail);
-        setMerchantId(finalMerchant);
-        setErrorMessage(null);
-      }
+    if (success === 'true') {
+      setPaypalStatus('connected');
       // Clean query parameters
       window.history.replaceState({}, document.title, window.location.pathname);
+      // Refresh status
+      fetch('/api/producer/account')
+        .then(res => res.json())
+        .then(data => {
+           setMerchantId(data.paypal_merchant_id || '');
+        });
+    } else if (error) {
+      setPaypalStatus('failed');
+      setErrorMessage(`PayPal Connection Failed: ${error}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [paypalEmail]);
+  }, []);
 
-  // Real Connect PayPal Flow
+  // Real Connect PayPal Flow (Onboarding Workflow)
   const handleConnectPayPal = async () => {
-    const trimmedEmail = paypalEmail.trim();
-    if (!trimmedEmail || !trimmedEmail.includes('@')) {
-      setErrorMessage('Please enter a valid PayPal merchant email address.');
-      return;
-    }
-
     setIsSubmitting(true);
     setErrorMessage(null);
     setPaypalStatus('connecting');
 
     try {
-      const res = await fetch(`/api/paypal/auth-url?email=${encodeURIComponent(trimmedEmail)}`);
-      let redirectUrl = 'https://www.paypal.com/signin';
-      let generatedMerchantId = `PP-MERCHANT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const res = await fetch('/api/paypal/onboard');
+      const data = await res.json();
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url && data.url.startsWith('https://')) {
-          redirectUrl = data.url;
-        }
+      if (!res.ok) {
+        // This handles the "Missing credentials" requirement
+        setErrorMessage(data.message || 'Onboarding failed to initialize.');
+        setPaypalStatus('failed');
+        setIsSubmitting(false);
+        return;
       }
 
-      // Open PayPal in a new top-level browser tab to prevent iframe X-Frame-Options/white-screen crashes
-      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
-
-      // Update local state to connected
-      setPaypalStatus('connected');
-      setPaypalEmail(trimmedEmail);
-      setMerchantId(generatedMerchantId);
-      setIsSubmitting(false);
+      if (data.url) {
+        // Open the official PayPal authorization/onboarding flow in a new window
+        // This is genuinely hosted by PayPal
+        window.location.href = data.url;
+      }
     } catch (err: any) {
-      console.error('[PayPalConnectionCenter] Connection error:', err);
-      // Fallback connect
-      const fallbackMerchantId = `PP-MERCHANT-${Math.floor(100000 + Math.random() * 900000)}`;
-      window.open('https://www.paypal.com/signin', '_blank', 'noopener,noreferrer');
-      setPaypalStatus('connected');
-      setPaypalEmail(trimmedEmail);
-      setMerchantId(fallbackMerchantId);
+      console.error('[PayPalConnectionCenter] Onboarding error:', err);
+      setErrorMessage('Could not initiate PayPal onboarding.');
+      setPaypalStatus('failed');
       setIsSubmitting(false);
     }
   };
 
-  const handleDisconnectPayPal = () => {
-    setPaypalStatus('not_connected');
-    setPaypalEmail('');
-    setMerchantId('');
-    setErrorMessage(null);
+  const handleDisconnectPayPal = async () => {
+    try {
+      await fetch('/api/paypal/disconnect', { method: 'POST' });
+      setPaypalStatus('not_connected');
+      setPaypalEmail('');
+      setMerchantId('');
+      setErrorMessage(null);
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
+    }
   };
 
   // Feature 37: Real Refund Processing
@@ -208,8 +199,8 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
               <div className="p-4 bg-zinc-900 border border-zinc-850 rounded-2xl space-y-1">
-                <span className="text-[10px] text-zinc-500 uppercase font-bold">PayPal Merchant Email</span>
-                <div className="font-extrabold text-white text-sm truncate">{paypalEmail}</div>
+                <span className="text-[10px] text-zinc-500 uppercase font-bold">PayPal Merchant Status</span>
+                <div className="font-extrabold text-white text-sm truncate">AUTHORIZED</div>
               </div>
               <div className="p-4 bg-zinc-900 border border-zinc-850 rounded-2xl space-y-1">
                 <span className="text-[10px] text-zinc-500 uppercase font-bold">Merchant Account ID</span>
@@ -241,19 +232,12 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
         ) : (
           /* Disconnected Flow View */
           <div className="space-y-4 max-w-xl">
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Connect your PayPal account to enable instant, automated checkout for MP3 leases, premium licenses, and exclusive beat sales with zero manual invoicing.
+            <p className="text-xs text-zinc-400 leading-relaxed font-mono">
+              Connect your official PayPal Payout Account to receive instant payments from beat sales. 
+              This will launch the official PayPal authorization flow.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="email"
-                value={paypalEmail}
-                onChange={(e) => setPaypalEmail(e.target.value)}
-                placeholder="Enter PayPal account email..."
-                disabled={isSubmitting}
-                className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-[#0070ba] rounded-xl px-4 py-3 text-xs text-white placeholder-zinc-500 font-mono outline-none"
-              />
               <button
                 onClick={handleConnectPayPal}
                 disabled={isSubmitting}
@@ -262,7 +246,7 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Connecting to PayPal...</span>
+                    <span>Launching PayPal...</span>
                   </>
                 ) : (
                   <span>CONNECT PAYPAL</span>

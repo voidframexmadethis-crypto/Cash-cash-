@@ -2,12 +2,13 @@ import React, { useState, useRef } from 'react';
 import { Upload, X, ImageIcon, AlertCircle } from 'lucide-react';
 
 interface ArtworkUploaderProps {
+  beatId: string;
   currentArtworkUrl: string;
   onArtworkSaved: (url: string) => void;
   title: string;
 }
 
-export const ArtworkUploader: React.FC<ArtworkUploaderProps> = ({ currentArtworkUrl, onArtworkSaved, title }) => {
+export const ArtworkUploader: React.FC<ArtworkUploaderProps> = ({ beatId, currentArtworkUrl, onArtworkSaved, title }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>(currentArtworkUrl);
   const [error, setError] = useState<string | null>(null);
@@ -25,30 +26,49 @@ export const ArtworkUploader: React.FC<ArtworkUploaderProps> = ({ currentArtwork
     };
     reader.readAsDataURL(file);
 
+    // Logging initial operation
+    console.log('[ArtworkPipeline] Starting upload for Beat:', beatId);
+    console.log('[ArtworkPipeline] File Details:', {
+      name: file.name,
+      type: file.type,
+      size: `${(file.size / 1024).toFixed(2)} KB`
+    });
+
     // Upload
     setIsUploading(true);
     setError(null);
     try {
       const formData = new FormData();
-      formData.append('audioFile', file);
-      formData.append('fileName', file.name);
-      formData.append('mediaType', file.type);
+      formData.append('file', file); // Field name must match upload.single('file')
+      formData.append('assetType', 'artwork');
 
-      const res = await fetch('/api/storage/upload', {
+      const res = await fetch(`/api/beats/${beatId}/upload`, {
         method: 'POST',
         body: formData,
       });
 
-      if (!res.ok) throw new Error('Artwork upload failed');
-
+      console.log('[ArtworkPipeline] Server Response Status:', res.status);
+      
       const result = await res.json();
-      const newUrl = result.iaUrl || result.playbackUrl;
-      if (!newUrl) throw new Error('Upload successful but URL missing');
+      console.log('[ArtworkPipeline] Server Response Body:', result);
 
+      if (!res.ok) {
+        throw new Error(result.error || 'Artwork upload failed');
+      }
+
+      const newUrl = result.playbackUrl || result.iaUrl;
+      if (!newUrl) {
+        throw new Error('Upload successful but URL missing in response');
+      }
+
+      console.log('[ArtworkPipeline] Artwork successfully saved and associated with beat.');
       onArtworkSaved(newUrl);
     } catch (err: any) {
-      console.error('Artwork upload error:', err);
-      setError(err.message || 'Failed to save artwork');
+      console.error('[ArtworkPipeline] Fatal Error:', err);
+      setError(`${err.name}: ${err.message}`);
+      
+      // Keep existing artwork on failure as requested
+      setPreviewUrl(currentArtworkUrl);
     } finally {
       setIsUploading(false);
     }

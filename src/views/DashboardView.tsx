@@ -76,6 +76,7 @@ import {
   Video,
   Key
 } from 'lucide-react';
+import { PayPalConnectionCenter } from '../components/PayPalConnectionCenter';
 import { Beat, FreeDownloadLead, Promotion, SaleRecord, StoreSettings, ProducerProfile, BeatPack } from '../types';
 import { UploadModal } from '../components/UploadModal';
 import { UgcCreator } from '../components/UgcCreator';
@@ -398,58 +399,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [newVideoDuration, setNewVideoDuration] = useState('3:00');
 
   // PayPal Connection State
-  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed' | 'cancelled'>(() => {
-    const saved = localStorage.getItem('voodoo_paypal_connection');
-    if (!saved) return 'not_connected';
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed === 'connecting') return 'not_connected';
-      return parsed;
-    } catch {
-      return 'not_connected';
-    }
-  });
-  const [paypalEmailInput, setPaypalEmailInput] = useState('');
-  const [paypalInfo, setPaypalInfo] = useState<{ email: string; merchantId: string }>(() => {
-    const saved = localStorage.getItem('voodoo_paypal_info');
-    if (!saved) return { email: '', merchantId: '' };
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return { email: '', merchantId: '' };
-    }
-  });
+  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed' | 'cancelled'>('not_connected');
+  const [paypalInfo, setPaypalInfo] = useState<{ email: string; merchantId: string }>({ email: '', merchantId: '' });
   const [isSubmittingPayPal, setIsSubmittingPayPal] = useState(false);
-  const [showManageModal, setShowManageModal] = useState(false);
+  const [paypalError, setPaypalError] = useState<string | null>(null);
 
+  // Sync with server
   useEffect(() => {
-    const statusToSave = paypalStatus === 'connecting' ? 'not_connected' : paypalStatus;
-    localStorage.setItem('voodoo_paypal_connection', JSON.stringify(statusToSave));
-    localStorage.setItem('voodoo_paypal_info', JSON.stringify(paypalInfo));
-  }, [paypalStatus, paypalInfo]);
+    const fetchAccountStatus = async () => {
+      try {
+        const res = await fetch('/api/producer/account');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.paypal_connected) {
+            setPaypalStatus('connected');
+            setPaypalInfo({ 
+              email: data.paypal_email || 'AUTHORIZED', 
+              merchantId: data.paypal_merchant_id || '' 
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to sync producer account:', err);
+      }
+    };
+    fetchAccountStatus();
+  }, [activeTab]);
 
   // Handle return/callback from PayPal authorization flow
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const action = params.get('paypal_action');
-    const merchantId = params.get('merchantIdInPayPal') || params.get('merchantId') || params.get('merchant_id');
-    const emailParam = params.get('email');
-    const errorParam = params.get('error') || params.get('paypal_error');
-    const statusParam = params.get('status');
+    const success = params.get('payout_success');
+    const error = params.get('payout_error');
 
-    if (action === 'callback' || merchantId || statusParam || errorParam) {
-      if (errorParam || statusParam === 'cancelled' || statusParam === 'cancel') {
-        setPaypalStatus('cancelled');
-      } else if (merchantId || statusParam === 'success' || action === 'callback') {
-        setPaypalStatus('connected');
-        const finalEmail = emailParam || paypalEmailInput || paypalInfo.email || 'producer@cashmerekids.com';
-        setPaypalInfo({
-          email: finalEmail,
-          merchantId: merchantId || 'PP-MERCHANT-' + Math.floor(100000 + Math.random() * 900000)
+    if (success === 'true') {
+      setPaypalStatus('connected');
+      triggerSaveState('PayPal Account Connected Successfully');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // Refresh status
+      fetch('/api/producer/account')
+        .then(res => res.json())
+        .then(data => {
+           setPaypalInfo({ 
+              email: data.paypal_email || 'AUTHORIZED', 
+              merchantId: data.paypal_merchant_id || '' 
+           });
         });
-        triggerSaveState('PayPal Account Connected Successfully');
-      }
-      // Clean up URL parameters without reloading
+    } else if (error) {
+      setPaypalStatus('failed');
+      setPaypalError('PayPal authorization was not completed or was cancelled.');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
@@ -457,49 +455,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const handleConnectPayPal = async () => {
     if (isSubmittingPayPal) return;
 
-    const trimmedEmail = paypalEmailInput.trim();
-    if (!trimmedEmail || !trimmedEmail.includes('@')) {
-      alert('Please enter a valid PayPal email address.');
-      return;
-    }
-
     setIsSubmittingPayPal(true);
     setPaypalStatus('connecting');
+    setPaypalError(null);
 
     try {
-      const res = await fetch(`/api/paypal/auth-url?email=${encodeURIComponent(trimmedEmail)}`);
-      let redirectUrl = 'https://www.paypal.com/signin';
-      let generatedMerchantId = `PP-MERCHANT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const res = await fetch('/api/paypal/onboard');
+      const data = await res.json();
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url && data.url.startsWith('https://')) {
-          redirectUrl = data.url;
-        }
+      if (!res.ok) {
+        setPaypalError(data.message || 'Onboarding failed to initialize.');
+        setPaypalStatus('failed');
+        setIsSubmittingPayPal(false);
+        return;
       }
 
-      // Open PayPal in a top-level new window/tab to prevent iframe X-Frame-Options crashes
-      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
-
-      // Set account to connected with user's merchant PayPal email
-      setPaypalStatus('connected');
-      setPaypalInfo({ email: trimmedEmail, merchantId: generatedMerchantId });
-      localStorage.setItem('voodoo_paypal_connection', JSON.stringify('connected'));
-      localStorage.setItem('voodoo_paypal_info', JSON.stringify({ email: trimmedEmail, merchantId: generatedMerchantId }));
-
-      setIsSubmittingPayPal(false);
-      triggerSaveState(`PayPal Account Connected Successfully (${trimmedEmail})`);
-    } catch (err) {
+      if (data.url) {
+        // Official PayPal authorization/onboarding flow
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
       console.error('PayPal connect error:', err);
-      // Fallback popup and instant connect
-      const fallbackMerchantId = `PP-MERCHANT-${Math.floor(100000 + Math.random() * 900000)}`;
-      window.open('https://www.paypal.com/signin', '_blank', 'noopener,noreferrer');
-      setPaypalStatus('connected');
-      setPaypalInfo({ email: trimmedEmail, merchantId: fallbackMerchantId });
-      localStorage.setItem('voodoo_paypal_connection', JSON.stringify('connected'));
-      localStorage.setItem('voodoo_paypal_info', JSON.stringify({ email: trimmedEmail, merchantId: fallbackMerchantId }));
+      setPaypalError('Could not initiate PayPal onboarding.');
+      setPaypalStatus('failed');
       setIsSubmittingPayPal(false);
-      triggerSaveState(`PayPal Account Connected Successfully (${trimmedEmail})`);
+    }
+  };
+
+  const handleDisconnectPayPal = async () => {
+    try {
+      await fetch('/api/paypal/disconnect', { method: 'POST' });
+      setPaypalStatus('not_connected');
+      setPaypalInfo({ email: '', merchantId: '' });
+      triggerSaveState('PayPal Account Disconnected');
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
     }
   };
 
@@ -3243,9 +3233,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {activeTab === 'integrations' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="border-b border-zinc-900 pb-4">
-              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">PAYMENTS & MERCHANT SETTINGS</h2>
-              <p className="text-xs text-zinc-500">Connect your payment accounts to receive direct payouts from CASHMERE KID$ customers.</p>
+              <h2 className="text-xl font-brand font-black text-white uppercase tracking-tight">PAYMENTS & Payout SETTINGS</h2>
+              <p className="text-xs text-zinc-500">Configure your professional payout accounts and monitor merchant transactions.</p>
             </div>
+
+            <PayPalConnectionCenter 
+              salesRecords={salesRecords}
+              onUpdateSalesRecords={(records) => {
+                 // Update parent records if needed
+              }}
+              currencySymbol={currencySymbol}
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Internet Archive Storage Card */}
@@ -3272,9 +3270,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="font-mono text-zinc-400 truncate max-w-[180px]">cashmerekids_vault_master_item</span>
                   </div>
                 </div>
-                <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
-                  All master MP3 and M4A beat audio files are securely stored on Internet Archive infrastructure with zero producer credential configuration required.
-                </p>
               </div>
 
               {/* Stripe Card */}
@@ -3284,70 +3279,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">CONNECTED</span>
                 </div>
                 <p className="text-xs text-zinc-400">Accept Credit Cards, Apple Pay, and Google Pay with zero platform commissions.</p>
-              </div>
-
-              {/* PayPal Card */}
-              <div className="p-6 bg-zinc-950 border border-zinc-900 rounded-3xl space-y-4">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-extrabold text-sm text-white">PayPal Account</h4>
-                  {paypalStatus === 'connected' ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">CONNECTED</span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-850 text-zinc-400 font-bold">NOT CONNECTED</span>
-                  )}
-                </div>
-
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  Connect your existing Personal PayPal account to receive payments from CASHMERE KID$ customers. No manual API credentials required.
-                </p>
-
-                {paypalStatus === 'connected' ? (
-                  <div className="space-y-3 pt-2">
-                    <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1 text-xs">
-                      <div className="text-[10px] text-emerald-400 font-mono uppercase font-bold flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" /> ✓ PAYPAL CONNECTED
-                      </div>
-                      <div className="font-bold text-white truncate">{paypalInfo.email}</div>
-                    </div>
-
-                    <button
-                      onClick={handleDisconnectPayPal}
-                      className="w-full py-2.5 bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-colors cursor-pointer font-mono uppercase tracking-wider"
-                    >
-                      DISCONNECT
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3 pt-2">
-                    {(paypalStatus === 'failed' || paypalStatus === 'cancelled') && (
-                      <p className="text-xs text-red-400 bg-red-950/30 border border-red-500/20 p-2.5 rounded-xl">
-                        PayPal authorization was not completed or was cancelled. Please try again.
-                      </p>
-                    )}
-                    <input
-                      type="email"
-                      value={paypalEmailInput}
-                      onChange={(e) => setPaypalEmailInput(e.target.value)}
-                      placeholder="Enter your PayPal email address"
-                      disabled={isSubmittingPayPal}
-                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500 rounded-xl px-4 py-3 text-white text-xs font-mono outline-none disabled:opacity-50"
-                    />
-                    <button
-                      onClick={handleConnectPayPal}
-                      disabled={isSubmittingPayPal}
-                      className="w-full py-3 bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      {isSubmittingPayPal ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                          <span>Redirecting to PayPal…</span>
-                        </>
-                      ) : (
-                        <span>Connect PayPal</span>
-                      )}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>

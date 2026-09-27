@@ -51,6 +51,7 @@ export interface BeatUploadingSystemProps {
 
 export interface UploadQueueItem {
   id: string;
+  beatId?: string; // Persistent Backend ID
   file: File;
   fileName: string;
   fileSizeStr: string;
@@ -192,6 +193,19 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
         continue;
       }
 
+      // Step 1: Create Draft Record Immediately
+      let persistentBeatId = '';
+      try {
+        const draftRes = await fetch('/api/beats/create', { method: 'POST' });
+        if (draftRes.ok) {
+          const draftData = await draftRes.json();
+          persistentBeatId = draftData.id;
+          console.log('[UploadSystem] Draft Created:', persistentBeatId);
+        }
+      } catch (err) {
+        console.error('[UploadSystem] Failed to create draft:', err);
+      }
+
       const fileType: 'MP3' | 'M4A' | 'ZIP' | 'UNKNOWN' = 
         fileNameLower.endsWith('.m4a') ? 'M4A' :
         fileNameLower.endsWith('.zip') ? 'ZIP' : 'MP3';
@@ -213,6 +227,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
 
       const newItem: UploadQueueItem = {
         id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        beatId: persistentBeatId,
         file,
         fileName: file.name,
         fileSizeStr: `${fileSizeMb} MB`,
@@ -369,13 +384,15 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
       const queueItem = queue.find((q) => q.id === itemId);
       const formData = new FormData();
       if (queueItem?.file) {
-        formData.append('audioFile', queueItem.file);
+        formData.append('file', queueItem.file);
       }
-      formData.append('fileName', queueItem?.fileName || 'voodoo_audio_master.mp3');
-      formData.append('fileSize', queueItem?.fileSizeStr || '6.85 MB');
-      formData.append('mediaType', queueItem?.fileType === 'M4A' ? 'audio/mp4' : 'audio/mpeg');
+      formData.append('assetType', 'main_audio');
+      
+      const uploadUrl = queueItem?.beatId 
+        ? `/api/beats/${queueItem.beatId}/upload` 
+        : '/api/storage/upload';
 
-      const res = await fetch('/api/storage/upload', {
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
       });
@@ -445,58 +462,105 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
   };
 
   // Publish Beat
-  const publishSingleItem = (index: number) => {
+  const handleSaveDraft = async (index: number) => {
     const item = queue[index];
-    if (!item) return;
+    if (!item || !item.beatId) return;
 
-    const isScheduled = item.publishingMode === 'scheduled';
-    const releaseDateStr = isScheduled
-      ? `${item.scheduledDate} ${item.scheduledTime}`
-      : new Date().toISOString().split('T')[0];
+    try {
+      const res = await fetch(`/api/beats/${item.beatId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: item.title,
+          description: item.description,
+          bpm: item.bpm,
+          key: item.key,
+          genre: item.genre,
+          mood: item.moods[0] || 'Dark',
+          tags: item.tags,
+          price: item.mp3Price,
+          free_download: item.freeDownload,
+          visibility: item.published ? 'PUBLIC' : 'PRIVATE'
+        }),
+      });
 
-    const finalBeat: Beat = {
-      id: `beat-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      title: item.title.trim() || 'UNTITLED BEAT',
-      producerName: item.producerName || 'CASHMERE KID$',
-      bpm: item.bpm || 140,
-      key: item.key || 'C Minor',
-      duration: item.durationFormatted || '2:45',
-      durationSeconds: item.durationSeconds || 165,
-      pricing: {
-        mp3Lease: item.mp3Price,
-        premiumLease: item.wavPrice,
-        unlimited: item.unlimitedPrice,
-        exclusive: item.exclusivePrice,
-      },
-      freeDownload: item.freeDownload,
-      freeDownloadType: item.freeDownloadType,
-      genre: item.genre,
-      subGenres: [item.subGenre || 'Dark Trap'],
-      moods: item.moods,
-      tags: item.tags,
-      artworkUrl: item.artworkUrl || vaultArtworkPresets[0].url,
-      playCount: 0,
-      downloadCount: 0,
-      likeCount: 0,
-      featured: true,
-      published: !isScheduled,
-      createdDate: new Date().toISOString().split('T')[0],
-      releaseDate: releaseDateStr,
-      description: item.description,
-      voiceTag: true,
-      storageProvider: item.storageProvider || 'internet_archive',
-      iaUrl: item.iaUrl,
-      audioUrl: item.audioUrl || item.audioObjectUrl,
-      fileSize: item.fileSizeStr,
-    };
+      if (!res.ok) throw new Error('Failed to save draft metadata');
+      showToast('DRAFT SAVED', `"${item.title}" progress saved to persistent storage.`, 'success');
+    } catch (err: any) {
+      console.error('[UploadSystem] Save Draft Error:', err);
+      showToast('SAVE FAILED', err.message, 'error');
+    }
+  };
 
-    onPublishBeat(finalBeat);
-    removeItemFromQueue(item.id);
+  const publishSingleItem = async (index: number) => {
+    const item = queue[index];
+    if (!item || !item.beatId) return;
 
-    if (isScheduled) {
-      showToast('Release Scheduled', `"${finalBeat.title}" scheduled for ${releaseDateStr}.`, 'success');
-    } else {
-      showToast('Beat Published!', `"${finalBeat.title}" is now live in your store.`, 'success');
+    // First save metadata
+    await handleSaveDraft(index);
+
+    try {
+      const res = await fetch(`/api/beats/${item.beatId}/publish`, {
+        method: 'PUT'
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Publishing failed');
+      }
+
+      const isScheduled = item.publishingMode === 'scheduled';
+      const releaseDateStr = isScheduled
+        ? `${item.scheduledDate} ${item.scheduledTime}`
+        : new Date().toISOString().split('T')[0];
+
+      const finalBeat: Beat = {
+        id: item.beatId,
+        title: item.title.trim() || 'UNTITLED BEAT',
+        producerName: item.producerName || 'CASHMERE KID$',
+        bpm: item.bpm || 140,
+        key: item.key || 'C Minor',
+        duration: item.durationFormatted || '2:45',
+        durationSeconds: item.durationSeconds || 165,
+        pricing: {
+          mp3Lease: item.mp3Price,
+          premiumLease: item.wavPrice,
+          unlimited: item.unlimitedPrice,
+          exclusive: item.exclusivePrice,
+        },
+        freeDownload: item.freeDownload,
+        freeDownloadType: item.freeDownloadType,
+        genre: item.genre,
+        subGenres: [item.subGenre || 'Dark Trap'],
+        moods: item.moods,
+        tags: item.tags,
+        artworkUrl: item.artworkUrl || vaultArtworkPresets[0].url,
+        playCount: 0,
+        downloadCount: 0,
+        likeCount: 0,
+        featured: true,
+        published: !isScheduled,
+        createdDate: new Date().toISOString().split('T')[0],
+        releaseDate: releaseDateStr,
+        description: item.description,
+        voiceTag: true,
+        storageProvider: item.storageProvider || 'internet_archive',
+        iaUrl: item.iaUrl,
+        audioUrl: item.audioUrl || item.audioObjectUrl,
+        fileSize: item.fileSizeStr,
+      };
+
+      onPublishBeat(finalBeat);
+      removeItemFromQueue(item.id);
+
+      if (isScheduled) {
+        showToast('Release Scheduled', `"${finalBeat.title}" scheduled for ${releaseDateStr}.`, 'success');
+      } else {
+        showToast('Beat Published!', `"${finalBeat.title}" is now live in your store.`, 'success');
+      }
+    } catch (err: any) {
+      console.error('[UploadSystem] Publish Error:', err);
+      showToast('PUBLISH FAILED', err.message, 'error');
     }
   };
 
@@ -686,6 +750,12 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleSaveDraft(selectedItemIndex)}
+                  className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer border border-zinc-700"
+                >
+                  Save Draft
+                </button>
                 <button
                   onClick={() => publishSingleItem(selectedItemIndex)}
                   className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer shadow-lg"
@@ -897,6 +967,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-400 uppercase block">Upload Artwork</label>
                     <ArtworkUploader
+                      beatId={activeItem.beatId || ''}
                       currentArtworkUrl={activeItem.artworkUrl}
                       title={activeItem.title}
                       onArtworkSaved={(url) => {

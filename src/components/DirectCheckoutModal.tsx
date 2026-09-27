@@ -83,55 +83,69 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     const status = document.getElementById("paypal-status");
     if (status) status.textContent = "Loading checkout...";
 
-    // Load PayPal script only when Buy is clicked
-    const script = document.createElement('script');
-    script.src = 'https://www.paypal.com/sdk/js?client-id=sb&currency=USD&components=buttons';
-    script.async = true;
-    script.onload = () => {
-        // Initialize buttons
-        if (window.paypal && window.paypal.Buttons) {
-            window.paypal.Buttons({
-                createOrder: async () => {
-                    const res = await fetch('/api/paypal/create-order', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            beatId: beat.id,
-                            price: total
-                        }),
-                    });
-                    if (!res.ok) throw new Error('Failed to create order');
-                    const data = await res.json();
-                    if (!data.id) throw new Error("PayPal did not return an order ID");
-                    return data.id;
-                },
-                onApprove: async (data: any) => {
-                    if (status) status.textContent = "Completing payment...";
-                    const res = await fetch('/api/paypal/capture-order', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderID: data.orderID, beatId: beat.id }),
-                    });
-                    const result = await res.json();
-                    if (!res.ok || !result.success) throw new Error(result.error || 'Payment capture failed');
-                    
-                    if (status) status.textContent = "Payment successful. Your beat is ready.";
-                    handlePayPalDirectSuccess(result);
-                },
-                onError: (err: any) => {
-                    setCheckoutStatus('failed');
-                    if (status) status.textContent = "PayPal checkout could not be completed.";
-                    setCheckoutError('Payment failed. Please try again.');
-                }
-            }).render(paypalContainerRef.current);
-        }
-    };
-    script.onerror = () => {
+    try {
+        // Fetch Client ID from backend
+        const idRes = await fetch('/api/paypal/client-id');
+        const { clientId } = await idRes.json();
+
+        // Load PayPal script only when Buy is clicked
+        const script = document.createElement('script');
+        script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&components=buttons`;
+        script.async = true;
+        script.onload = () => {
+            // Initialize buttons
+            if (window.paypal && window.paypal.Buttons) {
+                window.paypal.Buttons({
+                    createOrder: async () => {
+                        const res = await fetch('/api/paypal/create-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                beatId: beat.id,
+                                price: total
+                            }),
+                        });
+                        if (!res.ok) {
+                            const errorData = await res.json();
+                            throw new Error(errorData.message || 'Failed to create order');
+                        }
+                        const data = await res.json();
+                        if (!data.id) throw new Error("PayPal did not return an order ID");
+                        return data.id;
+                    },
+                    onApprove: async (data: any) => {
+                        if (status) status.textContent = "Completing payment...";
+                        const res = await fetch('/api/paypal/capture-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orderID: data.orderID, beatId: beat.id }),
+                        });
+                        const result = await res.json();
+                        if (!res.ok || !result.success) throw new Error(result.error || result.message || 'Payment capture failed');
+                        
+                        if (status) status.textContent = "Payment successful. Your beat is ready.";
+                        handlePayPalDirectSuccess(result);
+                    },
+                    onError: (err: any) => {
+                        console.error('[PayPalPipeline] SDK Error:', err);
+                        setCheckoutStatus('failed');
+                        if (status) status.textContent = "PayPal checkout could not be completed.";
+                        setCheckoutError(`Checkout Error: ${err.message || 'Check browser console for details.'}`);
+                    }
+                }).render(paypalContainerRef.current);
+            }
+        };
+        script.onerror = () => {
+            setCheckoutStatus('failed');
+            if (status) status.textContent = "Checkout could not be loaded.";
+            setCheckoutError('PayPal SDK failed to load.');
+        };
+        document.body.appendChild(script);
+    } catch (err: any) {
+        console.error('[PayPalPipeline] Initialization Error:', err);
         setCheckoutStatus('failed');
-        if (status) status.textContent = "Checkout could not be loaded.";
-        setCheckoutError('PayPal SDK failed to load.');
-    };
-    document.body.appendChild(script);
+        setCheckoutError(`Initialization Failed: ${err.message}`);
+    }
   };
 
   return (

@@ -165,7 +165,89 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
   });
 
-  // PayPal Partner & Direct Merchant Onboarding Route
+  // ====================================================
+  // PRODUCER PAYOUT ACCOUNT PERSISTENCE
+  // ====================================================
+  interface ProducerAccount {
+    paypal_connected: boolean;
+    paypal_merchant_id?: string;
+    paypal_email?: string;
+    connection_status: 'connected' | 'not_connected' | 'pending';
+    connected_at?: string;
+  }
+
+  // Simulated persistence for producer account
+  let producerAccount: ProducerAccount = {
+    paypal_connected: false,
+    connection_status: 'not_connected'
+  };
+
+  // API: Get Producer Account Status
+  app.get('/api/producer/account', (req, res) => {
+    res.json(producerAccount);
+  });
+
+  // API: Get PayPal Onboarding URL (Partner Referrals)
+  app.get('/api/paypal/onboard', async (req, res) => {
+    try {
+      const clientId = process.env.PAYPAL_CLIENT_ID;
+      const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+      
+      // Check for real credentials
+      if (!clientId || !clientSecret || clientId === 'sb' || clientId.includes('YOUR_')) {
+        return res.status(400).json({ 
+          error: 'MISSING_CREDENTIALS', 
+          message: 'PayPal seller onboarding requires the appropriate PayPal platform/partner credentials.' 
+        });
+      }
+
+      const accessToken = await getPayPalAccessToken();
+      const trackingId = `payout-${Date.now()}`;
+      const appOrigin = getAppOrigin(req);
+      const returnUrl = `${appOrigin}/api/paypal/onboard-callback`;
+
+      // Official PayPal Partner Referrals API call would go here to get a specific action URL
+      // For now, we use the standard signup URL structure for partners
+      const host = process.env.PAYPAL_MODE === 'live' ? 'www.paypal.com' : 'www.sandbox.paypal.com';
+      const onboardingUrl = `https://${host}/bizsignup/partner/entry?partnerId=${encodeURIComponent(clientId)}&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
+
+      res.json({ url: onboardingUrl });
+    } catch (err: any) {
+      console.error('[PayPalOnboarding] Error:', err);
+      res.status(500).json({ error: 'ONBOARDING_INIT_FAILED', message: err.message });
+    }
+  });
+
+  // API: PayPal Onboarding Callback
+  app.get('/api/paypal/onboard-callback', (req, res) => {
+    const { merchantId, status, merchantIdInPayPal } = req.query;
+    
+    if (merchantId || merchantIdInPayPal) {
+      producerAccount = {
+        paypal_connected: true,
+        paypal_merchant_id: (merchantId || merchantIdInPayPal) as string,
+        connection_status: 'connected',
+        connected_at: new Date().toISOString()
+      };
+      
+      // Redirect back to account settings
+      const appOrigin = getAppOrigin(req);
+      res.redirect(`${appOrigin}/dashboard?payout_success=true`);
+    } else {
+      res.redirect(`${getAppOrigin(req)}/dashboard?payout_error=failed`);
+    }
+  });
+
+  // API: Disconnect PayPal
+  app.post('/api/paypal/disconnect', (req, res) => {
+    producerAccount = {
+      paypal_connected: false,
+      connection_status: 'not_connected'
+    };
+    res.json({ success: true });
+  });
+
+  // PayPal Partner & Direct Merchant Onboarding Route (Legacy/Alternative)
   app.get('/api/paypal/auth-url', (req, res) => {
     const trackingId = `ck-pp-${Date.now()}`;
     const email = (req.query.email as string) || '';
@@ -294,6 +376,11 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
   });
 
+  // API endpoint to fetch client ID for SDK
+  app.get('/api/paypal/client-id', (req, res) => {
+    res.json({ clientId: process.env.PAYPAL_CLIENT_ID || 'sb' });
+  });
+
 
 
   // ====================================================
@@ -395,17 +482,23 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
   // API: Upload Asset (Audio/Artwork)
   app.post('/api/beats/:beatId/upload', upload.single('file'), (req, res) => {
-    try {
-      const { beatId } = req.params;
-      const { assetType } = req.body; // 'artwork' | 'main_audio' | 'preview_audio'
-      const file = req.file;
+    const { beatId } = req.params;
+    const { assetType } = req.body; // 'artwork' | 'main_audio' | 'preview_audio'
+    const file = req.file;
 
+    console.log(`[UploadService] Operation: ${assetType} upload for Beat: ${beatId}`);
+
+    try {
       if (!file || !beatId || !assetType) {
+        console.error('[UploadService] Missing parameters:', { file: !!file, beatId, assetType });
         return res.status(400).json({ error: 'Missing file, beatId, or assetType' });
       }
 
       const beat = beatsStore.get(beatId);
-      if (!beat) return res.status(404).json({ error: 'Beat not found' });
+      if (!beat) {
+        console.error(`[UploadService] Beat not found: ${beatId}`);
+        return res.status(404).json({ error: 'Beat not found' });
+      }
 
       // Simulate R2 upload (save to /media)
       const assetId = `as_${Date.now()}`;
@@ -414,13 +507,14 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       
       const MEDIA_DIR = path.resolve('media');
       if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
-      fs.writeFileSync(path.join(MEDIA_DIR, `${assetId}.${extension}`), file.buffer);
+      const filePath = path.join(MEDIA_DIR, `${assetId}.${extension}`);
+      fs.writeFileSync(filePath, file.buffer);
 
       // Create D1 Asset record
       const newAsset: BeatAsset = {
         id: assetId,
         beat_id: beatId,
-        asset_type: assetType,
+        asset_type: assetType as any,
         r2_key: r2Key,
         original_filename: file.originalname,
         mime_type: file.mimetype,
@@ -435,9 +529,20 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       beat.updated_at = new Date().toISOString();
       beatsStore.set(beatId, beat);
 
-      res.json(newAsset);
+      console.log(`[UploadService] Success: ${assetId} stored at ${r2Key}`);
+
+      res.json({
+        ...newAsset,
+        playbackUrl: `/media/${assetId}.${extension}`,
+        iaUrl: `/media/${assetId}.${extension}` // For compatibility
+      });
     } catch (err: any) {
-      res.status(500).json({ error: 'Upload failed', message: err.message });
+      console.error('[UploadService] Fatal error:', err);
+      res.status(500).json({ 
+        error: 'STORAGE_ERROR', 
+        message: err.message,
+        details: { beatId, assetType, filename: file?.originalname }
+      });
     }
   });
 
@@ -470,94 +575,72 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     res.json(beat);
   });
 
+  // PayPal Server Order Creation Endpoint (Marketplace Compatible)
+  app.post('/api/paypal/create-order', async (req, res) => {
+    const { beatId, price, cart } = req.body;
+    console.log(`[PayPalServer] Creating order for Beat: ${beatId}, Price: ${price}`);
+
     try {
-      const { cart, discount = 0 } = req.body;
-      if (!cart || !Array.isArray(cart) || cart.length === 0) {
-        return res.status(400).json({ error: 'EMPTY_CART', message: 'Cannot initialize checkout for an empty cart.' });
-      }
+        // If it's a single beat checkout from DirectCheckoutModal
+        if (beatId && price) {
+            const orderData = await createPayPalOrder(price, beatId);
+            console.log(`[PayPalServer] Order created successfully: ${orderData.id}`);
+            return res.json({ id: orderData.id });
+        }
 
-      const origin = getAppOrigin(req);
-      const orderId = `CK-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        // Legacy cart support
+        if (cart && Array.isArray(cart)) {
+            const orderId = `CK-${Date.now()}`;
+            const total = cart.reduce((sum: number, item: any) => sum + (item.price || 0), 0);
+            
+            const newOrder: ServerOrder = {
+                orderId,
+                cart,
+                subtotal: total,
+                discount: 0,
+                total,
+                status: 'CREATED',
+                createdAt: new Date().toISOString(),
+            };
+            serverOrdersStore.set(orderId, newOrder);
 
-      // Secure server-side calculation of active Flash Sales to prevent client-side manipulation
-      const now = new Date();
-      const activeSale = flashSales.find(s => {
-        const start = new Date(s.startDate);
-        const end = new Date(s.endDate);
-        return s.status === 'active' && now >= start && now <= end;
-      });
+            return res.json({ 
+                success: true, 
+                orderId, 
+                total: total.toFixed(2),
+                id: orderId // For compatibility
+            });
+        }
 
-      let secureCart = [...cart];
-      let subtotal = 0;
-
-      if (activeSale) {
-        console.log(`[PayPalServer] Applying active secure flash sale "${activeSale.title}" onto cart.`);
-        secureCart = cart.map((item: any) => {
-          let isEligible = false;
-          if (item.isBeatPack && activeSale.includeBeatPacks) {
-            isEligible = true;
-          } else if (!item.isBeatPack && !item.isMerch && activeSale.includeSingleBeats) {
-            isEligible = true;
-          }
-
-          if (activeSale.eligibleProducts && activeSale.eligibleProducts.length > 0 && !activeSale.eligibleProducts.includes('ALL')) {
-            const prodId = item.beatId || item.beatPackId || item.id;
-            if (!activeSale.eligibleProducts.includes(prodId)) {
-              isEligible = false;
-            }
-          }
-
-          let finalPrice = item.price;
-          if (isEligible) {
-            if (activeSale.discountType === 'percentage') {
-              finalPrice = Math.max(0, item.price * (1 - activeSale.discountAmount / 100));
-            } else if (activeSale.discountType === 'fixed') {
-              finalPrice = Math.max(0, item.price - activeSale.discountAmount);
-            }
-          }
-
-          subtotal += finalPrice;
-          return { ...item, price: Number(finalPrice.toFixed(2)) };
-        });
-      } else {
-        subtotal = cart.reduce((sum: number, item: any) => sum + (item.price || 0), 0);
-      }
-
-      const total = Math.max(0, subtotal * (1 - discount));
-
-      const newOrder: ServerOrder = {
-        orderId,
-        cart: secureCart,
-        subtotal,
-        discount,
-        total,
-        status: 'CREATED',
-        createdAt: new Date().toISOString(),
-      };
-
-      serverOrdersStore.set(orderId, newOrder);
-
-      // Mock redirection to real PayPal URL
-      const paypalUrl = `https://www.sandbox.paypal.com/checkoutnow?token=${orderId}`;
-
-      console.log(`[PayPalServer] Created verified order session ${orderId} for total $${total.toFixed(2)}. Redirecting to ${paypalUrl}`);
-
-      const appOrigin = getAppOrigin(req);
-      const returnUrl = `${appOrigin}/api/paypal/return?order_id=${orderId}`;
-      const cancelUrl = `${appOrigin}/api/paypal/cancel?order_id=${orderId}`;
-
-      res.json({
-        success: true,
-        orderId,
-        total: total.toFixed(2),
-        currency: 'USD',
-        approvalUrl: paypalUrl,
-        returnUrl,
-        cancelUrl,
-      });
+        res.status(400).json({ error: 'INVALID_REQUEST', message: 'Missing beatId/price or cart' });
     } catch (err: any) {
-      console.error('[PayPalServer] Error creating order:', err);
-      res.status(500).json({ error: 'ORDER_CREATION_FAILED', message: err.message || 'Failed to create PayPal order.' });
+        console.error('[PayPalServer] Create Order Error:', err);
+        res.status(500).json({ error: 'PAYPAL_ERROR', message: err.message });
+    }
+  });
+
+  // PayPal Server Order Capture Endpoint
+  app.post('/api/paypal/capture-order', async (req, res) => {
+    const { orderID, beatId } = req.body;
+    console.log(`[PayPalServer] Capturing order: ${orderID} for beat: ${beatId}`);
+
+    try {
+        if (!orderID) return res.status(400).json({ error: 'Missing orderID' });
+
+        const captureData = await capturePayPalOrder(orderID);
+        console.log(`[PayPalServer] Capture successful for ${orderID}`);
+
+        // Update local order record if exists
+        const order = serverOrdersStore.get(orderID);
+        if (order) {
+            order.status = 'COMPLETED';
+            serverOrdersStore.set(orderID, order);
+        }
+
+        res.json({ success: true, id: orderID, details: captureData });
+    } catch (err: any) {
+        console.error('[PayPalServer] Capture Order Error:', err);
+        res.status(500).json({ error: 'CAPTURE_FAILED', message: err.message });
     }
   });
 
@@ -1424,7 +1507,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     });
   }
 
-  const port = parseInt(process.env.PORT || '3000', 10);
+  const port = parseInt(process.env.PORT || '3001', 10);
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${port}`);
   });
