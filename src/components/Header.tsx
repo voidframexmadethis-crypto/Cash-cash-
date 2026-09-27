@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Menu, X, Sparkles, User, Volume2, Search, Music, Plus, Bell } from 'lucide-react';
+import { ShoppingBag, Menu, X, Sparkles, User, Volume2, Search, Music, Plus, Bell, Youtube } from 'lucide-react';
 import { CartItem } from '../types';
 
 interface HeaderProps {
@@ -46,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
           : 'bg-zinc-950/90 backdrop-blur-md border-zinc-900/80 py-2'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+      <div className="w-full px-4 sm:px-6 lg:px-10 h-14 sm:h-16 flex items-center justify-between">
         {/* Left: Brand Wordmark */}
         <button
           onClick={() => {
@@ -67,10 +67,10 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Center/Right Primary Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 text-xs font-semibold text-zinc-400">
+        <nav className="hidden lg:flex items-center gap-4 xl:gap-5 text-xs font-semibold text-zinc-400">
           <button
             onClick={() => setCurrentView('home')}
-            className={`hover:text-white transition-colors py-1 ${
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
               currentView === 'home' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
             }`}
           >
@@ -78,60 +78,43 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={() => setCurrentView('browse')}
-            className={`hover:text-white transition-colors py-1 ${
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
               currentView === 'browse' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
             }`}
           >
-            BEATS
+            STORE
+          </button>
+          <button
+            onClick={() => setCurrentView('feed')}
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
+              currentView === 'feed' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : ''
+            }`}
+          >
+            FEED
           </button>
           <button
             onClick={() => setCurrentView('charts')}
-            className={`hover:text-white transition-colors py-1 ${
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
               currentView === 'charts' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : ''
             }`}
           >
-            FEATURED
+            TOP TRACKS
           </button>
           <button
             onClick={() => setCurrentView('collections')}
-            className={`hover:text-white transition-colors py-1 ${
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
               currentView === 'collections' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
             }`}
           >
             COLLECTIONS
           </button>
           <button
-            onClick={() => setCurrentView('merch')}
-            className={`hover:text-white transition-colors py-1 ${
-              currentView === 'merch' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
+            onClick={() => setCurrentView('top-rated')}
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
+              currentView === 'top-rated' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : ''
             }`}
           >
-            MERCH
-          </button>
-          <button
-            onClick={() => setCurrentView('beatpacks')}
-            className={`hover:text-white transition-colors py-1 ${
-              currentView === 'beatpacks' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
-            }`}
-          >
-            BEAT PACKS
-          </button>
-          <button
-            onClick={() => setCurrentView('search-by-sound')}
-            className={`hover:text-white transition-colors py-1 ${
-              currentView === 'search-by-sound' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : ''
-            }`}
-          >
-            SEARCH BY SOUND
-          </button>
-          <button
-            onClick={() => setCurrentView('hall-of-fame')}
-            className={`hover:text-white transition-colors py-1 ${
-              currentView === 'hall-of-fame' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : 'text-zinc-400'
-            }`}
-            title="Record Plaque Hall of Fame"
-          >
-            HALL OF FAME
+            TOP RATED
           </button>
           <button
             onClick={() => {
@@ -140,15 +123,51 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenAudioPlayer();
               }
             }}
-            className={`transition-colors py-1 font-extrabold flex items-center gap-1.5 px-2.5 py-1 rounded-xl shadow-sm cursor-pointer ${
+            className={`transition-colors py-1 font-extrabold flex items-center gap-1 px-2.5 rounded-xl shadow-sm cursor-pointer ${
               currentView === 'player'
                 ? 'bg-purple-600 text-white border border-purple-400 shadow-purple-950 ring-1 ring-purple-400/50'
-                : 'bg-purple-950/60 border border-purple-500/30 text-purple-300 hover:text-white hover:border-purple-400/60'
+                : 'bg-purple-950/70 border border-purple-500/40 text-purple-300 hover:text-white hover:border-purple-400/60'
             }`}
-            title="Open Audio Player"
+            title="Open Audio Player Directly"
           >
             <Volume2 className="w-3.5 h-3.5 text-purple-400" />
             <span>AUDIO PLAYER</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('merch')}
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
+              currentView === 'merch' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
+            }`}
+          >
+            MERCH
+          </button>
+          <button
+            onClick={() => setCurrentView('youtube-videos')}
+            className={`hover:text-white transition-colors py-1 flex items-center gap-1 cursor-pointer ${
+              currentView === 'youtube-videos' ? 'text-red-400 font-extrabold border-b-2 border-red-500' : 'text-zinc-400'
+            }`}
+            title="YouTube Studio Videos"
+          >
+            <Youtube className="w-3.5 h-3.5 text-red-500" />
+            <span>YOUTUBE</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className={`hover:text-white transition-colors py-1 flex items-center gap-1 cursor-pointer ${
+              currentView === 'dashboard' ? 'text-purple-400 font-extrabold border-b-2 border-purple-500' : 'text-purple-300'
+            }`}
+            title="Producer Dashboard"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>DASHBOARD</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('profile')}
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
+              currentView === 'profile' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
+            }`}
+          >
+            PROFILE
           </button>
         </nav>
 
@@ -268,45 +287,39 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="md:hidden bg-zinc-950 border-b border-zinc-800 px-6 py-4 space-y-3 text-xs font-extrabold text-zinc-300 animate-fadeIn">
           <button
             onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2 ${currentView === 'home' ? 'text-purple-400' : 'hover:text-white'}`}
+            className={`block w-full text-left py-2 ${currentView === 'home' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
             HOME
           </button>
           <button
             onClick={() => { setCurrentView('browse'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2 ${currentView === 'browse' ? 'text-purple-400' : 'hover:text-white'}`}
+            className={`block w-full text-left py-2 ${currentView === 'browse' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
-            BEATS CATALOG
+            STORE
+          </button>
+          <button
+            onClick={() => { setCurrentView('feed'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 ${currentView === 'feed' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
+          >
+            FEED
           </button>
           <button
             onClick={() => { setCurrentView('charts'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2.5 ${currentView === 'charts' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
+            className={`block w-full text-left py-2 ${currentView === 'charts' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
-            FEATURED & CHARTS
+            TOP TRACKS
           </button>
           <button
             onClick={() => { setCurrentView('collections'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2.5 ${currentView === 'collections' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
+            className={`block w-full text-left py-2 ${currentView === 'collections' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
             COLLECTIONS
           </button>
           <button
-            onClick={() => { setCurrentView('merch'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2.5 ${currentView === 'merch' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
+            onClick={() => { setCurrentView('top-rated'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 ${currentView === 'top-rated' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
-            MERCH
-          </button>
-          <button
-            onClick={() => { setCurrentView('beatpacks'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2.5 ${currentView === 'beatpacks' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
-          >
-            BEAT PACKS
-          </button>
-          <button
-            onClick={() => { setCurrentView('search-by-sound'); setMobileMenuOpen(false); }}
-            className={`block w-full text-left py-2.5 ${currentView === 'search-by-sound' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
-          >
-            SEARCH BY SOUND
+            TOP RATED
           </button>
           <button
             onClick={() => {
@@ -316,7 +329,7 @@ export const Header: React.FC<HeaderProps> = ({
               }
               setMobileMenuOpen(false);
             }}
-            className={`block w-full text-left py-2.5 font-extrabold flex items-center gap-2 ${
+            className={`block w-full text-left py-2 font-extrabold flex items-center gap-2 ${
               currentView === 'player' ? 'text-purple-400' : 'text-purple-300 hover:text-white'
             }`}
           >
@@ -324,10 +337,34 @@ export const Header: React.FC<HeaderProps> = ({
             <span>AUDIO PLAYER</span>
           </button>
           <button
-            onClick={() => { setCurrentView('profile'); setMobileMenuOpen(false); }}
-            className="block w-full text-left py-2 text-zinc-400 hover:text-white"
+            onClick={() => { setCurrentView('merch'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 ${currentView === 'merch' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
-            PRODUCER PROFILE
+            MERCH
+          </button>
+          <button
+            onClick={() => { setCurrentView('youtube-videos'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 font-extrabold flex items-center gap-2 ${
+              currentView === 'youtube-videos' ? 'text-red-400' : 'text-zinc-300 hover:text-white'
+            }`}
+          >
+            <Youtube className="w-4 h-4 text-red-500" />
+            <span>YOUTUBE</span>
+          </button>
+          <button
+            onClick={() => { setCurrentView('dashboard'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 font-extrabold flex items-center gap-2 ${
+              currentView === 'dashboard' ? 'text-purple-400' : 'text-purple-300 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <span>DASHBOARD</span>
+          </button>
+          <button
+            onClick={() => { setCurrentView('profile'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 ${currentView === 'profile' ? 'text-purple-400 font-extrabold' : 'text-zinc-300 hover:text-white'}`}
+          >
+            PROFILE
           </button>
           <button
             onClick={() => { setCurrentView('hall-of-fame'); setMobileMenuOpen(false); }}

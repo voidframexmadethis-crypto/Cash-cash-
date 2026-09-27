@@ -328,27 +328,43 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* SEARCH SECTION                                                            */}
       {/* ========================================================================= */}
       <section className="px-4 sm:px-6 lg:px-8 -mt-20 relative z-20 w-full">
-        <div className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex items-center gap-4">
-          <Search className="w-6 h-6 text-purple-500 ml-2" />
+        <div className="w-full bg-zinc-950/90 backdrop-blur-2xl border border-purple-500/30 hover:border-purple-500/60 shadow-2xl shadow-purple-950/30 rounded-3xl p-6 flex items-center gap-4 transition-all">
+          <Search className="w-6 h-6 text-purple-400 ml-2 shrink-0" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Find your sound (BPM, Key, Mood...)"
-            className="w-full bg-transparent text-white placeholder-zinc-500 text-lg font-medium focus:outline-none"
+            placeholder="Search beat store by title, BPM, musical key, tag, or mood..."
+            className="w-full bg-transparent text-white placeholder-zinc-500 text-base sm:text-lg font-medium focus:outline-none"
           />
         </div>
       </section>
 
-      <div className="space-y-24 px-4 sm:px-6 lg:px-8 w-full">
+      <div className="space-y-28 lg:space-y-36 px-4 sm:px-6 lg:px-8 w-full">
         {/* ========================================================================= */}
         {/* FEATURED BEATS (HORIZONTAL SHELF)                                         */}
         {/* ========================================================================= */}
         <section className="space-y-8">
-          <h2 className="text-3xl font-black text-white uppercase tracking-tight">FEATURED PRODUCTIONS</h2>
-          <div className="flex gap-6 overflow-x-auto pb-6 snap-x scrollbar-hide w-full">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-zinc-900/80">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 text-purple-400 font-mono text-[10px] font-bold uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>SPOTLIGHT & EXECUTIVE SELECTIONS</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">FEATURED PRODUCTIONS</h2>
+            </div>
+            <button
+              onClick={() => onNavigate('browse')}
+              className="text-xs font-mono font-bold text-zinc-400 hover:text-purple-300 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>Explore All Beats ({publishedBeats.length})</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex gap-6 sm:gap-8 overflow-x-auto pb-6 snap-x scrollbar-none w-full">
             {featuredBeats.map((beat) => (
-              <div key={beat.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
+              <div key={beat.id} className="min-w-[290px] sm:min-w-[340px] snap-start">
                 <BeatCard
                   beat={beat}
                   isPlaying={isPlaying}
@@ -371,10 +387,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
         {/* NEW RELEASES (HORIZONTAL SHELF)                                           */}
         {/* ========================================================================= */}
         <section className="space-y-8">
-          <h2 className="text-3xl font-black text-white uppercase tracking-tight">NEW RELEASES</h2>
-          <div className="flex gap-6 overflow-x-auto pb-6 snap-x scrollbar-hide w-full">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-zinc-900/80">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 text-purple-400 font-mono text-[10px] font-bold uppercase tracking-widest">
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                <span>FRESH FROM THE ANALOG STUDIO</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">NEW RELEASES</h2>
+            </div>
+            <button
+              onClick={() => onNavigate('browse')}
+              className="text-xs font-mono font-bold text-zinc-400 hover:text-purple-300 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>View Full Catalog</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex gap-6 sm:gap-8 overflow-x-auto pb-6 snap-x scrollbar-none w-full">
             {newReleasesBeats.map((beat) => (
-              <div key={beat.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
+              <div key={beat.id} className="min-w-[290px] sm:min-w-[340px] snap-start">
                 <BeatCard
                   beat={beat}
                   isPlaying={isPlaying}
@@ -397,9 +429,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
         {/* TOP TRACKS                                                                */}
         {/* ========================================================================= */}
         <section className="space-y-8">
-          <h2 className="text-3xl font-black text-white uppercase tracking-tight">TOP TRACKS</h2>
-          <div className="space-y-3 w-full">
-            {topTracksBeats.slice(0, 5).map((beat, idx) => (
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-zinc-900/80">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 text-purple-400 font-mono text-[10px] font-bold uppercase tracking-widest">
+                <Volume2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>MOST STREAMED BY ARTISTS</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">TOP CHARTS</h2>
+            </div>
+          </div>
+
+          <div className="space-y-4 w-full">
+            {topTracksBeats.slice(0, 6).map((beat, idx) => (
               <BeatRow
                 key={beat.id}
                 beat={beat}
@@ -423,14 +464,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
         {/* COLLECTIONS                                                               */}
         {/* ========================================================================= */}
         <section className="space-y-8">
-          <h2 className="text-3xl font-black text-white uppercase tracking-tight">COLLECTIONS</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">
+          <div className="pb-4 border-b border-zinc-900/80">
+            <div className="inline-flex items-center gap-2 text-purple-400 font-mono text-[10px] font-bold uppercase tracking-widest mb-1">
+              <Folder className="w-3.5 h-3.5 text-purple-400" />
+              <span>THEMATIC SOUND SUITES</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">CURATED COLLECTIONS</h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 w-full">
             {collections.slice(0, 4).map((col) => (
-              <div key={col.id} className="cursor-pointer" onClick={() => onNavigate('collections')}>
-                <div className="aspect-square rounded-3xl overflow-hidden mb-4 border border-zinc-800">
-                  <img src={col.artworkUrl} alt={col.name} className="w-full h-full object-cover hover:scale-105 transition-transform" />
+              <div
+                key={col.id}
+                className="group cursor-pointer bg-zinc-950/80 backdrop-blur-xl p-5 rounded-3xl border border-zinc-850 hover:border-purple-500/50 hover:shadow-2xl hover:shadow-purple-950/40 transition-all duration-300"
+                onClick={() => onNavigate('collections')}
+              >
+                <div className="aspect-square rounded-2xl overflow-hidden mb-4 border border-zinc-800 relative">
+                  <img src={col.artworkUrl} alt={col.name} className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
                 </div>
-                <h3 className="font-black text-white text-lg">{col.name}</h3>
+                <h3 className="font-extrabold text-white text-lg group-hover:text-purple-300 transition-colors">{col.name}</h3>
+                <p className="text-xs text-zinc-400 font-mono mt-1">Explore Collection →</p>
               </div>
             ))}
           </div>
@@ -446,6 +500,59 @@ export const HomeView: React.FC<HomeViewProps> = ({
             onAddBeatPackToCart={onAddBeatPackToCart}
           />
         </div>
+
+        {/* VIP Email Subscription Section */}
+        <section className="pt-8 w-full">
+          <div className="p-8 sm:p-12 bg-gradient-to-r from-purple-950/80 via-zinc-950 to-zinc-950 border border-purple-500/30 rounded-3xl shadow-2xl space-y-6">
+            <div className="max-w-2xl space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900/60 border border-purple-500/30 text-purple-300 text-[10px] font-mono font-bold uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>EXECUTIVE ARTIST LIST</span>
+              </div>
+              <h2 className="text-2xl sm:text-4xl font-black text-white uppercase tracking-tight">
+                JOIN THE CASHMERE VIP ARTIST VAULT
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-400 font-mono leading-relaxed">
+                Get instant 50% discount codes, unreleased beat previews, and exclusive free download stem packages delivered directly to your inbox.
+              </p>
+            </div>
+
+            {newsletterSubscribed ? (
+              <div className="p-4 bg-emerald-950/80 border border-emerald-500/50 rounded-2xl flex items-center gap-3 text-emerald-300 text-xs font-mono font-bold">
+                <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>YOU ARE SUBSCRIBED! Welcome to the Cashmere Kid$ VIP Artist Network. Check your inbox for your 50% promo code (CASHMERE50).</span>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newsletterEmail.trim()) {
+                    setNewsletterSubscribed(true);
+                  }
+                }}
+                className="flex flex-col sm:flex-row gap-3 max-w-xl"
+              >
+                <div className="relative flex-1">
+                  <Mail className="w-5 h-5 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    value={newsletterEmail}
+                    onChange={(e) => setNewsletterEmail(e.target.value)}
+                    placeholder="Enter your email address..."
+                    className="w-full pl-12 pr-4 py-3.5 bg-zinc-900 border border-zinc-800 rounded-2xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-8 py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-purple-950/80 transition-all cursor-pointer shrink-0"
+                >
+                  SUBSCRIBE NOW
+                </button>
+              </form>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

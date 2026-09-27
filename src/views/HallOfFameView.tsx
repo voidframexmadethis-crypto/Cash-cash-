@@ -53,7 +53,7 @@ export const HallOfFameView: React.FC<HallOfFameViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-black text-white py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-12 animate-fadeIn">
+    <div className="min-h-screen bg-black text-white py-10 px-2 w-full space-y-12 animate-fadeIn">
       {/* Header Section (Understated & Elegant) */}
       <div className="border-b border-zinc-900 pb-8 text-center sm:text-left flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">

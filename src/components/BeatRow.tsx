@@ -36,10 +36,10 @@ export const BeatRow: React.FC<BeatRowProps> = ({
   return (
     <div
       onClick={() => onViewDetail && onViewDetail(beat)}
-      className={`group flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border transition-all duration-200 text-left font-sans cursor-pointer ${
+      className={`group flex flex-col sm:flex-row sm:items-center justify-between gap-5 p-5 sm:p-6 rounded-3xl border transition-all duration-300 text-left font-sans cursor-pointer ${
         isCurrent
-          ? 'bg-zinc-900/90 border-zinc-700 shadow-xl shadow-black/80'
-          : 'bg-zinc-950/40 border-zinc-900/60 hover:bg-zinc-900/50 hover:border-zinc-800'
+          ? 'bg-purple-950/30 border-purple-500/80 shadow-2xl shadow-purple-950/60 ring-1 ring-purple-500/40'
+          : 'bg-zinc-950/70 border-zinc-850/80 hover:bg-zinc-900/60 hover:border-purple-500/40 hover:shadow-xl hover:shadow-purple-950/20'
       }`}
     >
       {/* Left side: Artwork, Play button, Title, Genres */}

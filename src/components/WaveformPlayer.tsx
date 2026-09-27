@@ -862,7 +862,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           </div>
         )}
 
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="w-full px-4 sm:px-6 lg:px-10 flex items-center justify-between gap-4">
           
           {/* Left: Beat Artwork & Info */}
           <div className="flex items-center gap-3.5 min-w-0 max-w-xs sm:max-w-sm">

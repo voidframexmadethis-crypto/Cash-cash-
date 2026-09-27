@@ -79,7 +79,7 @@ export const SearchBySoundView: React.FC<SearchBySoundViewProps> = ({
       </div>
 
       {/* Section: What is Search by Sound? */}
-      <div className="space-y-8 max-w-6xl mx-auto px-2">
+      <div className="space-y-8 w-full px-2">
         <div className="text-center">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white">What is Search by Sound?</h2>
         </div>
@@ -144,7 +144,7 @@ export const SearchBySoundView: React.FC<SearchBySoundViewProps> = ({
       </div>
 
       {/* Featured Acoustic Carousel Cards (Matching IMG_3766.png top row) */}
-      <div className="space-y-4 max-w-6xl mx-auto px-2">
+      <div className="space-y-4 w-full px-2">
         <h3 className="text-xl font-bold text-white">Featured Audio References</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {beats.slice(0, 5).map((beat) => (
@@ -170,7 +170,7 @@ export const SearchBySoundView: React.FC<SearchBySoundViewProps> = ({
       </div>
 
       {/* Section: Top Beats Today */}
-      <div className="space-y-4 max-w-6xl mx-auto px-2">
+      <div className="space-y-4 w-full px-2">
         <div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Top Beats Today</h2>
           <p className="text-xs text-zinc-400 mt-1">
@@ -241,7 +241,7 @@ export const SearchBySoundView: React.FC<SearchBySoundViewProps> = ({
       </div>
 
       {/* Section: Hidden Gems (Matching IMG_3767.png) */}
-      <div className="space-y-4 max-w-6xl mx-auto px-2">
+      <div className="space-y-4 w-full px-2">
         <div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Hidden Gems</h2>
           <p className="text-xs text-zinc-400 mt-1">

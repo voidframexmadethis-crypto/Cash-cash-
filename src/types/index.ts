@@ -178,4 +178,5 @@ export interface StoreSettings {
   requireEmailForFreeDownload: boolean;
   voiceTagFrequencySeconds: number;
   autoSendInvoices: boolean;
+  merchStoreUrl?: string;
 }

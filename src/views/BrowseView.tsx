@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Grid,
@@ -58,6 +58,12 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Feature 26: Filter Chips States
   const [selectedGenre, setSelectedGenre] = useState<string>(initialGenreFilter || 'ALL');
+
+  useEffect(() => {
+    if (initialGenreFilter) {
+      setSelectedGenre(initialGenreFilter);
+    }
+  }, [initialGenreFilter]);
   const [selectedTag, setSelectedTag] = useState<string>('ALL');
   const [selectedKey, setSelectedKey] = useState<string>('ALL');
   const [selectedBpmRange, setSelectedBpmRange] = useState<string>('ALL');
@@ -210,7 +216,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       {/* ========================================================================= */}
       {/* 25. ADVANCED STORE SEARCH BAR WITH LEFT ALIGNED SEARCH ICON              */}
       {/* ========================================================================= */}
-      <div className="relative w-full max-w-4xl mx-auto px-4 mt-6">
+      <div className="relative w-full px-4 mt-6">
         <div className="absolute left-8 top-1/2 -translate-y-1/2 text-zinc-500">
           <Search className="w-5 h-5" />
         </div>
@@ -226,7 +232,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       {/* ========================================================================= */}
       {/* DOUBLE-TIER FAST-ACCESS PILLS WITH CENTERED RESET BUTTON                 */}
       {/* ========================================================================= */}
-      <div className="w-full max-w-4xl mx-auto px-4 flex flex-col items-center gap-4">
+      <div className="w-full px-4 flex flex-col items-center gap-4">
         
         {/* Tier 1: Primary Genres */}
         <div className="flex flex-wrap items-center justify-center gap-2 max-w-full">
@@ -287,7 +293,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       </div>
 
       {/* Control Strip (Sort, Key, BPM selectors) */}
-      <div className="w-full max-w-4xl mx-auto px-4">
+      <div className="w-full px-4">
         <div className="flex items-center justify-between p-3 bg-[#0d0d0e]/60 rounded-2xl border border-zinc-900">
           <div className="flex items-center gap-3">
             {/* Key Filter Dropdown */}
@@ -534,7 +540,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             onAction={resetFilters}
           />
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 lg:gap-10">
             {filteredBeats.map((beat) => (
               <BeatCard
                 key={beat.id}

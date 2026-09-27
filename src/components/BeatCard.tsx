@@ -33,10 +33,10 @@ export const BeatCard: React.FC<BeatCardProps> = ({
 
   return (
     <div
-      className={`group relative flex flex-col bg-zinc-950 rounded-2xl overflow-hidden border transition-all duration-300 text-left font-sans ${
+      className={`group relative flex flex-col bg-zinc-950/80 backdrop-blur-xl rounded-3xl overflow-hidden border transition-all duration-300 text-left font-sans ${
         isCurrent
-          ? 'border-purple-500 bg-purple-950/20 shadow-xl shadow-purple-950/60 ring-1 ring-purple-500/50'
-          : 'border-zinc-900 hover:border-purple-500/40 hover:shadow-xl hover:shadow-purple-950/30'
+          ? 'border-purple-500 bg-purple-950/20 shadow-2xl shadow-purple-950/80 ring-1 ring-purple-500/60'
+          : 'border-zinc-850/80 hover:border-purple-500/50 hover:shadow-2xl hover:shadow-purple-950/30'
       }`}
     >
       {/* Artwork Container - Primary Visual Anchor */}

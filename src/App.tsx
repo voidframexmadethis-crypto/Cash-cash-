@@ -26,6 +26,7 @@ import { BeatPacksView } from './views/BeatPacksView';
 import { HallOfFameView } from './views/HallOfFameView';
 import { CheckoutResultView } from './views/CheckoutResultView';
 import { AudioPlayerView } from './views/AudioPlayerView';
+import { YouTubeVideosView } from './views/YouTubeVideosView';
 
 import {
   Beat,
@@ -102,10 +103,15 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_PROMOTIONS;
   });
 
-  const [settings] = useState<StoreSettings>(() => {
+  const [settings, setSettings] = useState<StoreSettings>(() => {
     const saved = localStorage.getItem('voodoo_settings');
     return saved ? JSON.parse(saved) : INITIAL_STORE_SETTINGS;
   });
+
+  const handleUpdateSettings = (newSettings: StoreSettings) => {
+    setSettings(newSettings);
+    localStorage.setItem('voodoo_settings', JSON.stringify(newSettings));
+  };
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('voodoo_cart');
@@ -689,7 +695,7 @@ export default function App() {
         )}
         
         {/* Main View Container */}
-        <main className={`flex-1 ${!isLiveStoreMode ? 'max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8' : 'w-full'}`}>
+        <main className={`flex-1 ${!isLiveStoreMode ? 'w-full px-4 sm:px-6 lg:px-10 pt-6' : 'w-full'}`}>
         {currentView === 'home' && (
           <HomeView
             beats={publishedBeats}
@@ -728,6 +734,14 @@ export default function App() {
             favoriteIds={favoriteIds}
             onToggleFavorite={handleToggleFavorite}
             onNavigateToBrowse={() => setCurrentView('browse')}
+          />
+        )}
+
+        {currentView === 'youtube-videos' && (
+          <YouTubeVideosView
+            youtubeVideos={youtubeVideos}
+            profile={profile}
+            onOpenDashboard={() => setCurrentView('dashboard')}
           />
         )}
 
@@ -826,7 +840,24 @@ export default function App() {
           />
         )}
 
-        {currentView === 'charts' && (
+        {currentView === 'feed' && (
+          <BrowseView
+            beats={publishedBeats}
+            currentBeat={currentBeat}
+            isPlaying={isPlaying}
+            onPlayToggle={handlePlayToggle}
+            onBuyClick={(beat) => setSelectedBuyBeat(beat)}
+            onFreeDownloadClick={(beat) => setSelectedFreeBeat(beat)}
+            onShareClick={(beat) => setSelectedShareBeat(beat)}
+            onViewDetail={handleViewDetailWithHistory}
+            initialGenreFilter="ALL"
+            currencySymbol={settings.currencySymbol}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+          />
+        )}
+
+        {(currentView === 'charts' || currentView === 'top-rated') && (
           <TopChartsView
             beats={publishedBeats}
             currentBeat={currentBeat}
@@ -861,6 +892,8 @@ export default function App() {
           <MerchView
             onNavigateToBrowse={() => handleNavigateWithGenre('browse')}
             onAddMerchToCart={handleAddMerchToCart}
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
           />
         )}
 
@@ -894,8 +927,8 @@ export default function App() {
     </div>
 
       {/* Site-Wide Luxury Footer */}
-      <footer className="border-t border-zinc-900 bg-black py-14 px-4 sm:px-6 lg:px-8 mt-20 mb-20 text-xs text-zinc-400">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-zinc-900">
+      <footer className="border-t border-zinc-900 bg-black py-14 px-4 sm:px-6 lg:px-10 mt-20 mb-20 text-xs text-zinc-400 w-full">
+        <div className="w-full grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-zinc-900">
           {/* Col 1: Brand & Kicker */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -925,6 +958,7 @@ export default function App() {
             <h4 className="font-extrabold text-white uppercase text-[11px] tracking-wider text-purple-300">Brand & Studio</h4>
             <ul className="space-y-1.5 font-medium text-xs">
               <li><button onClick={() => handleNavigateWithGenre('profile')} className="hover:text-white transition-colors">Producer Profile & Vision</button></li>
+              <li><button onClick={() => handleNavigateWithGenre('youtube-videos')} className="hover:text-white text-red-400 font-bold transition-colors">YouTube Studio Videos</button></li>
               <li><button onClick={() => handleNavigateWithGenre('hall-of-fame')} className="text-purple-300 hover:text-white transition-colors font-bold">Record Plaque Hall of Fame</button></li>
               <li><button onClick={() => handleNavigateWithGenre('profile')} className="hover:text-white transition-colors">Book Custom Production</button></li>
               <li><button onClick={() => handleNavigateWithGenre('dashboard')} className="text-purple-400 hover:text-purple-300 font-bold transition-colors">Producer Studio Portal</button></li>
@@ -943,7 +977,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-[11px] text-zinc-500">
+        <div className="w-full pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-[11px] text-zinc-500">
           <span>© {new Date().getFullYear()} CASHMERE KID$. All rights reserved.</span>
           <span className="text-zinc-600">Executive Sound Architecture · Los Angeles / Atlanta</span>
         </div>

@@ -61,7 +61,7 @@ export const BeatPacksView: React.FC<BeatPacksViewProps> = ({
   };
 
   return (
-    <div className="space-y-16 py-12 animate-fadeIn max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="space-y-16 py-12 animate-fadeIn w-full px-2">
       {/* 1. HERO SECTION & EDITORIAL BRAND STATEMENT */}
       <div className="space-y-6 text-center max-w-3xl mx-auto pt-4 pb-8">
         <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-[0.25em] block">

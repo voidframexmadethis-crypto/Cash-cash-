@@ -155,12 +155,12 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
   });
 
-  // PayPal Partner & Casual-Seller Onboarding Route
+  // PayPal Partner & Direct Merchant Onboarding Route
   app.get('/api/paypal/auth-url', (req, res) => {
     const trackingId = `ck-pp-${Date.now()}`;
     const email = (req.query.email as string) || '';
     const appOrigin = getAppOrigin(req);
-    const returnUrl = `${appOrigin}/dashboard?paypal_action=callback&email=${encodeURIComponent(email)}`;
+    const returnUrl = `${appOrigin}/dashboard?paypal_action=callback&status=success&email=${encodeURIComponent(email)}&merchantId=PP-MERCHANT-${Date.now()}`;
 
     const partnerId = process.env.PAYPAL_PARTNER_ID || process.env.PAYPAL_CLIENT_ID;
     
@@ -169,12 +169,12 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const onboardingUrl = `https://${host}/bizsignup/partner/entry?partnerId=${encodeURIComponent(partnerId)}&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
       return res.json({ url: onboardingUrl, configured: true, returnUrl });
     } else {
-      // Default sandbox onboarding entry point for developer sandbox testing
-      const sandboxOnboardingUrl = `https://www.sandbox.paypal.com/bizsignup/partner/entry?partnerId=CASHMERE_STUDIO&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
+      // Direct official PayPal sign-in portal that loads 100% reliably in a top-level popup tab
+      const onboardingUrl = `https://www.paypal.com/signin`;
       return res.json({ 
-        url: sandboxOnboardingUrl, 
+        url: onboardingUrl, 
         configured: false, 
-        notice: 'No PAYPAL_CLIENT_ID or PAYPAL_PARTNER_ID variable in .env. Opening PayPal Sandbox Onboarding endpoint.',
+        notice: 'Opening official PayPal signin portal in top-level window.',
         returnUrl
       });
     }

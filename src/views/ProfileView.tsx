@@ -334,7 +334,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const activePromo = promotions.find(p => p.active);
 
   return (
-    <div className="space-y-12 py-8 animate-fadeIn max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-left font-sans">
+    <div className="space-y-12 py-8 animate-fadeIn w-full px-2 text-left font-sans">
       
       {/* ACTIVE PROMO BANNER (Only if active promotion exists) */}
       {activePromo && (
