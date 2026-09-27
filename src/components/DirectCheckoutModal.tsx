@@ -54,10 +54,10 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   if (!isOpen || !beat) return null;
 
   const tier = LICENSE_TIERS[currentLicenseKey] || LICENSE_TIERS.mp3Lease;
-  let basePrice = beat.pricing.mp3Lease;
-  if (currentLicenseKey === 'premiumLease') basePrice = beat.pricing.premiumLease;
-  if (currentLicenseKey === 'unlimited') basePrice = beat.pricing.unlimited;
-  if (currentLicenseKey === 'exclusive') basePrice = beat.pricing.exclusive;
+  let basePrice = beat.pricing?.mp3Lease ?? LICENSE_TIERS.mp3Lease.price;
+  if (currentLicenseKey === 'premiumLease') basePrice = beat.pricing?.premiumLease ?? LICENSE_TIERS.premiumLease.price;
+  if (currentLicenseKey === 'unlimited') basePrice = beat.pricing?.unlimited ?? LICENSE_TIERS.unlimited.price;
+  if (currentLicenseKey === 'exclusive') basePrice = beat.pricing?.exclusive ?? LICENSE_TIERS.exclusive.price;
 
   const discountAmount = basePrice * appliedDiscount;
   const total = Math.max(0, basePrice - discountAmount);
@@ -240,10 +240,10 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
             <div className="grid grid-cols-2 gap-2">
               {(['mp3Lease', 'premiumLease', 'unlimited', 'exclusive'] as LicenseTierKey[]).map((key) => {
                 const t = LICENSE_TIERS[key];
-                let p = beat.pricing.mp3Lease;
-                if (key === 'premiumLease') p = beat.pricing.premiumLease;
-                if (key === 'unlimited') p = beat.pricing.unlimited;
-                if (key === 'exclusive') p = beat.pricing.exclusive;
+                let p = beat.pricing?.mp3Lease ?? LICENSE_TIERS.mp3Lease.price;
+                if (key === 'premiumLease') p = beat.pricing?.premiumLease ?? LICENSE_TIERS.premiumLease.price;
+                if (key === 'unlimited') p = beat.pricing?.unlimited ?? LICENSE_TIERS.unlimited.price;
+                if (key === 'exclusive') p = beat.pricing?.exclusive ?? LICENSE_TIERS.exclusive.price;
                 const isSelected = currentLicenseKey === key;
 
                 return (

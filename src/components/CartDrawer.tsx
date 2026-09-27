@@ -189,10 +189,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     let newPrice = tier.price;
 
     if (matchedBeat) {
-      if (newKey === 'mp3Lease') newPrice = matchedBeat.pricing.mp3Lease;
-      if (newKey === 'premiumLease') newPrice = matchedBeat.pricing.premiumLease;
-      if (newKey === 'unlimited') newPrice = matchedBeat.pricing.unlimited;
-      if (newKey === 'exclusive') newPrice = matchedBeat.pricing.exclusive;
+      if (newKey === 'mp3Lease') newPrice = matchedBeat.pricing?.mp3Lease ?? LICENSE_TIERS.mp3Lease.price;
+      if (newKey === 'premiumLease') newPrice = matchedBeat.pricing?.premiumLease ?? LICENSE_TIERS.premiumLease.price;
+      if (newKey === 'unlimited') newPrice = matchedBeat.pricing?.unlimited ?? LICENSE_TIERS.unlimited.price;
+      if (newKey === 'exclusive') newPrice = matchedBeat.pricing?.exclusive ?? LICENSE_TIERS.exclusive.price;
     }
 
     if (onUpdateCartItemLicense) {
@@ -329,16 +329,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                 className="bg-zinc-900 border border-zinc-800 text-purple-300 text-xs font-semibold rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer"
                               >
                                 <option value="mp3Lease">
-                                  MP3 Lease ({currencySymbol}{(matchedBeat?.pricing.mp3Lease || LICENSE_TIERS.mp3Lease.price).toFixed(2)})
+                                  MP3 Lease ({currencySymbol}{(matchedBeat?.pricing?.mp3Lease || LICENSE_TIERS.mp3Lease.price).toFixed(2)})
                                 </option>
                                 <option value="premiumLease">
-                                  Premium M4A ({currencySymbol}{(matchedBeat?.pricing.premiumLease || LICENSE_TIERS.premiumLease.price).toFixed(2)})
+                                  Premium M4A ({currencySymbol}{(matchedBeat?.pricing?.premiumLease || LICENSE_TIERS.premiumLease.price).toFixed(2)})
                                 </option>
                                 <option value="unlimited">
-                                  Unlimited Stems ({currencySymbol}{(matchedBeat?.pricing.unlimited || LICENSE_TIERS.unlimited.price).toFixed(2)})
+                                  Unlimited Stems ({currencySymbol}{(matchedBeat?.pricing?.unlimited || LICENSE_TIERS.unlimited.price).toFixed(2)})
                                 </option>
                                 <option value="exclusive">
-                                  Exclusive Rights ({currencySymbol}{(matchedBeat?.pricing.exclusive || LICENSE_TIERS.exclusive.price).toFixed(2)})
+                                  Exclusive Rights ({currencySymbol}{(matchedBeat?.pricing?.exclusive || LICENSE_TIERS.exclusive.price).toFixed(2)})
                                 </option>
                               </select>
                             </div>

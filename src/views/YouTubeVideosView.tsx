@@ -38,7 +38,7 @@ export const YouTubeVideosView: React.FC<YouTubeVideosViewProps> = ({
     return matchesCategory && matchesSearch;
   });
 
-  const youtubeChannelUrl = profile?.socials?.youtube || 'https://youtube.com';
+  const youtubeChannelUrl = profile?.socialLinks?.youtube || 'https://youtube.com';
 
   const activeVideo = selectedVideo || filteredVideos[0] || null;
 

@@ -18,18 +18,28 @@ const fileCache = new Map<string, { buffer: Buffer; mimeType: string }>();
 
 function isValidAudioBuffer(buffer: Buffer, fileName: string): { valid: boolean; error?: string; mimeType: string } {
   if (!buffer || buffer.length === 0) {
-    return { valid: false, error: 'FILE_ZERO_BYTES: Audio buffer is empty.', mimeType: 'audio/mpeg' };
+    return { valid: false, error: 'FILE_ZERO_BYTES: Buffer is empty.', mimeType: 'audio/mpeg' };
   }
 
   // Check if buffer is an HTML error page (e.g. starting with <!DOCTYPE or <html)
   const headerStr = buffer.slice(0, 100).toString('utf8').toLowerCase();
   if (headerStr.includes('<!doctype html') || headerStr.includes('<html') || headerStr.includes('<error')) {
-    return { valid: false, error: 'INVALID_AUDIO: Storage provider returned HTML error document instead of binary audio stream.', mimeType: 'audio/mpeg' };
+    return { valid: false, error: 'INVALID_DATA: Storage provider returned HTML error document instead of binary stream.', mimeType: 'audio/mpeg' };
   }
 
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.wav')) {
     return { valid: false, error: 'UNSUPPORTED_CODEC: WAV format is permanently excluded. MP3 and M4A only.', mimeType: 'audio/wav' };
+  }
+
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return { valid: true, mimeType: 'image/jpeg' };
+  }
+  if (lower.endsWith('.png')) {
+    return { valid: true, mimeType: 'image/png' };
+  }
+  if (lower.endsWith('.webp')) {
+    return { valid: true, mimeType: 'image/webp' };
   }
 
   const mimeType = lower.endsWith('.m4a') ? 'audio/mp4' : 'audio/mpeg';
@@ -640,14 +650,14 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     });
   });
 
-  app.post('/api/storage/upload', upload.single('audioFile'), async (req: any, res: any) => {
+  (app as any).post('/api/storage/upload', upload.single('audioFile'), async (req: any, res: any) => {
     try {
       const iaAccessKey = process.env.IA_ACCESS_KEY;
       const iaSecretKey = process.env.IA_SECRET_KEY;
       const isIaConfigured = !!(iaAccessKey && iaSecretKey);
 
       if (!isIaConfigured) {
-        console.warn('[InternetArchiveStorageAdapter] IA keys are not set, caching file in-memory for instant local playback.');
+        console.warn('[InternetArchiveStorageAdapter] IA keys are not set, caching file in-memory and on-disk.');
       }
 
       const file = req.file;
@@ -662,10 +672,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         });
       }
 
-      if (!lowerName.endsWith('.mp3') && !lowerName.endsWith('.m4a') && !lowerName.endsWith('.zip') && !lowerName.endsWith('.rar')) {
+      if (!lowerName.endsWith('.mp3') && !lowerName.endsWith('.m4a') && !lowerName.endsWith('.zip') && !lowerName.endsWith('.rar') && !lowerName.endsWith('.jpg') && !lowerName.endsWith('.jpeg') && !lowerName.endsWith('.png') && !lowerName.endsWith('.webp')) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid file format. Only MP3, M4A, ZIP, and RAR are supported by Internet Archive storage.'
+          error: 'Invalid file format. Supported: MP3, M4A, ZIP, RAR, JPG, JPEG, PNG, WEBP.'
         });
       }
 
@@ -678,6 +688,14 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       // Calculate real SHA-256 checksum
       const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
       const checksum = `sha256-${hash}`;
+
+      // Save file buffer to the local media directory for persistence
+      const MEDIA_DIR = path.resolve('media');
+      if (!fs.existsSync(MEDIA_DIR)) {
+        fs.mkdirSync(MEDIA_DIR, { recursive: true });
+      }
+      const localFilePath = path.join(MEDIA_DIR, cleanFileName);
+      fs.writeFileSync(localFilePath, fileBuffer);
 
       // Perform real binary upload to Internet Archive S3 API
       if (isIaConfigured) {
@@ -716,7 +734,17 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       }
 
       // Cache file buffer in server media memory for high-performance instant range streaming
-      const mimeType = cleanFileName.toLowerCase().endsWith('.m4a') ? 'audio/mp4' : 'audio/mpeg';
+      let mimeType = 'audio/mpeg';
+      if (cleanFileName.toLowerCase().endsWith('.m4a')) {
+        mimeType = 'audio/mp4';
+      } else if (cleanFileName.toLowerCase().endsWith('.jpg') || cleanFileName.toLowerCase().endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+      } else if (cleanFileName.toLowerCase().endsWith('.png')) {
+        mimeType = 'image/png';
+      } else if (cleanFileName.toLowerCase().endsWith('.webp')) {
+        mimeType = 'image/webp';
+      }
+
       fileCache.set(cleanFileName, { buffer: fileBuffer, mimeType });
 
       console.log(`[InternetArchiveStorageAdapter] Successfully stored real file ${cleanFileName} (${fileSizeStr}) in item ${itemId}`);
@@ -821,6 +849,24 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       }
 
       let fileData = fileCache.get(cleanFileName);
+
+      if (!fileData) {
+        // Try loading from local media directory first
+        const MEDIA_DIR = path.resolve('media');
+        const localFilePath = path.join(MEDIA_DIR, cleanFileName);
+        if (fs.existsSync(localFilePath)) {
+          try {
+            const buf = fs.readFileSync(localFilePath);
+            const validation = isValidAudioBuffer(buf, cleanFileName);
+            if (validation.valid) {
+              fileData = { buffer: buf, mimeType: validation.mimeType };
+              fileCache.set(cleanFileName, fileData);
+            }
+          } catch (readErr) {
+            console.warn(`[MediaStream] Error reading local file ${cleanFileName}:`, readErr);
+          }
+        }
+      }
 
       if (!fileData) {
         // Fetch real media file from Internet Archive server-side

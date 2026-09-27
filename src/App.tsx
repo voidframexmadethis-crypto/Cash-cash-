@@ -229,18 +229,23 @@ export default function App() {
     });
   };
 
-  // Deep-linking parsing and routing on mount + popstate
+  // Deep-linking parsing on mount/beats change
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryBeatId = params.get('beat');
+    if (queryBeatId) {
+      const matchedBeat = beats.find((b) => b.id === queryBeatId);
+      if (matchedBeat) {
+        setSelectedDetailBeat(matchedBeat);
+      }
+    }
+  }, [beats]);
+
+  // Main routing effect running strictly once on mount & popstate
   useEffect(() => {
     const handleRouting = () => {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
-      const queryBeatId = params.get('beat');
-      if (queryBeatId) {
-        const matchedBeat = beats.find((b) => b.id === queryBeatId);
-        if (matchedBeat) {
-          setSelectedDetailBeat(matchedBeat);
-        }
-      }
 
       if (pathname === '/audio-player') {
         setCurrentView('player');
@@ -254,7 +259,7 @@ export default function App() {
     handleRouting();
     window.addEventListener('popstate', handleRouting);
     return () => window.removeEventListener('popstate', handleRouting);
-  }, [beats]);
+  }, []);
 
   // Synchronize browser address bar pathname with currentView
   useEffect(() => {

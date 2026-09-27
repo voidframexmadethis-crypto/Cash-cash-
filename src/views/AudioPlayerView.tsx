@@ -437,7 +437,7 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
                       <span className="font-bold text-xs text-white block">WAV Lease</span>
                       <span className="text-[10px] text-zinc-500 font-mono">500,000 Streams</span>
                     </div>
-                    <span className="font-mono font-black text-purple-300 text-sm">{currencySymbol}{activeBeat.pricing.wavLease.toFixed(2)}</span>
+                    <span className="font-mono font-black text-purple-300 text-sm">{currencySymbol}{(activeBeat.pricing?.premiumLease ?? 79.99).toFixed(2)}</span>
                   </div>
                 </div>
               </div>

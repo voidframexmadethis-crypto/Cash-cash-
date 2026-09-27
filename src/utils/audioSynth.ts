@@ -186,26 +186,37 @@ class RealAudioPlayerEngine {
     if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) {
       return rawUrl;
     }
+
+    let urlToProcess = rawUrl;
     
-    // If it's already an absolute applet media stream URL
-    if (rawUrl.startsWith('/api/media/stream')) {
-      if (!rawUrl.includes('token=')) {
-        const separator = rawUrl.includes('?') ? '&' : '?';
-        return `${rawUrl}${separator}token=CK-PREVIEW`;
+    // Check if it already contains /api/media/stream or /api/media
+    if (urlToProcess.includes('/api/media')) {
+      if (!urlToProcess.includes('token=')) {
+        const separator = urlToProcess.includes('?') ? '&' : '?';
+        return `${urlToProcess}${separator}token=CK-PREVIEW`;
       }
-      return rawUrl;
+      return urlToProcess;
     }
-    
-    // Extract filename from Internet Archive or stored URLs
+
+    // Otherwise, try to extract file parameter or filename
     try {
-      const cleanFileName = rawUrl.split('/').pop()?.split('?')[0];
-      if (cleanFileName && (cleanFileName.endsWith('.mp3') || cleanFileName.endsWith('.m4a'))) {
+      if (urlToProcess.includes('file=')) {
+        const parts = urlToProcess.split('file=');
+        if (parts[1]) {
+          const fileName = decodeURIComponent(parts[1].split('&')[0]);
+          return `/api/media/stream?file=${encodeURIComponent(fileName)}&token=CK-PREVIEW`;
+        }
+      }
+      
+      const cleanFileName = urlToProcess.split('/').pop()?.split('?')[0];
+      if (cleanFileName && (cleanFileName.endsWith('.mp3') || cleanFileName.endsWith('.m4a') || cleanFileName.endsWith('.wav'))) {
         return `/api/media/stream?file=${encodeURIComponent(cleanFileName)}&token=CK-PREVIEW`;
       }
-    } catch {
-      // Fall through
+    } catch (e) {
+      console.error('[resolveStreamUrl] Error resolving stream URL:', e);
     }
-    return rawUrl;
+    
+    return urlToProcess;
   }
 
   public playBeat(beatId: string, bpm: number = 140, key: string = 'F# Minor', durationSeconds: number = 165, rawAudioUrl?: string) {
