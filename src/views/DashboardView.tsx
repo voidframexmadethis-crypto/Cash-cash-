@@ -398,111 +398,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [newVideoDesc, setNewVideoDesc] = useState('');
   const [newVideoDuration, setNewVideoDuration] = useState('3:00');
 
-  // PayPal Connection State
-  const [paypalStatus, setPaypalStatus] = useState<'not_connected' | 'connecting' | 'connected' | 'failed' | 'cancelled'>('not_connected');
-  const [paypalInfo, setPaypalInfo] = useState<{ email: string; merchantId: string }>({ email: '', merchantId: '' });
-  const [isSubmittingPayPal, setIsSubmittingPayPal] = useState(false);
-  const [paypalError, setPaypalError] = useState<string | null>(null);
-
-  // Sync with server
-  useEffect(() => {
-    const fetchAccountStatus = async () => {
-      try {
-        const res = await fetch('/api/producer/account');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.paypal_connected) {
-            setPaypalStatus('connected');
-            setPaypalInfo({ 
-              email: data.paypal_email || 'AUTHORIZED', 
-              merchantId: data.paypal_merchant_id || '' 
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Failed to sync producer account:', err);
-      }
-    };
-    fetchAccountStatus();
-  }, [activeTab]);
-
-  // Handle return/callback from PayPal authorization flow
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const success = params.get('payout_success');
-    const error = params.get('payout_error');
-
-    if (success === 'true') {
-      setPaypalStatus('connected');
-      triggerSaveState('PayPal Account Connected Successfully');
-      window.history.replaceState({}, document.title, window.location.pathname);
-      // Refresh status
-      fetch('/api/producer/account')
-        .then(res => res.json())
-        .then(data => {
-           setPaypalInfo({ 
-              email: data.paypal_email || 'AUTHORIZED', 
-              merchantId: data.paypal_merchant_id || '' 
-           });
-        });
-    } else if (error) {
-      setPaypalStatus('failed');
-      setPaypalError('PayPal authorization was not completed or was cancelled.');
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
-
-  const handleConnectPayPal = async () => {
-    if (isSubmittingPayPal) return;
-
-    setIsSubmittingPayPal(true);
-    setPaypalStatus('connecting');
-    setPaypalError(null);
-
-    try {
-      const res = await fetch('/api/paypal/onboard');
-      const data = await res.json();
-
-      if (!res.ok) {
-        setPaypalError(data.message || 'Onboarding failed to initialize.');
-        setPaypalStatus('failed');
-        setIsSubmittingPayPal(false);
-        return;
-      }
-
-      if (data.url) {
-        // Official PayPal authorization/onboarding flow
-        window.location.href = data.url;
-      }
-    } catch (err: any) {
-      console.error('PayPal connect error:', err);
-      setPaypalError('Could not initiate PayPal onboarding.');
-      setPaypalStatus('failed');
-      setIsSubmittingPayPal(false);
-    }
-  };
-
-  const handleDisconnectPayPal = async () => {
-    try {
-      await fetch('/api/paypal/disconnect', { method: 'POST' });
-      setPaypalStatus('not_connected');
-      setPaypalInfo({ email: '', merchantId: '' });
-      triggerSaveState('PayPal Account Disconnected');
-    } catch (err) {
-      console.error('Failed to disconnect:', err);
-    }
-  };
-
-  const handleDisconnectPayPal = () => {
-    setPaypalStatus('not_connected');
-    setPaypalEmailInput('');
-    setPaypalInfo({ email: '', merchantId: '' });
-    localStorage.removeItem('voodoo_paypal_connection');
-    localStorage.removeItem('voodoo_paypal_info');
-    setIsSubmittingPayPal(false);
-    triggerSaveState('PayPal Disconnected');
-  };
-
   // Edit beat modal state
   const [editingBeat, setEditingBeat] = useState<Beat | null>(null);
   const [editPriceVal, setEditPriceVal] = useState<number>(29.99);
@@ -3284,51 +3179,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
 
-      {/* Manage PayPal Connection Modal */}
-      {showManageModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
-            <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
-              <h3 className="font-brand font-black text-sm text-white uppercase tracking-wider">MANAGE PAYPAL CONNECTION</h3>
-              <button onClick={() => setShowManageModal(false)} className="text-zinc-500 hover:text-white p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-zinc-300">
-              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1">
-                <div className="text-[10px] text-zinc-500 font-mono uppercase font-bold">Authorized Account</div>
-                <div className="font-bold text-white">{paypalInfo.email}</div>
-                <div className="text-[10px] text-zinc-400 font-mono">Merchant ID: {paypalInfo.merchantId}</div>
-                <div className="text-[10px] text-emerald-400 font-semibold pt-1">Status: Active & Direct Escrow Enabled</div>
-              </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Your CASHMERE KID$ store is securely linked to PayPal via official partner onboarding. All customer license fees deposit directly into your merchant balance with zero manual API keys.
-              </p>
-            </div>
-
-            <div className="pt-2 flex gap-3">
-              <button
-                onClick={() => setShowManageModal(false)}
-                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  setPaypalStatus('not_connected');
-                  setShowManageModal(false);
-                  triggerSaveState('PayPal Disconnected');
-                }}
-                className="py-2.5 px-4 bg-zinc-900 hover:bg-red-950/40 text-red-400 font-bold text-xs rounded-xl border border-zinc-800 cursor-pointer"
-              >
-                Disconnect PayPal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
         {/* ==================== 17. SETTINGS: LEGAL CONTRACTS ==================== */}
         {activeTab === 'legal_services' && (
           <div className="space-y-6 animate-fadeIn">
@@ -3449,6 +3299,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="space-y-2">
                   <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Beat Artwork</label>
                   <ArtworkUploader
+                    beatId={editingBeat.id}
                     currentArtworkUrl={editArtworkUrl}
                     title={editTitle}
                     onArtworkSaved={(url) => {

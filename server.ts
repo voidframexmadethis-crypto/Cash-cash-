@@ -81,7 +81,7 @@ interface ServerOrder {
   subtotal: number;
   discount: number;
   total: number;
-  status: 'CREATED' | 'VERIFIED' | 'CANCELLED' | 'FAILED';
+  status: 'CREATED' | 'VERIFIED' | 'CANCELLED' | 'FAILED' | 'COMPLETED';
   createdAt: string;
   payerName?: string;
   payerEmail?: string;
@@ -220,12 +220,13 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
   // API: PayPal Onboarding Callback
   app.get('/api/paypal/onboard-callback', (req, res) => {
-    const { merchantId, status, merchantIdInPayPal } = req.query;
+    const merchantId = req.query.merchantId as string;
+    const merchantIdInPayPal = req.query.merchantIdInPayPal as string;
     
     if (merchantId || merchantIdInPayPal) {
       producerAccount = {
         paypal_connected: true,
-        paypal_merchant_id: (merchantId || merchantIdInPayPal) as string,
+        paypal_merchant_id: (merchantId || merchantIdInPayPal),
         connection_status: 'connected',
         connected_at: new Date().toISOString()
       };
@@ -282,9 +283,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
 
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const host = process.env.PAYPAL_MODE === 'live' ? 'api-m.paypal.com' : 'api-m.sandbox.paypal.com';
 
     const response = await fetch(
-      "https://api-m.paypal.com/v1/oauth2/token",
+      `https://${host}/v1/oauth2/token`,
       {
         method: "POST",
         headers: {
@@ -306,9 +308,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   // PayPal Order Creation
   async function createPayPalOrder(price: number, beatId: string) {
     const accessToken = await getPayPalAccessToken();
+    const host = process.env.PAYPAL_MODE === 'live' ? 'api-m.paypal.com' : 'api-m.sandbox.paypal.com';
 
     const response = await fetch(
-      "https://api-m.paypal.com/v2/checkout/orders",
+      `https://${host}/v2/checkout/orders`,
       {
         method: "POST",
         headers: {
@@ -341,9 +344,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   // PayPal Order Capture
   async function capturePayPalOrder(orderID: string) {
     const accessToken = await getPayPalAccessToken();
+    const host = process.env.PAYPAL_MODE === 'live' ? 'api-m.paypal.com' : 'api-m.sandbox.paypal.com';
 
     const response = await fetch(
-      `https://api-m.paypal.com/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`,
+      `https://${host}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`,
       {
         method: "POST",
         headers: {
@@ -481,7 +485,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   });
 
   // API: Upload Asset (Audio/Artwork)
-  app.post('/api/beats/:beatId/upload', upload.single('file'), (req, res) => {
+  app.post('/api/beats/:beatId/upload', upload.single('file') as any, (req: any, res: any) => {
     const { beatId } = req.params;
     const { assetType } = req.body; // 'artwork' | 'main_audio' | 'preview_audio'
     const file = req.file;
@@ -494,7 +498,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         return res.status(400).json({ error: 'Missing file, beatId, or assetType' });
       }
 
-      const beat = beatsStore.get(beatId);
+      const beat = beatsStore.get(beatId as string);
       if (!beat) {
         console.error(`[UploadService] Beat not found: ${beatId}`);
         return res.status(404).json({ error: 'Beat not found' });
@@ -514,7 +518,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const newAsset: BeatAsset = {
         id: assetId,
         beat_id: beatId,
-        asset_type: assetType as any,
+        asset_type: assetType as 'artwork' | 'main_audio' | 'preview_audio' | 'download',
         r2_key: r2Key,
         original_filename: file.originalname,
         mime_type: file.mimetype,
@@ -529,7 +533,16 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       beat.updated_at = new Date().toISOString();
       beatsStore.set(beatId, beat);
 
-      console.log(`[UploadService] Success: ${assetId} stored at ${r2Key}`);
+      console.log('[UploadService] Operation Success:', {
+        operation: `${assetType} upload`,
+        beatId,
+        assetId,
+        storageKey: r2Key,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        status: 'SUCCESS'
+      });
 
       res.json({
         ...newAsset,
@@ -1507,7 +1520,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     });
   }
 
-  const port = parseInt(process.env.PORT || '3001', 10);
+  const port = parseInt(process.env.PORT || '3000', 10);
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${port}`);
   });

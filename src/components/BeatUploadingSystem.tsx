@@ -145,6 +145,12 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
 
   // Modals
   const [showCropModal, setShowCropModal] = useState<boolean>(false);
+  const [cropperRawImage, setCropperRawImage] = useState<string>('');
+  const [isSavingArtwork, setIsSavingArtwork] = useState<boolean>(false);
+
+  const applySquareCrop = () => {
+    setShowCropModal(false);
+  };
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
   const [showReplaceModal, setShowReplaceModal] = useState<boolean>(false);
   const [wavAlertMessage, setWavAlertMessage] = useState<string | null>(null);
