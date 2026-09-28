@@ -189,6 +189,20 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     }
   };
 
+  const handleSimulateSandboxCheckout = () => {
+    setCheckoutStatus('processing');
+    setCheckoutError(null);
+    setTimeout(() => {
+      handlePayPalDirectSuccess({
+        id: `ORD-DEMO-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        payer: {
+          name: { given_name: 'Demo VIP Artist' },
+          email_address: 'demo-buyer@cashmerekid.com'
+        }
+      });
+    }, 1000);
+  };
+
   const handleOpenPayPalWindow = async () => {
     setCheckoutStatus('processing');
     setCheckoutError(null);
@@ -433,6 +447,22 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
               )}
               <span>Open PayPal Checkout Window ({currencySymbol}{total.toFixed(2)})</span>
             </button>
+
+            {paypalMode === 'sandbox' && (
+              <button
+                type="button"
+                onClick={handleSimulateSandboxCheckout}
+                disabled={checkoutStatus === 'processing'}
+                className="w-full py-3 bg-zinc-950 hover:bg-zinc-900 text-purple-400 hover:text-purple-300 font-extrabold text-xs uppercase tracking-widest rounded-xl border border-purple-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {checkoutStatus === 'processing' ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                )}
+                <span>Direct Sandbox Fast Checkout (Simulate Purchase)</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-zinc-500 justify-center">

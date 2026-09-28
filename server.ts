@@ -635,18 +635,18 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     buffer.write('data', 36);
     buffer.writeUInt32LE(dataSize, 40);
 
-    // Generate smooth luxury analog trap instrumental loop in F# Minor with deep 808 sub-bass
+    // Generate smooth luxury analog trap instrumental loop in F# Minor with punchy audible bass & bell melody
     const bpm = 140;
     const beatSec = 60 / bpm;
     const barSec = beatSec * 4;
 
     const chords = [
-      [185.00, 220.00, 277.18], // F#m (F#3, A3, C#4)
-      [146.83, 185.00, 220.00], // D (D3, F#3, A3)
-      [164.81, 196.00, 246.94], // E (E3, G3, B3)
-      [138.59, 174.61, 207.65], // C#m (C#3, F3, G#3)
+      [370.00, 440.00, 554.37], // F#m (F#4, A4, C#5) - shifted up an octave for clear audibility
+      [293.66, 370.00, 440.00], // D (D4, F#4, A4)
+      [329.63, 392.00, 493.88], // E (E4, G4, B4)
+      [277.18, 349.23, 415.30], // C#m (C#4, F4, G#4)
     ];
-    const bassNotes = [46.25, 36.71, 41.20, 34.65]; // F#1, D1, E1, C#1 (sub-bass 808)
+    const bassNotes = [92.50, 73.42, 82.41, 69.30]; // F#2, D2, E2, C#2 - shifted up an octave to be punchy and audible
 
     let offset = 44;
     for (let i = 0; i < numSamples; i++) {
@@ -656,23 +656,34 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const bass = bassNotes[barIndex];
       const beatPos = (t % beatSec) / beatSec;
 
-      // 808 sub-bass with exponential decay
-      const subDecay = Math.exp(-beatPos * 3.2);
-      const subSample = Math.sin(2 * Math.PI * bass * t) * 0.42 * subDecay;
+      // 808 sub-bass/kick with punchy exponential decay
+      const subDecay = Math.exp(-beatPos * 4.5);
+      const subSample = Math.sin(2 * Math.PI * bass * t) * 0.45 * subDecay;
 
-      // Soft warm analog synth pad chord
+      // Rich warm analog synth pad chords - boosted scale from 0.10 to 0.35
       let chordSample = 0;
       for (const freq of chord) {
-        chordSample += Math.sin(2 * Math.PI * freq * t) * 0.10;
-        chordSample += Math.sin(2 * Math.PI * (freq * 2) * t) * 0.03;
+        chordSample += Math.sin(2 * Math.PI * freq * t) * 0.28;
+        chordSample += Math.sin(2 * Math.PI * (freq * 2) * t) * 0.08;
+      }
+
+      // Add a nice soft analog synth melody / bell arpeggiator to make it feel expensive, rich, and clearly audible
+      const step = Math.floor(t / (beatSec / 4)) % 16;
+      const melodyFreqs = [740.00, 880.00, 1108.73, 1318.51, 1479.98, 0, 1108.73, 880.00];
+      const melodyNote = melodyFreqs[step % melodyFreqs.length];
+      let melodySample = 0;
+      if (melodyNote > 0) {
+        const stepPos = (t % (beatSec / 4)) / (beatSec / 4);
+        const melodyDecay = Math.exp(-stepPos * 8.0);
+        melodySample = Math.sin(2 * Math.PI * melodyNote * t) * 0.15 * melodyDecay;
       }
 
       // Soft trap hi-hat tick on 8th notes
       const eighth = (t % (beatSec / 2)) / (beatSec / 2);
       const hatDecay = Math.exp(-eighth * 35);
-      const hatSample = (Math.random() * 2 - 1) * 0.06 * hatDecay;
+      const hatSample = (Math.random() * 2 - 1) * 0.08 * hatDecay;
 
-      let sampleVal = subSample + chordSample + hatSample;
+      let sampleVal = subSample + chordSample + hatSample + melodySample;
       sampleVal = Math.max(-1, Math.min(1, sampleVal));
       const intSample = Math.floor(sampleVal * 32767);
 

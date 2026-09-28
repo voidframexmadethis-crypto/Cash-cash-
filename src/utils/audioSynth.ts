@@ -149,6 +149,8 @@ class RealAudioPlayerEngine {
       this.masterGain.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
       this.webAudioConnected = true;
+      // Set audio element volume to 1.0 once routed to Web Audio to avoid double attenuation
+      this.audio.volume = 1.0;
     } catch (err) {
       this.webAudioConnected = false;
       console.warn('[RealAudioPlayerEngine] WebAudio node binding deferred (native HTML5 streaming active):', err);
@@ -158,7 +160,7 @@ class RealAudioPlayerEngine {
   public setVolume(val: number) {
     this.volume = Math.max(0, Math.min(1, val));
     if (this.audio) {
-      this.audio.volume = this.volume;
+      this.audio.volume = this.webAudioConnected ? 1.0 : this.volume;
     }
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
@@ -260,7 +262,7 @@ class RealAudioPlayerEngine {
       this.currentAudioUrl = audioUrl;
       this.audio.src = audioUrl;
       this.audio.playbackRate = Math.max(0.5, Math.min(2.0, this.tempoMultiplier * Math.pow(2, this.pitchShiftSemitones / 12)));
-      this.audio.volume = this.volume;
+      this.audio.volume = this.webAudioConnected ? 1.0 : this.volume;
       if (this.onStateChangeCallback) {
         this.onStateChangeCallback('loading');
       }
