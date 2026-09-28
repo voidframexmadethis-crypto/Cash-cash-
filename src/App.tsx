@@ -27,6 +27,7 @@ import { HallOfFameView } from './views/HallOfFameView';
 import { CheckoutResultView } from './views/CheckoutResultView';
 import { AudioPlayerView } from './views/AudioPlayerView';
 import { YouTubeVideosView } from './views/YouTubeVideosView';
+import { ServicesView } from './views/ServicesView';
 
 import {
   Beat,
@@ -167,13 +168,8 @@ export default function App() {
     fetch('/api/beats')
       .then((r) => r.json())
       .then((data) => {
-        if (data?.beats && Array.isArray(data.beats) && data.beats.length > 0) {
-          setBeats((prev) => {
-            const existingIds = new Set(prev.map((b) => b.id));
-            const newBeats = data.beats.filter((b: any) => !existingIds.has(b.id));
-            if (newBeats.length === 0) return prev;
-            return [...prev, ...newBeats];
-          });
+        if (data?.beats && Array.isArray(data.beats)) {
+          setBeats(data.beats);
         }
       })
       .catch(() => {});
@@ -919,6 +915,14 @@ export default function App() {
           />
         )}
 
+        {currentView === 'services' && (
+          <ServicesView
+            currencySymbol={settings.currencySymbol}
+            onNavigateToBrowse={() => handleNavigateWithGenre('browse')}
+            onAddToCart={handleAddMerchToCart}
+          />
+        )}
+
         {currentView === 'beatpacks' && (
           <BeatPacksView
             beatPacks={beatPacks}
@@ -971,6 +975,7 @@ export default function App() {
               <li><button onClick={() => handleNavigateWithGenre('charts')} className="hover:text-white transition-colors">Top Charts & Featured</button></li>
               <li><button onClick={() => handleNavigateWithGenre('collections')} className="hover:text-white transition-colors">Curated Collections</button></li>
               <li><button onClick={() => handleNavigateWithGenre('search-by-sound')} className="hover:text-white transition-colors">Search By Sound</button></li>
+              <li><button onClick={() => handleNavigateWithGenre('services')} className="hover:text-white transition-colors font-bold text-purple-300">Bespoke Audio Services</button></li>
               <li><button onClick={() => handleNavigateWithGenre('merch')} className="hover:text-white transition-colors">Apparel & Merch</button></li>
             </ul>
           </div>

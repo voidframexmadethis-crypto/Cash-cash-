@@ -85,6 +85,14 @@ export const Header: React.FC<HeaderProps> = ({
             STORE
           </button>
           <button
+            onClick={() => setCurrentView('services')}
+            className={`hover:text-white transition-colors py-1 cursor-pointer ${
+              currentView === 'services' ? 'text-white font-extrabold border-b-2 border-purple-500' : ''
+            }`}
+          >
+            SERVICES
+          </button>
+          <button
             onClick={() => setCurrentView('feed')}
             className={`hover:text-white transition-colors py-1 cursor-pointer ${
               currentView === 'feed' ? 'text-purple-300 font-extrabold border-b-2 border-purple-500' : ''
@@ -296,6 +304,12 @@ export const Header: React.FC<HeaderProps> = ({
             className={`block w-full text-left py-2 ${currentView === 'browse' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
           >
             STORE
+          </button>
+          <button
+            onClick={() => { setCurrentView('services'); setMobileMenuOpen(false); }}
+            className={`block w-full text-left py-2 ${currentView === 'services' ? 'text-purple-400 font-extrabold' : 'hover:text-white'}`}
+          >
+            SERVICES
           </button>
           <button
             onClick={() => { setCurrentView('feed'); setMobileMenuOpen(false); }}

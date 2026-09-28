@@ -40,10 +40,21 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
       return;
     }
 
-    // Handle missing order reference gracefully
-    const finalOrderId = orderIdParam || `ORD-PP-${Date.now()}`;
+    if (statusParam === 'failed' || statusParam === 'error' || statusParam === 'declined') {
+      setResultState('error');
+      setErrorMessage('PayPal transaction was declined or failed.');
+      return;
+    }
 
-    // Handle Success / Processing Verification with Server
+    if (!orderIdParam && !tokenParam) {
+      setResultState('error');
+      setErrorMessage('Missing PayPal payment transaction reference.');
+      return;
+    }
+
+    const finalOrderId = orderIdParam || tokenParam || '';
+
+    // Verify Payment Authorization with Server
     setResultState('processing');
 
     fetch('/api/paypal/verify-order', {
@@ -58,29 +69,16 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
     })
       .then((res) => res.json())
       .then((data) => {
-        const orderData = data.verified && data.cart ? data : {
-          orderId: finalOrderId,
-          cart: [{
-            id: 'sale-item-1',
-            beatTitle: 'PLATINUM CASHMERE BEAT',
-            price: 39.99,
-            licenseName: 'Standard License'
-          }],
-          total: 39.99,
-          payerName: 'VIP Artist',
-          payerEmail: 'client@paypal.com'
-        };
+        if (data.verified && data.cart) {
+          setVerifiedOrder(data);
+          setResultState('success');
 
-        setVerifiedOrder(orderData);
-        setResultState('success');
-
-        // Record Sale Records safely
-        if (orderData.cart) {
-          const newRecords: SaleRecord[] = orderData.cart.map((item: any) => ({
+          // Record Sale Records
+          const newRecords: SaleRecord[] = data.cart.map((item: any) => ({
             id: `sale-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            orderId: orderData.orderId,
-            customerName: orderData.payerName || 'VIP Artist',
-            customerEmail: orderData.payerEmail || 'client@paypal.com',
+            orderId: data.orderId,
+            customerName: data.payerName || 'Verified Customer',
+            customerEmail: data.payerEmail || 'client@paypal.com',
             beatTitle: item.beatTitle,
             licenseType: item.licenseName,
             amount: item.price || 39.99,
@@ -89,60 +87,53 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
           }));
 
           onRecordSale(newRecords);
+          onClearCart();
+
+          // Broadcast local notifications for purchased items
+          try {
+            const savedPrefs = localStorage.getItem('voodoo_notification_prefs');
+            const prefs = savedPrefs ? JSON.parse(savedPrefs) : { newBeats: true, beatPurchases: true, beatPacks: true, announcements: true };
+
+            data.cart.forEach((item: any) => {
+              const isPack = item.licenseName?.toLowerCase().includes('pack') || item.beatTitle?.toLowerCase().includes('pack');
+              if (isPack && prefs.beatPacks) {
+                showLocalNotification(
+                  'YOUR BEAT PACK IS READY',
+                  `${item.beatTitle} is ready for access.`,
+                  `/checkout/result?status=success&order_id=${data.orderId}`
+                );
+              } else if (prefs.beatPurchases) {
+                showLocalNotification(
+                  'YOUR BEAT IS READY',
+                  `Your purchase of: ${item.beatTitle} is ready.`,
+                  `/checkout/result?status=success&order_id=${data.orderId}`
+                );
+              }
+            });
+          } catch (notifErr) {
+            console.error('[CheckoutResultView] Notification error:', notifErr);
+          }
+
+          // Clean URL parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (data.status === 'CANCELLED') {
+          setResultState('cancelled');
+        } else {
+          setResultState('error');
+          setErrorMessage(data.message || 'Payment has not been confirmed by PayPal. Delivery withheld.');
         }
-        onClearCart();
-
-        // Broadcast local notifications for purchased items based on customer preference
-        try {
-          const savedPrefs = localStorage.getItem('voodoo_notification_prefs');
-          const prefs = savedPrefs ? JSON.parse(savedPrefs) : { newBeats: true, beatPurchases: true, beatPacks: true, announcements: true };
-
-          orderData.cart?.forEach((item: any) => {
-            const isPack = item.licenseName?.toLowerCase().includes('pack') || item.beatTitle?.toLowerCase().includes('pack');
-            if (isPack && prefs.beatPacks) {
-              showLocalNotification(
-                'YOUR BEAT PACK IS READY',
-                `${item.beatTitle} is ready for access.`,
-                `/checkout/result?status=success&order_id=${orderData.orderId}`
-              );
-            } else if (prefs.beatPurchases) {
-              showLocalNotification(
-                'YOUR BEAT IS READY',
-                `Your purchase of: ${item.beatTitle} is ready.`,
-                `/checkout/result?status=success&order_id=${orderData.orderId}`
-              );
-            }
-          });
-        } catch (notifErr) {
-          console.error('[CheckoutResultView] Notification broadcast exception:', notifErr);
-        }
-
-        // Replace URL state cleanly to prevent double submission on refresh
-        window.history.replaceState({}, document.title, window.location.pathname);
       })
       .catch((err) => {
-        console.warn('[CheckoutResultView] Verified fallback active:', err);
-        const fallbackOrder = {
-          orderId: finalOrderId,
-          cart: [{
-            id: 'sale-item-1',
-            beatTitle: 'PLATINUM CASHMERE BEAT',
-            price: 39.99,
-            licenseName: 'Standard License',
-            artworkUrl: '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg'
-          }],
-          total: 39.99,
-          payerName: 'VIP Artist',
-          payerEmail: 'client@paypal.com'
-        };
-        setVerifiedOrder(fallbackOrder);
-        setResultState('success');
+        console.error('[CheckoutResultView] Verification exception:', err);
+        setResultState('error');
+        setErrorMessage('Failed to connect to PayPal server for payment verification.');
       });
   }, []);
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 animate-fadeIn">
       <div className="max-w-xl w-full bg-zinc-950 border border-zinc-900 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center">
+        
         {/* State 1: PAYMENT PROCESSING */}
         {resultState === 'processing' && (
           <div className="space-y-5 py-8">
@@ -152,10 +143,10 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
                 PAYPAL TRANSACTION VERIFICATION
               </span>
               <h2 className="text-2xl font-brand font-black text-white uppercase tracking-tight">
-                CONFIRMING YOUR PAYMENT...
+                VERIFYING PAYMENT SETTLEMENT...
               </h2>
               <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed font-sans">
-                Authenticating escrow settlement with PayPal servers and preparing high-definition WAV/MP3 master audio stems and license contracts.
+                Verifying escrow settlement with PayPal payment servers and unlocked master audio files.
               </p>
             </div>
           </div>
@@ -170,10 +161,10 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
 
             <div className="space-y-1.5">
               <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-widest block">
-                PAYMENT COMPLETE & VERIFIED
+                PAYMENT CONFIRMED & VERIFIED
               </span>
               <h2 className="text-2xl sm:text-3xl font-brand font-black text-white uppercase tracking-tight">
-                YOUR PURCHASE HAS BEEN CONFIRMED
+                YOUR PURCHASE IS COMPLETE
               </h2>
               <p className="text-xs text-zinc-400 font-mono">
                 Order Reference: <span className="text-purple-300 font-bold">#{verifiedOrder.orderId}</span>
@@ -209,7 +200,7 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
             <div className="space-y-3">
               <button
                 onClick={() => {
-                  const content = `CASHMERE KID$ OFFICIAL LICENSE RECEIPT\nOrder Ref: #${verifiedOrder.orderId}\nBuyer: ${verifiedOrder.payerName || 'VIP Artist'}\nItems: ${verifiedOrder.cart.map(c => `${c.beatTitle} (${c.licenseName})`).join(', ')}\nTotal Paid: $${verifiedOrder.total}\nTimestamp: ${verifiedOrder.createdAt || new Date().toISOString()}`;
+                  const content = `CASHMERE KID$ OFFICIAL LICENSE RECEIPT\nOrder Ref: #${verifiedOrder.orderId}\nBuyer: ${verifiedOrder.payerName || 'Verified Customer'}\nItems: ${verifiedOrder.cart.map(c => `${c.beatTitle} (${c.licenseName})`).join(', ')}\nTotal Paid: $${verifiedOrder.total}\nTimestamp: ${verifiedOrder.createdAt || new Date().toISOString()}`;
                   const blob = new Blob([content], { type: 'text/plain' });
                   const a = document.createElement('a');
                   a.href = URL.createObjectURL(blob);
@@ -262,7 +253,7 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
           </div>
         )}
 
-        {/* State 4: PAYMENT ERROR / SAFE FALLBACK */}
+        {/* State 4: PAYMENT ERROR / NOT VERIFIED */}
         {resultState === 'error' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="w-20 h-20 rounded-full bg-red-950/60 border-2 border-red-500/60 text-red-400 flex items-center justify-center mx-auto shadow-2xl shadow-red-950/50">
@@ -271,13 +262,13 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
 
             <div className="space-y-2">
               <span className="text-xs font-mono font-bold text-red-400 uppercase tracking-widest block">
-                CHECKOUT RETURN ERROR
+                UNCONFIRMED TRANSACTION
               </span>
               <h2 className="text-2xl sm:text-3xl font-brand font-black text-white uppercase tracking-tight">
-                PAYMENT COULD NOT BE COMPLETED
+                PAYMENT NOT CONFIRMED
               </h2>
-              <p className="text-xs text-red-300 bg-red-950/30 border border-red-500/30 p-3 rounded-2xl leading-relaxed font-mono max-w-md mx-auto">
-                {errorMessage || 'An unexpected error occurred during PayPal checkout verification.'}
+              <p className="text-xs text-red-300 bg-red-950/30 border border-red-500/30 p-3.5 rounded-2xl leading-relaxed font-mono max-w-md mx-auto">
+                {errorMessage || 'Payment was not confirmed by PayPal. Product delivery has been withheld.'}
               </p>
             </div>
 
@@ -287,7 +278,7 @@ export const CheckoutResultView: React.FC<CheckoutResultViewProps> = ({
                 className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Return to Store</span>
+                <span>Return to Beat Store</span>
               </button>
             </div>
           </div>

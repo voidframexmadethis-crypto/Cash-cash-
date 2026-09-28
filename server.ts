@@ -459,9 +459,11 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
   });
 
-  // API endpoint to fetch client ID for SDK
+  // API endpoint to fetch client ID & mode for SDK
   app.get('/api/paypal/client-id', (req, res) => {
-    res.json({ clientId: process.env.PAYPAL_CLIENT_ID || 'sb' });
+    const clientId = process.env.PAYPAL_CLIENT_ID || 'sb';
+    const mode = process.env.PAYPAL_MODE || (clientId === 'sb' ? 'sandbox' : 'live');
+    res.json({ clientId, mode });
   });
 
 
@@ -1508,46 +1510,39 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   app.post('/api/paypal/verify-order', async (req, res) => {
     try {
       const { orderId, token, payerId, status: queryStatus } = req.body;
-      const finalOrderId = orderId || token || `ORD-PP-${Date.now()}`;
+      const finalOrderId = orderId || token;
 
-      let order = serverOrdersStore.get(finalOrderId);
-
-      // Auto-synthesize order if not present so verification NEVER fails
-      if (!order) {
-        const beat = Array.from(beatsStore.values())[0];
-        order = {
-          orderId: finalOrderId,
-          cart: req.body.cart && Array.isArray(req.body.cart) && req.body.cart.length > 0 ? req.body.cart : [{
-            id: beat?.id || 'cc_master',
-            beatTitle: beat?.title || 'EXCLUSIVE MASTER BEAT',
-            price: req.body.total || 39.99,
-            licenseName: 'Standard License',
-            artworkUrl: beat?.artworkUrl || '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg'
-          }],
-          subtotal: req.body.total || 39.99,
-          discount: 0,
-          total: req.body.total || 39.99,
-          status: 'VERIFIED',
-          createdAt: new Date().toISOString(),
-          payerName: req.body.payerName || 'Verified VIP Artist',
-          payerEmail: req.body.payerEmail || 'client@paypal.com'
-        };
-        serverOrdersStore.set(finalOrderId, order);
+      if (!finalOrderId) {
+        return res.json({ verified: false, status: 'UNPAID', message: 'Missing order reference.' });
       }
 
-      if (queryStatus === 'cancelled' || queryStatus === 'cancel') {
-        order.status = 'CANCELLED';
-        serverOrdersStore.set(finalOrderId, order);
-        return res.json({ verified: false, status: 'CANCELLED', message: 'Payment was cancelled by buyer.' });
+      const order = serverOrdersStore.get(finalOrderId);
+
+      if (queryStatus === 'cancelled' || queryStatus === 'cancel' || order?.status === 'CANCELLED') {
+        if (order) order.status = 'CANCELLED';
+        return res.json({ verified: false, status: 'CANCELLED', message: 'Payment was cancelled by buyer. No charges were made.' });
       }
 
-      // Mark order as VERIFIED & COMPLETED
-      order.status = 'VERIFIED';
-      order.payerName = req.body.payerName || order.payerName || 'Verified VIP Artist';
-      order.payerEmail = req.body.payerEmail || order.payerEmail || 'client@paypal.com';
-      if (token) order.paypalToken = token;
+      if (queryStatus === 'failed' || queryStatus === 'error' || queryStatus === 'declined' || order?.status === 'FAILED') {
+        if (order) order.status = 'FAILED';
+        return res.json({ verified: false, status: 'FAILED', message: 'Payment failed or was declined by PayPal.' });
+      }
 
-      serverOrdersStore.set(finalOrderId, order);
+      if (!order || (order.status !== 'COMPLETED' && order.status !== 'VERIFIED')) {
+        return res.json({ verified: false, status: 'UNPAID', message: 'Payment has not been confirmed by PayPal.' });
+      }
+
+      // Order is verified and completed!
+      res.json({
+        verified: true,
+        status: 'COMPLETED',
+        orderId: order.orderId,
+        cart: order.cart,
+        total: order.total,
+        payerName: order.payerName || 'Verified VIP Artist',
+        payerEmail: order.payerEmail || 'client@paypal.com',
+        createdAt: order.createdAt
+      });
 
       // Log successful transaction to the Paper Trail audit logs
       try {
