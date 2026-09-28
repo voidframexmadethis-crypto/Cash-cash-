@@ -86,7 +86,8 @@ export const ArtworkUploader: React.FC<ArtworkUploaderProps> = ({ beatId, curren
         disabled={isUploading}
         className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase rounded-xl disabled:opacity-50 flex items-center gap-2"
       >
-        {isUploading ? 'Uploading...' : 'Edit Artwork'}
+        <Upload className="w-4 h-4" />
+        <span>{isUploading ? 'Uploading...' : 'Upload artwork'}</span>
       </button>
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
     </div>
