@@ -180,13 +180,14 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
   // =========================================================================
   const handleFilesSelected = async (fileList: FileList) => {
     const files = Array.from(fileList);
-    const newItems: UploadQueueItem[] = [];
+    if (files.length === 0) return;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    showToast('Processing Batch', `Processing ${files.length} file(s) instantly...`, 'info');
+
+    const itemPromises = files.map(async (file) => {
       const fileNameLower = file.name.toLowerCase();
 
-      // Check if file is supported audio or archive
+      // Check if file is supported audio or archive (MP3, M4A, WAV, FLAC, AAC, ZIP, RAR)
       const isAudio = fileNameLower.endsWith('.mp3') || 
                       fileNameLower.endsWith('.m4a') || 
                       fileNameLower.endsWith('.wav') || 
@@ -196,8 +197,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
                       fileNameLower.endsWith('.rar');
 
       if (!isAudio) {
-        showToast('Invalid File Type', `File "${file.name}" is not a supported audio format.`, 'error');
-        continue;
+        return null;
       }
 
       // Step 1: Create Draft Record Immediately
@@ -213,7 +213,6 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
           if (draftData?.beat?.id) {
             persistentBeatId = draftData.beat.id;
           }
-          console.log('[UploadSystem] Draft Created on backend:', persistentBeatId);
         }
       } catch (err) {
         console.warn('[UploadSystem] Local draft ID active:', persistentBeatId);
@@ -241,7 +240,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
         (b) => b.title.toLowerCase().trim() === cleanTitle.toLowerCase().trim()
       );
 
-      const newItem: UploadQueueItem = {
+      return {
         id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
         beatId: persistentBeatId,
         file,
@@ -301,18 +300,19 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
         
         audioObjectUrl: fileObjectUrl,
         duplicateWarning: matchedBeat ? `Matches existing beat "${matchedBeat.title}"` : undefined,
-      };
+      } as UploadQueueItem;
+    });
 
-      newItems.push(newItem);
-    }
+    const results = await Promise.all(itemPromises);
+    const newItems = results.filter((item): item is UploadQueueItem => item !== null);
 
     if (newItems.length > 0) {
       setQueue((prev) => {
         const updated = [...prev, ...newItems];
-        setTimeout(() => processQueueUploads(updated), 100);
+        setTimeout(() => processQueueUploads(updated), 50);
         return updated;
       });
-      showToast('Files Added to Uploader', `${newItems.length} audio file(s) loaded into 7-Step Wizard.`, 'success');
+      showToast('Fast Batch Upload', `${newItems.length} file(s) (MP3, M4A, ZIP) loaded into 7-Step Wizard.`, 'success');
     }
   };
 
