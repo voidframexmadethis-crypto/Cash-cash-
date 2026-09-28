@@ -71,12 +71,13 @@ export const CustomerDownloadLibraryModal: React.FC<CustomerDownloadLibraryModal
       (b) => b.title.toLowerCase().trim() === record.beatTitle.toLowerCase().trim()
     );
 
-    const audioUrl = matchedBeat?.iaUrl || matchedBeat?.audioUrl;
+    const audioUrl = matchedBeat?.iaUrl || matchedBeat?.audioUrl || (matchedBeat?.id ? `/api/beats/${matchedBeat.id}/audio?download=1` : null);
 
     if (audioUrl) {
       // Trigger actual master download
       const a = document.createElement('a');
-      a.href = audioUrl;
+      const finalUrl = audioUrl.includes('?') ? `${audioUrl}&download=1` : `${audioUrl}?download=1`;
+      a.href = finalUrl;
       a.download = `${record.beatTitle.replace(/\s+/g, '_')}_CASHMERE_KIDS_MASTER.mp3`;
       a.target = '_blank';
       document.body.appendChild(a);

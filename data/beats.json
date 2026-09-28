@@ -1,0 +1,40 @@
+{
+  "cc_1790558576482_qjd7u": {
+    "id": "cc_1790558576482_qjd7u",
+    "title": "TEST PLATINUM TRAP",
+    "slug": "cc_1790558576482_qjd7u",
+    "description": "",
+    "bpm": 140,
+    "key": "C Minor",
+    "genre": "Trap",
+    "mood": "Dark",
+    "tags": [
+      "cashmere",
+      "luxury"
+    ],
+    "price": 39.99,
+    "free_download": false,
+    "status": "published",
+    "visibility": "public",
+    "created_at": "2026-09-28T01:22:56.482Z",
+    "updated_at": "2026-09-28T01:23:05.768Z",
+    "pricing": {
+      "mp3Lease": 39.99,
+      "premiumLease": 79.99,
+      "unlimited": 249.99,
+      "exclusive": 1200
+    },
+    "published": true,
+    "audioUrl": "/api/beats/cc_1790558576482_qjd7u/audio",
+    "artworkUrl": "/api/beats/cc_1790558576482_qjd7u/artwork",
+    "main_audio_asset_id": "as_aud_default_cc_1790558576482_qjd7u",
+    "audio_key": "beats/cc_1790558576482_qjd7u/audio/default.mp3",
+    "audio_filename": "master_track.mp3",
+    "audio_content_type": "audio/mpeg",
+    "artwork_asset_id": "as_art_default_cc_1790558576482_qjd7u",
+    "artwork_key": "beats/cc_1790558576482_qjd7u/artwork/cover.jpg",
+    "artwork_filename": "cover.jpg",
+    "artwork_content_type": "image/jpeg",
+    "published_at": "2026-09-28T01:23:05.768Z"
+  }
+}

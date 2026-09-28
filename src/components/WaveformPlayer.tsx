@@ -226,14 +226,8 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   // Load and play beat when currentBeat changes
   useEffect(() => {
     if (currentBeat) {
-      const audioUrl = currentBeat.iaUrl || currentBeat.audioUrl;
+      const audioUrl = currentBeat.iaUrl || currentBeat.audioUrl || `/api/beats/${currentBeat.id}/audio`;
       setErrorMessage(null);
-
-      if (!audioUrl) {
-        setPlayerState('unavailable');
-        setErrorMessage('No real audio stream URL found for this beat product.');
-        return;
-      }
 
       // Feature 18: Record Recently Played Beats
       setRecentlyPlayedList((prev) => {

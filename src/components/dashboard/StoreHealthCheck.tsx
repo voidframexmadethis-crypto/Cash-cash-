@@ -30,10 +30,6 @@ export const StoreHealthCheck: React.FC<StoreHealthCheckProps> = ({
       issues.push({ level: 'ERROR', message: 'Missing master audio file', action: 'Upload Audio', actionType: 'upload' });
     }
 
-    if (b.audioUrl?.toLowerCase().endsWith('.wav') || b.iaUrl?.toLowerCase().endsWith('.wav')) {
-      issues.push({ level: 'ERROR', message: 'Unsupported WAV format (MP3/M4A required)', action: 'Replace Audio', actionType: 'upload' });
-    }
-
     if (!b.artworkUrl || b.artworkUrl.trim() === '') {
       issues.push({ level: 'ERROR', message: 'Missing square artwork cover', action: 'Add Artwork', actionType: 'edit' });
     }

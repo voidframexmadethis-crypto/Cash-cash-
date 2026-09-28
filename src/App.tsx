@@ -162,6 +162,23 @@ export default function App() {
     localStorage.setItem('voodoo_beats', JSON.stringify(beats));
   }, [beats]);
 
+  // Sync beats with backend store on mount
+  useEffect(() => {
+    fetch('/api/beats')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.beats && Array.isArray(data.beats) && data.beats.length > 0) {
+          setBeats((prev) => {
+            const existingIds = new Set(prev.map((b) => b.id));
+            const newBeats = data.beats.filter((b: any) => !existingIds.has(b.id));
+            if (newBeats.length === 0) return prev;
+            return [...prev, ...newBeats];
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('voodoo_cart', JSON.stringify(cart));
   }, [cart]);
