@@ -239,6 +239,10 @@ class RealAudioPlayerEngine {
 
     if (!this.audio) return;
 
+    // Explicitly pause and reset before changing source
+    this.audio.pause();
+    this.audio.currentTime = 0;
+
     this.baseBpm = bpm;
     this.activeKey = key;
 

@@ -183,7 +183,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({
               {beat.freeDownload ? 'Free / Lease' : 'MP3 Lease'}
             </span>
             <span className="text-sm font-black font-mono text-white">
-              {currencySymbol}{beat.pricing.mp3Lease.toFixed(2)}
+              {currencySymbol}{beat.pricing?.mp3Lease?.toFixed(2) || '0.00'}
             </span>
           </div>
 

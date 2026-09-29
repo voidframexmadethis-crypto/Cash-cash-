@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from "@google/genai";
 import multer from 'multer';
 import crypto from 'crypto';
+import ffmpeg from 'fluent-ffmpeg';
 
 dotenv.config();
 
@@ -232,23 +233,18 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
       const appOrigin = getAppOrigin(req);
       
-      // Auto-connect producer account immediately so connection never fails
-      producerAccount = {
-        paypal_connected: true,
-        paypal_merchant_id: `PP-MERCHANT-${Date.now()}`,
-        paypal_email: 'producer@cashmerekid.com',
-        connection_status: 'connected',
-        connected_at: new Date().toISOString()
-      };
-      saveToDisk();
+      const missing: string[] = [];
+      if (!clientId || clientId === 'sb') {
+        missing.push('PAYPAL_CLIENT_ID');
+      }
+      if (!clientSecret || clientSecret.includes('YOUR_')) {
+        missing.push('PAYPAL_CLIENT_SECRET');
+      }
 
-      // If live credentials are not set or default placeholder, provide instant callback
-      if (!clientId || !clientSecret || clientId === 'sb' || clientId.includes('YOUR_')) {
-        const instantUrl = `${appOrigin}/api/paypal/onboard-callback?merchantId=${producerAccount.paypal_merchant_id}`;
-        return res.json({ 
-          url: instantUrl,
-          mode: 'instant_activated',
-          notice: 'PayPal seller escrow account initialized successfully.'
+      if (missing.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Missing required PayPal configuration values: ${missing.join(', ')}. Please configure them in your environment.`
         });
       }
 
@@ -257,27 +253,46 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const returnUrl = `${appOrigin}/api/paypal/onboard-callback`;
 
       const host = process.env.PAYPAL_MODE === 'live' ? 'www.paypal.com' : 'www.sandbox.paypal.com';
-      const onboardingUrl = `https://${host}/bizsignup/partner/entry?partnerId=${encodeURIComponent(clientId)}&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
+      const onboardingUrl = `https://${host}/bizsignup/partner/entry?partnerId=${encodeURIComponent(clientId!)}&trackingId=${trackingId}&returnUrl=${encodeURIComponent(returnUrl)}&products=EXPRESS_CHECKOUT`;
 
-      res.json({ url: onboardingUrl });
+      res.json({ success: true, url: onboardingUrl });
     } catch (err: any) {
-      console.warn('[PayPalOnboarding] Live token deferred, activating instant mode:', err.message);
-      const appOrigin = getAppOrigin(req);
-      res.json({ 
-        url: `${appOrigin}/api/paypal/onboard-callback?merchantId=PP-CASHMERE-PRODUCER&merchantIdInPayPal=PP-MERCHANT-${Date.now()}`,
-        mode: 'instant_activated'
+      console.error('[PayPalOnboarding] Authorization failed:', err.message);
+      res.status(502).json({ 
+        success: false,
+        error: `PayPal Partner Authorization failed: ${err.message}`
       });
     }
   });
 
   // API: PayPal Onboarding Callback
   app.get('/api/paypal/onboard-callback', (req, res) => {
-    const merchantId = req.query.merchantId as string;
-    const merchantIdInPayPal = req.query.merchantIdInPayPal as string;
+    const { merchantId, merchantIdInPayPal, status, error, error_description } = req.query;
+    const appOrigin = getAppOrigin(req);
+
+    if (error || status === 'denied' || status === 'cancelled') {
+      const errMsg = (error_description || error || `PayPal authorization ${status || 'failed'}`) as string;
+      producerAccount = {
+        paypal_connected: false,
+        connection_status: 'not_connected'
+      };
+      saveToDisk();
+      return res.redirect(`${appOrigin}/dashboard?payout_error=${encodeURIComponent(errMsg)}`);
+    }
+
+    const resolvedMerchantId = (merchantId || merchantIdInPayPal) as string;
+    if (!resolvedMerchantId) {
+      producerAccount = {
+        paypal_connected: false,
+        connection_status: 'not_connected'
+      };
+      saveToDisk();
+      return res.redirect(`${appOrigin}/dashboard?payout_error=${encodeURIComponent('PayPal returned no Merchant ID. Onboarding incomplete.')}`);
+    }
     
     producerAccount = {
       paypal_connected: true,
-      paypal_merchant_id: (merchantId || merchantIdInPayPal || 'PP-CASHMERE-PRODUCER'),
+      paypal_merchant_id: resolvedMerchantId,
       paypal_email: 'producer@cashmerekid.com',
       connection_status: 'connected',
       connected_at: new Date().toISOString()
@@ -285,7 +300,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     saveToDisk();
     
     // Redirect back to account settings
-    const appOrigin = getAppOrigin(req);
     res.redirect(`${appOrigin}/dashboard?payout_success=true`);
   });
 
@@ -325,35 +339,105 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   });
 
   // PayPal Auth Helpers
-  async function getPayPalAccessToken() {
-    const clientId = process.env.PAYPAL_CLIENT_ID;
-    const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
-    
-    if (!clientId || !clientSecret) {
-      throw new Error("PayPal credentials not configured");
+  const PAYPAL_API = "https://api-m.paypal.com";
+  const PAYPAL_SANDBOX_API = "https://api-m.sandbox.paypal.com";
+  const getPaypalBaseUrl = () => process.env.PAYPAL_MODE === 'live' ? PAYPAL_API : PAYPAL_SANDBOX_API;
+
+  async function getPayPalAccessToken(env?: any) {
+    const environment = env || process.env;
+    const clientId = environment.PAYPAL_CLIENT_ID;
+    const clientSecret = environment.PAYPAL_CLIENT_SECRET;
+
+    if (!clientId) {
+      throw new Error("PAYPAL_CLIENT_ID is missing");
     }
 
-    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const host = process.env.PAYPAL_MODE === 'live' ? 'api-m.paypal.com' : 'api-m.sandbox.paypal.com';
+    if (!clientSecret) {
+      throw new Error("PAYPAL_CLIENT_SECRET is missing");
+    }
+
+    const credentials =
+      `${clientId}:${clientSecret}`;
+
+    const encodedCredentials =
+      btoa(credentials);
+
+    const baseUrl = getPaypalBaseUrl();
 
     const response = await fetch(
-      `https://${host}/v1/oauth2/token`,
+      `${baseUrl}/v1/oauth2/token`,
       {
         method: "POST",
+
         headers: {
-          "Authorization": `Basic ${credentials}`,
-          "Content-Type": "application/x-www-form-urlencoded"
+          "Authorization":
+            `Basic ${encodedCredentials}`,
+
+          "Content-Type":
+            "application/x-www-form-urlencoded",
+
+          "Accept":
+            "application/json"
         },
-        body: "grant_type=client_credentials"
+
+        body:
+          "grant_type=client_credentials"
       }
     );
 
+    const responseText =
+      await response.text();
+
     if (!response.ok) {
-      throw new Error("PayPal authentication failed");
+      console.error(
+        "PAYPAL OAUTH ERROR:",
+        response.status,
+        responseText
+      );
+
+      throw new Error(
+        `PayPal OAuth failed (${response.status}): ${responseText}`
+      );
     }
 
-    const data = await response.json();
+    const data =
+      JSON.parse(responseText);
+
+    if (!data.access_token) {
+      throw new Error(
+        "PayPal did not return an access token."
+      );
+    }
+
     return data.access_token;
+  }
+
+  async function testPayPalConnection(env?: any) {
+    try {
+      const token =
+        await getPayPalAccessToken(env);
+
+      return {
+        success: true,
+        connected: true,
+        message:
+          "PayPal gateway connection successful."
+      };
+    } catch (error) {
+      console.error(
+        "PAYPAL CONNECTION FAILED:",
+        error
+      );
+
+      return {
+        success: false,
+        connected: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unknown PayPal error"
+      };
+    }
   }
 
   // PayPal Order Creation
@@ -363,10 +447,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
       if (clientId && clientSecret && clientId !== 'sb' && !clientId.includes('YOUR_')) {
         const accessToken = await getPayPalAccessToken();
-        const host = process.env.PAYPAL_MODE === 'live' ? 'api-m.paypal.com' : 'api-m.sandbox.paypal.com';
+        const baseUrl = getPaypalBaseUrl();
 
         const response = await fetch(
-          `https://${host}/v2/checkout/orders`,
+          `${baseUrl}/v2/checkout/orders`,
           {
             method: "POST",
             headers: {
@@ -413,10 +497,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
       if (clientId && clientSecret && clientId !== 'sb' && !clientId.includes('YOUR_')) {
         const accessToken = await getPayPalAccessToken();
-        const host = process.env.PAYPAL_MODE === 'live' ? 'api-m.paypal.com' : 'api-m.sandbox.paypal.com';
+        const baseUrl = getPaypalBaseUrl();
 
         const response = await fetch(
-          `https://${host}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`,
+          `${baseUrl}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`,
           {
             method: "POST",
             headers: {
@@ -456,6 +540,23 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       res.json({ access_token: token });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API endpoint to test PayPal gateway connection
+  app.get('/api/paypal/test', async (req, res) => {
+    try {
+      const result = await testPayPalConnection();
+      res.status(result.success ? 200 : 502).json(result);
+    } catch (error: any) {
+      res.status(502).json({
+        success: false,
+        connected: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "PayPal connection failed"
+      });
     }
   });
 
@@ -567,12 +668,19 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   const beatsStore = new Map<string, Beat>();
   const assetsStore = new Map<string, BeatAsset>();
 
+  function ensureBeatStructure(beat: Beat): Beat {
+    if (!beat.pricing) {
+      beat.pricing = { mp3Lease: 39.99, premiumLease: 79.99, unlimited: 249.99, exclusive: 1200.00 };
+    }
+    return beat;
+  }
+
   // Initial Load from Disk
   function loadFromDisk() {
     try {
       if (fs.existsSync(BEATS_FILE)) {
         const data = JSON.parse(fs.readFileSync(BEATS_FILE, 'utf8'));
-        Object.entries(data).forEach(([k, v]) => beatsStore.set(k, v as Beat));
+        Object.entries(data).forEach(([k, v]) => beatsStore.set(k, ensureBeatStructure(v as Beat)));
       }
       if (fs.existsSync(ASSETS_FILE)) {
         const data = JSON.parse(fs.readFileSync(ASSETS_FILE, 'utf8'));
@@ -779,6 +887,8 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       if (ext === '.aac') contentType = 'audio/aac';
 
       const downloadName = preferredFileName || (beatId ? `${beatId}${ext}` : path.basename(candidatePath));
+      
+      console.log(`[PayPal/Audio Diagnostic] Serving audio request: beatId=${beatId}, candidatePath=${candidatePath}, FileSize=${fileSize}, Range=${range}, Content-Type=${contentType}`);
 
       if (range) {
         const parts = range.replace(/bytes=/, "").split("-");
@@ -786,6 +896,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
         if (start >= fileSize) {
+          console.error(`[Diagnostic] Range not satisfiable: start=${start}, size=${fileSize}`);
           res.status(416).send(`Requested range not satisfiable\n${start} >= ${fileSize}`);
           return;
         }
@@ -964,16 +1075,18 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   });
 
   // 2. UPLOAD AUDIO: POST /api/beats/:beatId/audio
-  app.post('/api/beats/:beatId/audio', upload.any() as any, (req: any, res: any) => {
+  app.post('/api/beats/:beatId/audio', upload.any() as any, async (req: any, res: any) => {
     const { beatId } = req.params;
     const file = (req.files && req.files[0]) || req.file;
+    console.log(`[Diagnostic] Upload request received for beatId: ${beatId}, File exists: ${!!file}, Files array length: ${req.files ? req.files.length : 0}`);
 
     try {
       let beat = beatsStore.get(beatId);
+      if (beat) ensureBeatStructure(beat);
       if (!beat) {
         // Auto-create beat if not initialized yet so upload NEVER fails
         const timestamp = new Date().toISOString();
-        beat = {
+        beat = ensureBeatStructure({
           id: beatId,
           title: 'NEW BEAT',
           slug: beatId,
@@ -988,8 +1101,9 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
           status: 'draft',
           created_at: timestamp,
           updated_at: timestamp,
+          pricing: { mp3Lease: 39.99, premiumLease: 79.99, unlimited: 249.99, exclusive: 1200.00 },
           ...beatUrls(beatId)
-        };
+        });
         beatsStore.set(beatId, beat);
       }
 
@@ -1005,6 +1119,33 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const fileBuffer = file ? file.buffer : (req.body && Buffer.isBuffer(req.body) ? req.body : getFallbackAudioBuffer());
       fs.writeFileSync(localFilePath, fileBuffer);
 
+      // Watermarking logic (requires public/voice_tag.mp3)
+      const watermarkedPath = path.join(MEDIA_DIR, `watermarked_${cleanFileName}`);
+      const voiceTagPath = path.resolve('public/voice_tag.mp3');
+      
+      let finalFilePath = localFilePath;
+      if (fs.existsSync(voiceTagPath)) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            ffmpeg(localFilePath)
+              .input(voiceTagPath)
+              .complexFilter([
+                'amix=inputs=2:duration=first:dropout_transition=0'
+              ])
+              .save(watermarkedPath)
+              .on('end', () => resolve())
+              .on('error', (err: any) => reject(err));
+          });
+          finalFilePath = watermarkedPath;
+          console.log(`[UploadAudio] Beat ${beatId} watermarked successfully.`);
+        } catch (err) {
+          console.error(`[UploadAudio] Watermarking failed for ${beatId}:`, err);
+          // Fallback to non-watermarked
+        }
+      } else {
+        console.warn(`[UploadAudio] Voice tag not found at ${voiceTagPath}. Skipping watermarking.`);
+      }
+
       const mimeType = ext === 'm4a' ? 'audio/mp4' : (ext === 'wav' ? 'audio/wav' : 'audio/mpeg');
 
       const newAsset: BeatAsset = {
@@ -1014,7 +1155,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         r2_key: r2Key,
         original_filename: originalFilename,
         mime_type: mimeType,
-        file_size: fileBuffer.length,
+        file_size: fs.statSync(finalFilePath).size, // Use size of watermarked file
         created_at: new Date().toISOString()
       };
       assetsStore.set(assetId, newAsset);
@@ -1298,6 +1439,13 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   app.patch('/api/beats/:beatId', updateBeatHandler);
   app.put('/api/beats/:beatId', updateBeatHandler);
 
+  app.delete('/api/beats/:beatId', (req, res) => {
+    const { beatId } = req.params;
+    const deleted = beatsStore.delete(beatId);
+    saveToDisk();
+    res.json({ success: deleted });
+  });
+
   // 7. GET BEAT: GET /api/beats/:beatId
   app.get('/api/beats/:beatId', (req, res) => {
     const { beatId } = req.params;
@@ -1391,46 +1539,29 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   // PayPal Server Order Creation Endpoint (Marketplace Compatible & Zero-Fail)
   app.post('/api/paypal/create-order', async (req, res) => {
     const { beatId, price, cart } = req.body;
-    console.log(`[PayPalServer] Creating order for Beat: ${beatId}, Price: ${price}, Cart: ${cart ? cart.length : 0}`);
+    console.log(`[PayPalServer] Creating order for Beat: ${beatId}, Price: ${price}`);
 
     try {
-        const orderId = `ORD-PP-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+        const orderData = await createPayPalOrder(Number(price || 39.99), beatId);
+        const orderId = orderData.id;
+        
         let orderCart: any[] = [];
-        let orderTotal = 0;
-
-        if (beatId && price) {
-            const beat = beatsStore.get(beatId);
-            orderTotal = Number(price);
-            orderCart = [{
-                id: beatId,
-                beatTitle: beat?.title || 'EXCLUSIVE MASTER BEAT',
-                price: orderTotal,
-                licenseName: 'Standard License',
-                artworkUrl: beat?.artworkUrl || `/api/beats/${beatId}/artwork`,
-                bpm: beat?.bpm || 140,
-                key: beat?.key || 'C Minor'
-            }];
-        } else if (cart && Array.isArray(cart) && cart.length > 0) {
-            orderCart = cart;
-            orderTotal = cart.reduce((sum: number, item: any) => sum + (item.price || 0), 0);
-        } else {
-            const beat = Array.from(beatsStore.values())[0];
-            orderTotal = 39.99;
-            orderCart = [{
-                id: beat?.id || 'cc_master',
-                beatTitle: beat?.title || 'EXCLUSIVE BEAT',
-                price: orderTotal,
-                licenseName: 'Standard License',
-                artworkUrl: beat?.artworkUrl || '/src/assets/images/cashmere_cover_velvet_1790419833792.jpg'
-            }];
-        }
+        const beat = beatId ? beatsStore.get(beatId) : undefined;
+        
+        orderCart = [{
+            id: beatId,
+            beatTitle: beat?.title || 'EXCLUSIVE MASTER BEAT',
+            price: Number(price),
+            licenseName: 'Standard License',
+            artworkUrl: beat?.artworkUrl || `/api/beats/${beatId}/artwork`
+        }];
 
         const newOrder: ServerOrder = {
             orderId,
             cart: orderCart,
-            subtotal: orderTotal,
+            subtotal: Number(price),
             discount: 0,
-            total: orderTotal,
+            total: Number(price),
             status: 'CREATED',
             createdAt: new Date().toISOString(),
             payerName: 'VIP Artist',
@@ -1438,36 +1569,19 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         };
         serverOrdersStore.set(orderId, newOrder);
 
-        const approvalUrl = `/checkout/result?status=success&order_id=${encodeURIComponent(orderId)}`;
+        const approvalUrl = orderData.links?.find((l: any) => l.rel === 'approve')?.href || `/checkout/result?status=success&order_id=${encodeURIComponent(orderId)}`;
 
         return res.json({ 
             success: true, 
             id: orderId,
             orderId: orderId, 
-            total: orderTotal.toFixed(2),
+            total: Number(price).toFixed(2),
             approvalUrl,
             status: 'CREATED'
         });
     } catch (err: any) {
         console.error('[PayPalServer] Create Order Error:', err);
-        const fallbackId = `ORD-PP-${Date.now()}`;
-        const fallbackOrder: ServerOrder = {
-            orderId: fallbackId,
-            cart: [],
-            subtotal: Number(price || 39.99),
-            discount: 0,
-            total: Number(price || 39.99),
-            status: 'CREATED',
-            createdAt: new Date().toISOString()
-        };
-        serverOrdersStore.set(fallbackId, fallbackOrder);
-        res.json({
-            success: true,
-            id: fallbackId,
-            orderId: fallbackId,
-            total: (price || 39.99).toString(),
-            approvalUrl: `/checkout/result?status=success&order_id=${fallbackId}`
-        });
+        return res.status(500).json({ error: 'Failed to create PayPal order.' });
     }
   });
 

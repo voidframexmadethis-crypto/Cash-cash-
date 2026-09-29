@@ -70,6 +70,7 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
 
     if (success === 'true') {
       setPaypalStatus('connected');
+      setErrorMessage(null);
       // Clean query parameters
       window.history.replaceState({}, document.title, window.location.pathname);
       // Refresh status
@@ -77,11 +78,11 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
         .then(res => res.json())
         .then(data => {
            setMerchantId(data.paypal_merchant_id || '');
+           setPaypalEmail(data.paypal_email || '');
         });
     } else if (error) {
-      setPaypalStatus('connected');
-      setMerchantId('PP-CASHMERE-PRODUCER');
-      setPaypalEmail('producer@cashmerekid.com');
+      setPaypalStatus('failed');
+      setErrorMessage(decodeURIComponent(error));
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
@@ -93,23 +94,23 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
     setPaypalStatus('connecting');
 
     try {
-      const emailToUse = paypalEmail.trim() || 'producer@cashmerekid.com';
-      const res = await fetch('/api/paypal/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailToUse, merchantId: merchantId || `PP-MERCHANT-${Date.now()}` })
-      });
+      const res = await fetch('/api/paypal/onboard');
       const data = await res.json();
 
-      setPaypalStatus('connected');
-      setMerchantId(data.account?.paypal_merchant_id || 'PP-CASHMERE-PRODUCER');
-      setPaypalEmail(data.account?.paypal_email || emailToUse);
-      setIsSubmitting(false);
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'Failed to initiate official PayPal onboarding.');
+      }
+
+      if (data.url) {
+        // Safe redirect to official PayPal onboarding page
+        window.location.href = data.url;
+      } else {
+        throw new Error('PayPal onboarding URL was not returned.');
+      }
     } catch (err: any) {
-      console.warn('[PayPalConnectionCenter] Direct fallback activating seller account:', err);
-      setPaypalStatus('connected');
-      setMerchantId('PP-CASHMERE-PRODUCER');
-      setPaypalEmail(paypalEmail || 'producer@cashmerekid.com');
+      console.error('[PayPalConnectionCenter] Connection initiation failed:', err);
+      setPaypalStatus('failed');
+      setErrorMessage(err.message || 'Failed to establish connection with PayPal gateway.');
       setIsSubmitting(false);
     }
   };
@@ -173,6 +174,16 @@ export const PayPalConnectionCenter: React.FC<PayPalConnectionCenterProps> = ({
             <div className="px-3.5 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-mono text-xs font-bold flex items-center gap-1.5 shadow">
               <CheckCircle className="w-4 h-4" />
               <span>PAYPAL CONNECTED</span>
+            </div>
+          ) : paypalStatus === 'connecting' ? (
+            <div className="px-3.5 py-1.5 rounded-full bg-blue-950/80 border border-blue-500/40 text-blue-400 font-mono text-xs font-bold flex items-center gap-1.5 shadow animate-pulse">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>AUTHORIZING...</span>
+            </div>
+          ) : paypalStatus === 'failed' ? (
+            <div className="px-3.5 py-1.5 rounded-full bg-red-950/80 border border-red-500/40 text-red-400 font-mono text-xs font-bold flex items-center gap-1.5 shadow">
+              <AlertTriangle className="w-4 h-4" />
+              <span>CONNECTION FAILED</span>
             </div>
           ) : (
             <div className="px-3.5 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono text-xs font-bold flex items-center gap-1.5">

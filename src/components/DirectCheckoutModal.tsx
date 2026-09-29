@@ -26,7 +26,7 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'processing' | 'succeeded' | 'failed'>('idle');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [paypalMode, setPaypalMode] = useState<'sandbox' | 'live'>('sandbox');
+  const [paypalMode, setPaypalMode] = useState<'sandbox' | 'live'>('live');
   const [paypalLoaded, setPaypalLoaded] = useState(false);
   const paypalContainerRef = useRef<HTMLDivElement>(null);
 
@@ -189,19 +189,6 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     }
   };
 
-  const handleSimulateSandboxCheckout = () => {
-    setCheckoutStatus('processing');
-    setCheckoutError(null);
-    setTimeout(() => {
-      handlePayPalDirectSuccess({
-        id: `ORD-DEMO-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        payer: {
-          name: { given_name: 'Demo VIP Artist' },
-          email_address: 'demo-buyer@cashmerekid.com'
-        }
-      });
-    }, 1000);
-  };
 
   const handleOpenPayPalWindow = async () => {
     setCheckoutStatus('processing');
@@ -435,34 +422,8 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
             {/* Smart PayPal Buttons Container */}
             <div ref={paypalContainerRef} className="w-full min-h-[45px]" />
 
-            <button
-              onClick={handleOpenPayPalWindow}
-              disabled={checkoutStatus === 'processing'}
-              className="w-full py-3.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-400 hover:from-yellow-400 hover:to-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {checkoutStatus === 'processing' ? (
-                <div className="w-4 h-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
-              ) : (
-                <Wallet className="w-4 h-4" />
-              )}
-              <span>Open PayPal Checkout Window ({currencySymbol}{total.toFixed(2)})</span>
-            </button>
-
-            {paypalMode === 'sandbox' && (
-              <button
-                type="button"
-                onClick={handleSimulateSandboxCheckout}
-                disabled={checkoutStatus === 'processing'}
-                className="w-full py-3 bg-zinc-950 hover:bg-zinc-900 text-purple-400 hover:text-purple-300 font-extrabold text-xs uppercase tracking-widest rounded-xl border border-purple-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {checkoutStatus === 'processing' ? (
-                  <div className="w-4 h-4 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                )}
-                <span>Direct Sandbox Fast Checkout (Simulate Purchase)</span>
-              </button>
-            )}
+            {/* Direct Checkout Fallback */}
+              {/* Fallback removed as PayPal is now live and reliable */}
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-zinc-500 justify-center">

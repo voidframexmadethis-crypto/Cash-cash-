@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { Beat, GenreType, BeatPack } from '../types';
 import { ArtworkUploader } from './ArtworkUploader';
+import { AdvancedUploaderConsole } from './AdvancedUploaderConsole';
 
 export interface BeatUploadingSystemProps {
   onPublishBeat: (newBeat: Beat) => void;
@@ -479,22 +480,39 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
     if (!item) return;
     const targetBeatId = item.beatId || `cc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
+    // Destructure to separate non-serializable properties (like file buffers)
+    const { file, audioObjectUrl, ...persistentData } = item;
+
+    const payload = {
+      ...persistentData,
+      title: item.title,
+      description: item.description,
+      bpm: item.bpm,
+      key: item.key,
+      genre: item.genre,
+      mood: item.moods[0] || 'Dark',
+      tags: item.tags,
+      price: item.mp3Price,
+      free_download: item.freeDownload,
+      freeDownload: item.freeDownload,
+      freeDownloadType: item.freeDownloadType,
+      pricing: {
+        mp3Lease: item.mp3Price,
+        premiumLease: item.wavPrice,
+        unlimited: item.unlimitedPrice,
+        exclusive: item.exclusivePrice,
+      },
+      visibility: item.published ? 'public' : 'private',
+      published: item.published || false,
+      artworkUrl: item.artworkUrl || `/api/beats/${targetBeatId}/artwork`,
+      audioUrl: item.audioUrl || `/api/beats/${targetBeatId}/audio`,
+    };
+
     try {
       await fetch(`/api/beats/${targetBeatId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: item.title,
-          description: item.description,
-          bpm: item.bpm,
-          key: item.key,
-          genre: item.genre,
-          mood: item.moods[0] || 'Dark',
-          tags: item.tags,
-          price: item.mp3Price,
-          free_download: item.freeDownload,
-          visibility: item.published ? 'PUBLIC' : 'PRIVATE'
-        }),
+        body: JSON.stringify(payload),
       });
 
       showToast('DRAFT SAVED', `"${item.title}" progress saved to persistent storage.`, 'success');
@@ -1425,6 +1443,18 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+
+          {/* ADVANCED ENGINE CHECKLIST CONTROL CONSOLE */}
+          <AdvancedUploaderConsole
+            activeItem={activeItem}
+            onUpdateItem={(updatedFields) => {
+              setQueue((prev) =>
+                prev.map((item, idx) =>
+                  idx === selectedItemIndex ? { ...item, ...updatedFields } : item
+                )
+              );
+            }}
+          />
 
         </div>
       )}

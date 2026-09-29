@@ -422,7 +422,7 @@ export const StorefrontPicker: React.FC<StorefrontPickerProps> = ({
                   <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">{selectedBeat.description || 'Premium platinum Trap / Dark Synth studio master track licensed directly.'}</p>
                   <div className="flex justify-between items-baseline pt-2">
                     <span className="text-sm font-mono font-bold text-zinc-400">MP3 Lease Licence:</span>
-                    <span className="text-lg font-mono font-black text-purple-300">{currencySymbol}{(selectedBeat.pricing.mp3Lease).toFixed(2)}</span>
+                    <span className="text-lg font-mono font-black text-purple-300">{currencySymbol}{selectedBeat.pricing?.mp3Lease?.toFixed(2) || '0.00'}</span>
                   </div>
                 </div>
               ) : (

@@ -223,6 +223,17 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     }
   }, [setIsPlaying, isLooping, currentBeat, onNext, writeVerseMode, loopInTime, loopOutTime, isPlaying, queueList, activeBeatPack, onNextBeatPackTrack, onPlayToggle]);
 
+  // Diagnostics
+  useEffect(() => {
+    if (currentBeat) {
+      console.log('Cash Cash selecting beat:', {
+        beatId: currentBeat.id,
+        title: currentBeat.title,
+        audioUrl: currentBeat.iaUrl || currentBeat.audioUrl || `/api/beats/${currentBeat.id}/audio`
+      });
+    }
+  }, [currentBeat?.id]);
+
   // Load and play beat when currentBeat changes
   useEffect(() => {
     if (currentBeat) {
@@ -269,7 +280,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     } else {
       setPlayerState('idle');
     }
-  }, [currentBeat, isPlaying]);
+  }, [currentBeat?.id, isPlaying]);
 
   // Feature 15: Volume Control Function
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -560,7 +571,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                   className="flex-1 min-h-[48px] px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-xl flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  <span>Buy License ({currencySymbol}{currentBeat.pricing.mp3Lease.toFixed(2)})</span>
+                  <span>Buy License ({currencySymbol}{currentBeat.pricing?.mp3Lease?.toFixed(2) || '0.00'})</span>
                 </button>
 
                 <button
@@ -589,25 +600,16 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
               </div>
             </div>
 
-            {/* Right Column: Waveform, Seekbar, Controls & Drawer Tabs */}
+            {/* Right Column: Waveform, Seekbar, Controls */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* Beat Info Title Header */}
+              {/* Beat Title Header */}
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400">
-                  <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-500/30 rounded">
-                    {currentBeat.genre}
-                  </span>
-                  <span>·</span>
-                  <span>{currentBeat.bpm} BPM</span>
-                  <span>·</span>
-                  <span>{currentBeat.key}</span>
-                </div>
                 <h1 className="text-3xl sm:text-4xl font-extrabold text-white">{currentBeat.title}</h1>
                 <p className="text-xs text-zinc-400 font-mono">Produced by {currentBeat.producerName || 'CASHMERE KID$'}</p>
               </div>
 
-              {/* Feature 13: Large Interactive Visual Waveform Player */}
+              {/* Main Waveform Player */}
               <div className="p-6 bg-zinc-950 border border-zinc-850 rounded-3xl space-y-4 shadow-2xl">
                 <div
                   className="relative w-full h-24 cursor-pointer"
@@ -622,8 +624,8 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                 </div>
               </div>
 
-              {/* Main Player Transport Controls */}
-              <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-zinc-950 border border-zinc-850 rounded-3xl">
+              {/* Player Transport Controls */}
+              <div className="flex items-center justify-between gap-4 p-4 bg-zinc-950 border border-zinc-850 rounded-3xl">
                 <div className="flex items-center gap-4">
                   <button
                     onClick={onPrev}
@@ -645,19 +647,9 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                   >
                     <SkipForward className="w-5 h-5" />
                   </button>
-
-                  <button
-                    onClick={() => setIsLooping(!isLooping)}
-                    className={`p-3 rounded-full border cursor-pointer ${
-                      isLooping ? 'bg-purple-950 border-purple-500 text-purple-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                    }`}
-                    title="Loop Beat"
-                  >
-                    <Repeat className="w-5 h-5" />
-                  </button>
                 </div>
 
-                {/* Feature 15: Volume Control Slider */}
+                {/* Volume Control Slider */}
                 <div className="flex items-center gap-3 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
                   <button onClick={toggleMute} className="text-zinc-400 hover:text-white cursor-pointer">
                     {isMuted || volume === 0 ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
@@ -673,160 +665,6 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                   />
                 </div>
               </div>
-
-              {/* Drawer Modal & Tabs Toggle Row */}
-              <div className="bg-zinc-950 p-1.5 rounded-2xl border border-zinc-850 flex text-xs font-extrabold font-mono">
-                <button
-                  onClick={() => setActiveDrawerTab('info')}
-                  className={`flex-1 py-2.5 rounded-xl transition-all ${
-                    activeDrawerTab === 'info' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  BEAT INFO (REQ 20)
-                </button>
-                <button
-                  onClick={() => setActiveDrawerTab('queue')}
-                  className={`flex-1 py-2.5 rounded-xl transition-all ${
-                    activeDrawerTab === 'queue' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  QUEUE ({queueList.length})
-                </button>
-                <button
-                  onClick={() => setActiveDrawerTab('history')}
-                  className={`flex-1 py-2.5 rounded-xl transition-all ${
-                    activeDrawerTab === 'history' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  RECENTLY PLAYED ({recentlyPlayedList.length})
-                </button>
-              </div>
-
-              {/* Tab 1: Feature 20 - Beat Information Drawer */}
-              {activeDrawerTab === 'info' && (
-                <div className="p-6 bg-zinc-950 border border-zinc-850 rounded-3xl space-y-4 text-xs font-mono text-zinc-300 animate-fadeIn">
-                  <h4 className="font-extrabold text-sm text-white uppercase tracking-wider border-b border-zinc-900 pb-2">
-                    BEAT METADATA SPECIFICATIONS
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    <div>
-                      <div className="text-[10px] text-zinc-500 uppercase">Title</div>
-                      <div className="font-bold text-white mt-0.5">{currentBeat.title}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-zinc-500 uppercase">Producer</div>
-                      <div className="font-bold text-white mt-0.5">{currentBeat.producerName || 'CASHMERE KID$'}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-zinc-500 uppercase">BPM & Key</div>
-                      <div className="font-bold text-white mt-0.5">{currentBeat.bpm} BPM · {currentBeat.key}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-zinc-500 uppercase">Genre</div>
-                      <div className="font-bold text-white mt-0.5">{currentBeat.genre}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-zinc-500 uppercase">Duration</div>
-                      <div className="font-bold text-white mt-0.5">{formatTime(duration)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-zinc-500 uppercase">Storage Provider</div>
-                      <div className="font-bold text-emerald-400 mt-0.5">{currentBeat.storageProvider || 'Internet Archive'}</div>
-                    </div>
-                  </div>
-
-                  {currentBeat.description && (
-                    <div className="pt-2 border-t border-zinc-900">
-                      <div className="text-[10px] text-zinc-500 uppercase">Description</div>
-                      <p className="text-zinc-300 mt-1 leading-relaxed">{currentBeat.description}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 2: Feature 19 - Player Listening Queue */}
-              {activeDrawerTab === 'queue' && (
-                <div className="p-6 bg-zinc-950 border border-zinc-850 rounded-3xl space-y-4 animate-fadeIn">
-                  <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
-                    <h4 className="font-extrabold text-sm text-white uppercase tracking-wider">
-                      UP NEXT IN QUEUE
-                    </h4>
-                    {queueList.length > 0 && (
-                      <button onClick={clearQueue} className="text-xs text-red-400 hover:text-red-300 font-bold">
-                        Clear Queue
-                      </button>
-                    )}
-                  </div>
-
-                  {queueList.length === 0 ? (
-                    <p className="text-xs text-zinc-500 font-mono py-4 text-center">
-                      Queue is currently empty. Tap the + icon on any beat to add it to your queue.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {queueList.map((beat, idx) => (
-                        <div key={`${beat.id}-${idx}`} className="p-3 bg-zinc-900 border border-zinc-850 rounded-2xl flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-3">
-                            <img src={beat.artworkUrl} alt={beat.title} className="w-10 h-10 rounded-xl object-cover" />
-                            <div>
-                              <div className="font-bold text-white">{beat.title}</div>
-                              <div className="text-[10px] text-zinc-400 font-mono">{beat.genre} · {beat.bpm} BPM</div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => moveQueueItem(idx, 'up')} className="p-1 text-zinc-400 hover:text-white">
-                              <ArrowUp className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => moveQueueItem(idx, 'down')} className="p-1 text-zinc-400 hover:text-white">
-                              <ArrowDown className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => removeFromQueue(idx)} className="p-1 text-red-400 hover:text-red-300">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 3: Feature 18 - Recently Played Beats */}
-              {activeDrawerTab === 'history' && (
-                <div className="p-6 bg-zinc-950 border border-zinc-850 rounded-3xl space-y-4 animate-fadeIn">
-                  <h4 className="font-extrabold text-sm text-white uppercase tracking-wider border-b border-zinc-900 pb-2">
-                    RECENTLY PLAYED SESSION HISTORY
-                  </h4>
-
-                  {recentlyPlayedList.length === 0 ? (
-                    <p className="text-xs text-zinc-500 font-mono py-4 text-center">
-                      No recently played beats yet. Start listening to build your session history.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {recentlyPlayedList.map((beat) => (
-                        <div key={beat.id} className="p-3 bg-zinc-900 border border-zinc-850 rounded-2xl flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-3">
-                            <img src={beat.artworkUrl} alt={beat.title} className="w-10 h-10 rounded-xl object-cover" />
-                            <div>
-                              <div className="font-bold text-white">{beat.title}</div>
-                              <div className="text-[10px] text-zinc-400 font-mono">{beat.duration || '2:45'} · {beat.genre}</div>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => onPlayToggle(beat)}
-                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl cursor-pointer"
-                          >
-                            Play
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -962,7 +800,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
               className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase rounded-xl shadow cursor-pointer hidden sm:flex items-center gap-1.5"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>{currencySymbol}{currentBeat.pricing.mp3Lease.toFixed(2)}</span>
+              <span>{currencySymbol}{currentBeat.pricing?.mp3Lease?.toFixed(2) || '0.00'}</span>
             </button>
 
             <button

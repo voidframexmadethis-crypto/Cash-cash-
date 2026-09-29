@@ -565,16 +565,38 @@ export default function App() {
         return item;
       })
     );
+
+    // Persist changes to server-side JSON storage
+    fetch(`/api/beats/${updatedBeat.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedBeat),
+    })
+    .then((r) => r.json())
+    .then((data) => {
+      console.log('[Backend Sync] Beat successfully updated in server-side store:', data);
+    })
+    .catch((err) => console.error('[Backend Sync] Beat update failed:', err));
   };
 
   const handleUpdateBeatPrice = (beatId: string, newPrice: number) => {
     setBeats((prev) =>
       prev.map((b) => {
         if (b.id === beatId) {
-          const updated = { ...b, pricing: { ...b.pricing, mp3Lease: newPrice } };
+          const updated = { ...b, price: newPrice, pricing: { ...b.pricing, mp3Lease: newPrice } };
           if (currentBeat?.id === beatId) {
             setCurrentBeat(updated);
           }
+          // Persist price update to backend
+          fetch(`/api/beats/${beatId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price: newPrice, pricing: { ...b.pricing, mp3Lease: newPrice } }),
+          })
+          .then((r) => r.json())
+          .then((data) => console.log('[Backend Sync] Price updated successfully:', data))
+          .catch((err) => console.error('[Backend Sync] Price update failed:', err));
+
           return updated;
         }
         return b;
@@ -592,10 +614,20 @@ export default function App() {
     setBeats((prev) =>
       prev.map((b) => {
         if (b.id === beatId) {
-          const updated = { ...b, freeDownload: free };
+          const updated = { ...b, freeDownload: free, free_download: free };
           if (currentBeat?.id === beatId) {
             setCurrentBeat(updated);
           }
+          // Persist free download setting to backend
+          fetch(`/api/beats/${beatId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ freeDownload: free, free_download: free }),
+          })
+          .then((r) => r.json())
+          .then((data) => console.log('[Backend Sync] Free download updated successfully:', data))
+          .catch((err) => console.error('[Backend Sync] Free download update failed:', err));
+
           return updated;
         }
         return b;
@@ -620,28 +652,56 @@ export default function App() {
     });
     // Remove from cart when beat is deleted from catalog
     setCart((prev) => prev.filter((item) => item.beatId !== beatId));
+
+    // Persist deletion to backend
+    fetch(`/api/beats/${beatId}`, {
+      method: 'DELETE',
+    })
+    .then((r) => r.json())
+    .then((data) => {
+      console.log('[Backend Sync] Beat deleted successfully:', data);
+    })
+    .catch((err) => console.error('[Backend Sync] Delete failed:', err));
   };
 
   const handleDuplicateBeat = (beatId: string) => {
+    const original = beats.find((b) => b.id === beatId);
+    if (!original) return;
+    const newId = `beat-dup-${Date.now()}`;
+    const duplicated: Beat = {
+      ...original,
+      id: newId,
+      title: `${original.title} (COPY)`,
+      featured: false,
+      playCount: 0,
+      downloadCount: 0,
+      likeCount: 0,
+      releaseDate: new Date().toISOString().split('T')[0],
+      isNew: true,
+    };
+
     setBeats((prev) => {
-      const original = prev.find((b) => b.id === beatId);
-      if (!original) return prev;
-      const duplicated: Beat = {
-        ...original,
-        id: `beat-dup-${Date.now()}`,
-        title: `${original.title} (COPY)`,
-        featured: false,
-        playCount: 0,
-        downloadCount: 0,
-        likeCount: 0,
-        releaseDate: new Date().toISOString().split('T')[0],
-        isNew: true,
-      };
       const index = prev.findIndex((b) => b.id === beatId);
       const updated = [...prev];
       updated.splice(index + 1, 0, duplicated);
       return updated;
     });
+
+    // Create the duplicate on the backend
+    fetch('/api/beats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(duplicated),
+    })
+    .then(() => {
+      // Send a PATCH with pricing and metadata to fully synchronize duplicated information
+      fetch(`/api/beats/${newId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(duplicated),
+      });
+    })
+    .catch((err) => console.error('[Backend Sync] Duplicate failed:', err));
   };
 
   const handleAddPromotion = (promo: Promotion) => {
