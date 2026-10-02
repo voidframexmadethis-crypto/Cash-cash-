@@ -35,6 +35,7 @@ interface AudioPlayerViewProps {
   favoriteIds?: string[];
   onToggleFavorite?: (beat: Beat) => void;
   onNavigateToBrowse: () => void;
+  onNavigateToUploader?: () => void;
 }
 
 // Custom seek SVG icons matching the BeatStore reference proportions
@@ -79,6 +80,7 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
   favoriteIds = [],
   onToggleFavorite,
   onNavigateToBrowse,
+  onNavigateToUploader,
 }) => {
   // Real Audio Engine State
   const [currentTime, setCurrentTime] = useState(0);
@@ -177,16 +179,32 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
 
   if (!activeBeat) {
     return (
-      <div className="p-12 text-center bg-[#111217] border border-zinc-900 rounded-3xl space-y-4 max-w-xl mx-auto my-12 shadow-2xl">
-        <Music className="w-12 h-12 text-[#00FF66] mx-auto animate-bounce" />
-        <h2 className="text-xl font-black text-white uppercase tracking-wider">No Beat Loaded</h2>
-        <p className="text-xs text-zinc-400 font-mono">Select a beat from the catalog to load into the player console.</p>
-        <button
-          onClick={onNavigateToBrowse}
-          className="px-6 py-3 bg-[#00FF66] hover:bg-[#00E676] text-black font-black text-xs rounded-xl shadow-lg transition-all"
-        >
-          BROWSE CATALOG
-        </button>
+      <div className="p-12 text-center bg-[#0A0B0E] border border-zinc-900 rounded-3xl space-y-6 max-w-xl mx-auto my-16 shadow-2xl">
+        <div className="w-16 h-16 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-center mx-auto text-[#00FF66] shadow-[0_0_20px_rgba(0,255,102,0.15)]">
+          <Music className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-white uppercase tracking-tight font-brand">CASHMERE KID$ VAULT READY</h2>
+          <p className="text-xs text-zinc-400 font-mono max-w-md mx-auto leading-relaxed">
+            No beats currently loaded in the store vault. Upload your MP3/M4A beats to immediately populate this wide professional audio player.
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          {onNavigateToUploader && (
+            <button
+              onClick={onNavigateToUploader}
+              className="px-6 py-3 bg-[#00FF66] hover:bg-[#00E676] text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer"
+            >
+              UPLOAD YOUR BEATS
+            </button>
+          )}
+          <button
+            onClick={onNavigateToBrowse}
+            className="px-6 py-3 bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold text-xs uppercase tracking-wider border border-zinc-800 rounded-xl transition-all cursor-pointer"
+          >
+            BROWSE STORE
+          </button>
+        </div>
       </div>
     );
   }

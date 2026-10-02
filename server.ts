@@ -687,7 +687,12 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     try {
       if (fs.existsSync(BEATS_FILE)) {
         const data = JSON.parse(fs.readFileSync(BEATS_FILE, 'utf8'));
-        Object.entries(data).forEach(([k, v]) => beatsStore.set(k, ensureBeatStructure(v as Beat)));
+        const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis'];
+        Object.entries(data).forEach(([k, v]) => {
+          if (!placeholderIds.includes(k)) {
+            beatsStore.set(k, ensureBeatStructure(v as Beat));
+          }
+        });
       }
       if (fs.existsSync(ASSETS_FILE)) {
         const data = JSON.parse(fs.readFileSync(ASSETS_FILE, 'utf8'));
@@ -696,101 +701,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       if (fs.existsSync(PRODUCER_FILE)) {
         const data = JSON.parse(fs.readFileSync(PRODUCER_FILE, 'utf8'));
         producerAccount = { ...producerAccount, ...data };
-      }
-
-      if (beatsStore.size === 0) {
-        const initialBeats: Beat[] = [
-          {
-            id: 'beat-obsidian-runway',
-            title: 'OBSIDIAN RUNWAY',
-            slug: 'beat-obsidian-runway',
-            description: 'Dark, brooding analog synthesizers collide with devastating 808 glides and crisp percussion.',
-            bpm: 140,
-            key: 'F# Minor',
-            genre: 'Trap',
-            mood: 'Dark',
-            tags: ['voodoo', 'darktrap', 'cashmere', 'platinum', '808'],
-            price: 39.99,
-            free_download: true,
-            status: 'published',
-            visibility: 'public',
-            published: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            main_audio_asset_id: 'as_aud_1790611860448',
-            audio_key: 'beats/beat-obsidian-runway/audio/as_aud_1790611860448.mp3',
-            pricing: { mp3Lease: 39.99, premiumLease: 79.99, unlimited: 249.99, exclusive: 1200.00 },
-            ...beatUrls('beat-obsidian-runway')
-          },
-          {
-            id: 'beat-velvet-vault',
-            title: 'VELVET VAULT',
-            slug: 'beat-velvet-vault',
-            description: 'Vintage analog synth textures, wide stereo pads, and punchy modern drums designed for billboard records.',
-            bpm: 144,
-            key: 'C# Minor',
-            genre: 'Dark Synth',
-            mood: 'Ethereal',
-            tags: ['velvet', 'vault', 'cashmere', 'analog', 'synth'],
-            price: 39.99,
-            free_download: false,
-            status: 'published',
-            visibility: 'public',
-            published: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            main_audio_asset_id: 'as_aud_1790611891771',
-            audio_key: 'beats/beat-velvet-vault/audio/as_aud_1790611891771.mp3',
-            pricing: { mp3Lease: 39.99, premiumLease: 79.99, unlimited: 249.99, exclusive: 1200.00 },
-            ...beatUrls('beat-velvet-vault')
-          },
-          {
-            id: 'beat-platinum-runway',
-            title: 'PLATINUM RUNWAY',
-            slug: 'beat-platinum-runway',
-            description: 'Bouncy, infectious rhythm with crisp rolling hi-hats and a punchy low-end tailored for dynamic lyrical flows.',
-            bpm: 138,
-            key: 'D Minor',
-            genre: 'Freestyle Trap',
-            mood: 'Energetic',
-            tags: ['platinum', 'runway', 'cashmere', 'freestyle', 'hit'],
-            price: 49.99,
-            free_download: true,
-            status: 'published',
-            visibility: 'public',
-            published: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            main_audio_asset_id: 'as_aud_1790611914775',
-            audio_key: 'beats/beat-platinum-runway/audio/as_aud_1790611914775.m4a',
-            pricing: { mp3Lease: 49.99, premiumLease: 99.99, unlimited: 299.99, exclusive: 1500.00 },
-            ...beatUrls('beat-platinum-runway')
-          },
-          {
-            id: 'beat-dark-synthesis',
-            title: 'DARK SYNTHESIS',
-            slug: 'beat-dark-synthesis',
-            description: 'Distorted 808s, haunting minor melodies, and razor-sharp percussion for an unmistakable hard trap vibe.',
-            bpm: 142,
-            key: 'A Minor',
-            genre: 'Hard Trap',
-            mood: 'Aggressive',
-            tags: ['darksynth', 'hard', 'distortion', '808'],
-            price: 39.99,
-            free_download: false,
-            status: 'published',
-            visibility: 'public',
-            published: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            main_audio_asset_id: 'as_aud_1790612890896',
-            audio_key: 'beats/beat-dark-synthesis/audio/as_aud_1790612890896.mp3',
-            pricing: { mp3Lease: 39.99, premiumLease: 79.99, unlimited: 249.99, exclusive: 1200.00 },
-            ...beatUrls('beat-dark-synthesis')
-          }
-        ];
-        initialBeats.forEach(b => beatsStore.set(b.id, b));
-        saveToDisk();
       }
     } catch (err) {
       console.error('[Persistence] Load Error:', err);

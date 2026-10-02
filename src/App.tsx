@@ -65,7 +65,8 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed;
+          const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis'];
+          return parsed.filter((b: Beat) => !placeholderIds.includes(b.id));
         }
       } catch {
         return [];
@@ -169,7 +170,8 @@ export default function App() {
       .then((r) => r.json())
       .then((data) => {
         if (data?.beats && Array.isArray(data.beats)) {
-          setBeats(data.beats);
+          const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis'];
+          setBeats(data.beats.filter((b: Beat) => !placeholderIds.includes(b.id)));
         }
       })
       .catch(() => {});
@@ -812,6 +814,7 @@ export default function App() {
             favoriteIds={favoriteIds}
             onToggleFavorite={handleToggleFavorite}
             onNavigateToBrowse={() => setCurrentView('browse')}
+            onNavigateToUploader={() => setCurrentView('uploader')}
           />
         )}
 
