@@ -209,10 +209,11 @@ export default function App() {
           if (validBeats.length > 0) {
             setCurrentBeat((prev) => {
               console.log('[AudioStateTrace] setCurrentBeat called from fetch(/api/beats) callback:', { prevId: prev?.id });
-              if (!prev || prev.id === 'beat-as_aud_1790611860448') return validBeats[0];
-              const match = validBeats.find((b: Beat) => b.id === prev.id);
-              // Preserve currently selected/playing beat and avoid resetting to validBeats[0]
-              return match || prev;
+              if (prev && prev.id && prev.id !== 'beat-as_aud_1790611860448') {
+                // Strictly preserve existing object reference to avoid re-triggering audio playback effects
+                return prev;
+              }
+              return validBeats[0] || null;
             });
           }
         }

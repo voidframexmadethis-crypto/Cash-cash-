@@ -2095,10 +2095,26 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
 
   // Internet Archive Storage Adapter Endpoints (Server-Side Only)
+  function getIaCredentials(): { accessKey: string; secretKey: string; configured: boolean } {
+    let accessKey = process.env.IA_ACCESS_KEY || '';
+    let secretKey = process.env.IA_SECRET_KEY || '';
+    const configPath = path.resolve('data/ia_config.json');
+    if ((!accessKey || !secretKey) && fs.existsSync(configPath)) {
+      try {
+        const stored = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (stored.accessKey && !accessKey) accessKey = stored.accessKey;
+        if (stored.secretKey && !secretKey) secretKey = stored.secretKey;
+      } catch {}
+    }
+    return {
+      accessKey,
+      secretKey,
+      configured: !!(accessKey && secretKey)
+    };
+  }
+
   app.get('/api/storage/status', (req, res) => {
-    const iaAccessKey = process.env.IA_ACCESS_KEY;
-    const iaSecretKey = process.env.IA_SECRET_KEY;
-    const configured = !!(iaAccessKey && iaSecretKey);
+    const { configured } = getIaCredentials();
     res.json({
       storageProvider: 'Internet Archive',
       status: configured ? 'Ready' : 'Not Configured',
@@ -2110,11 +2126,23 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     });
   });
 
+  // Automatically learn and persist Internet Archive access credentials permanently without client manual pasting
+  app.post('/api/storage/learn-credentials', express.json(), (req, res) => {
+    const { accessKey, secretKey } = req.body || {};
+    if (accessKey && secretKey) {
+      const configPath = path.resolve('data/ia_config.json');
+      fs.writeFileSync(configPath, JSON.stringify({ accessKey, secretKey, learnedAt: new Date().toISOString() }, null, 2));
+      process.env.IA_ACCESS_KEY = accessKey;
+      process.env.IA_SECRET_KEY = secretKey;
+      console.log('[InternetArchiveStorageAdapter] Store learned Internet Archive access keys successfully.');
+      return res.json({ success: true, message: 'Internet Archive credentials learned and stored permanently.' });
+    }
+    res.status(400).json({ success: false, error: 'Missing accessKey or secretKey' });
+  });
+
   (app as any).post('/api/storage/upload', upload.any(), async (req: any, res: any) => {
     try {
-      const iaAccessKey = process.env.IA_ACCESS_KEY;
-      const iaSecretKey = process.env.IA_SECRET_KEY;
-      const isIaConfigured = !!(iaAccessKey && iaSecretKey);
+      const { accessKey: iaAccessKey, secretKey: iaSecretKey, configured: isIaConfigured } = getIaCredentials();
 
       if (!isIaConfigured) {
         console.warn('[InternetArchiveStorageAdapter] IA keys are not set, caching file in-memory and on-disk.');
@@ -2477,9 +2505,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   });
 
   app.get('/api/storage/test', async (req, res) => {
-    const iaAccessKey = process.env.IA_ACCESS_KEY;
-    const iaSecretKey = process.env.IA_SECRET_KEY;
-    const configured = !!(iaAccessKey && iaSecretKey);
+    const { configured } = getIaCredentials();
 
     res.json({
       storageTestReport: {
