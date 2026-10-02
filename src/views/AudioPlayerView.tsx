@@ -99,25 +99,24 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
   // Active playing beat reference (falls back to first beat in store)
   const activeBeat = currentBeat || beats[0] || null;
 
-  // Poll state continuously from the real Web Audio engine
+  // Subscribe to state continuously from the real Web Audio engine
   useEffect(() => {
-    audioSynth.setCallbacks(
-      (time, dur) => {
+    const unsubscribe = audioSynth.subscribe({
+      onTimeUpdate: (time, dur) => {
         setCurrentTime(time);
         if (dur && !isNaN(dur) && dur > 0) setDuration(dur);
       },
-      () => {},
-      (err) => {
-        setAudioError(err || 'Audio not uploaded yet.');
+      onError: (err) => {
+        setAudioError(err || 'Audio file unavailable');
       },
-      (state) => {
+      onStateChange: (state) => {
         if (state === 'unavailable' || state === 'error') {
-          setAudioError('Audio not uploaded yet.');
+          setAudioError('Audio file unavailable');
         } else if (state === 'playing' || state === 'ready') {
           setAudioError(null);
         }
-      }
-    );
+      },
+    });
 
     const interval = setInterval(() => {
       const state = audioSynth.getCurrentState();
@@ -128,7 +127,11 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
       setVolume(audioSynth.getVolume());
       setIsMuted(audioSynth.getVolume() === 0);
     }, 80);
-    return () => clearInterval(interval);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, []);
 
   // Synchronized canvas waveform rendering

@@ -32,17 +32,11 @@ function isValidAudioBuffer(buffer: Buffer, fileName: string): { valid: boolean;
   }
 
   const lower = fileName.toLowerCase();
-  if (lower.endsWith('.wav')) {
-    return { valid: true, mimeType: 'audio/wav' };
-  }
-  if (lower.endsWith('.flac')) {
-    return { valid: true, mimeType: 'audio/flac' };
-  }
-  if (lower.endsWith('.aac')) {
-    return { valid: true, mimeType: 'audio/aac' };
-  }
   if (lower.endsWith('.m4a')) {
     return { valid: true, mimeType: 'audio/mp4' };
+  }
+  if (lower.endsWith('.mp3')) {
+    return { valid: true, mimeType: 'audio/mpeg' };
   }
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
     return { valid: true, mimeType: 'image/jpeg' };
@@ -54,7 +48,7 @@ function isValidAudioBuffer(buffer: Buffer, fileName: string): { valid: boolean;
     return { valid: true, mimeType: 'image/webp' };
   }
 
-  return { valid: true, mimeType: 'audio/mpeg' };
+  return { valid: false, error: 'UNSUPPORTED_FORMAT: Only .m4a and .mp3 files are supported.', mimeType: '' };
 }
 
 function getAppOrigin(req: express.Request): string {
@@ -656,6 +650,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     freeDownloadType?: string;
     artworkUrl?: string;
     audioUrl?: string;
+    iaUrl?: string;
     created_at: string;
     updated_at: string;
     published_at?: string | null;
@@ -702,12 +697,83 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         const data = JSON.parse(fs.readFileSync(PRODUCER_FILE, 'utf8'));
         producerAccount = { ...producerAccount, ...data };
       }
+
+      // Auto-discover media files in /media/ directory
+      if (fs.existsSync(MEDIA_DIR)) {
+        const files = fs.readdirSync(MEDIA_DIR);
+        files.forEach((file) => {
+          const lower = file.toLowerCase();
+          if (lower.endsWith('.mp3') || lower.endsWith('.m4a')) {
+            const fileBaseName = path.parse(file).name;
+            const beatId = `beat-${fileBaseName}`;
+            const ext = path.extname(file).replace('.', '').toLowerCase();
+            const mimeType = ext === 'm4a' ? 'audio/mp4' : 'audio/mpeg';
+            
+            // Check if any existing beat points to this file
+            let existsInStore = Array.from(beatsStore.values()).some(b => 
+              b.audio_filename === file || b.audio_key?.includes(file) || b.id === beatId
+            );
+
+            const assetId = `as_aud_${fileBaseName}`;
+            if (!assetsStore.has(assetId)) {
+              let statSize = 0;
+              try {
+                statSize = fs.statSync(path.join(MEDIA_DIR, file)).size;
+              } catch {}
+              assetsStore.set(assetId, {
+                id: assetId,
+                beat_id: beatId,
+                asset_type: 'main_audio',
+                r2_key: `beats/${beatId}/audio/${file}`,
+                original_filename: file,
+                mime_type: mimeType,
+                file_size: statSize,
+                created_at: new Date().toISOString()
+              });
+            }
+
+            if (!existsInStore) {
+              const rawTitle = fileBaseName.replace(/^as_aud_\d+_?/, '').replace(/[_-]/g, ' ').trim();
+              const titleName = rawTitle ? rawTitle.toUpperCase() : `REAL MASTER ${ext.toUpperCase()} BEAT`;
+              const timestamp = new Date().toISOString();
+
+              beatsStore.set(beatId, ensureBeatStructure({
+                id: beatId,
+                title: titleName,
+                slug: beatId,
+                description: `Real uploaded master beat track (${ext.toUpperCase()}).`,
+                bpm: 140,
+                key: 'C Minor',
+                genre: 'Trap',
+                mood: 'Dark',
+                tags: ['cashmere', 'master', ext],
+                price: 39.99,
+                free_download: false,
+                status: 'published',
+                visibility: 'public',
+                published: true,
+                main_audio_asset_id: assetId,
+                audio_key: `beats/${beatId}/audio/${file}`,
+                audio_filename: file,
+                audio_content_type: mimeType,
+                audioUrl: `/api/beats/${beatId}/audio`,
+                iaUrl: `/api/beats/${beatId}/audio`,
+                artworkUrl: `/api/beats/${beatId}/artwork`,
+                created_at: timestamp,
+                updated_at: timestamp,
+                published_at: timestamp,
+              }));
+            }
+          }
+        });
+      }
     } catch (err) {
       console.error('[Persistence] Load Error:', err);
     }
   }
 
   loadFromDisk();
+  saveToDisk();
 
   // Persistence Helper
   function saveToDisk() {
@@ -809,12 +875,23 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
           const p = path.join(MEDIA_DIR, beat.audio_filename);
           if (fs.existsSync(p)) candidatePath = p;
         }
+        if (!candidatePath && beat.audioUrl) {
+          const fn = path.basename(beat.audioUrl);
+          const p = path.join(MEDIA_DIR, fn);
+          if (fs.existsSync(p)) candidatePath = p;
+        }
+        if (!candidatePath && beat.iaUrl) {
+          const fn = path.basename(beat.iaUrl);
+          const p = path.join(MEDIA_DIR, fn);
+          if (fs.existsSync(p)) candidatePath = p;
+        }
       }
 
       if (!candidatePath) {
         try {
+          const rawIdName = beatId.replace(/^beat-/, '');
           const mediaFiles = fs.readdirSync(MEDIA_DIR);
-          const matched = mediaFiles.find(f => f.startsWith(`${beatId}_`) || f.startsWith(`beat-audio-${beatId}`) || f.includes(beatId));
+          const matched = mediaFiles.find(f => f.startsWith(`${beatId}_`) || f.startsWith(`beat-audio-${beatId}`) || f.includes(beatId) || f.includes(rawIdName));
           if (matched) {
             const p = path.join(MEDIA_DIR, matched);
             if (fs.existsSync(p)) candidatePath = p;
@@ -835,11 +912,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const fileSize = stat.size;
       const range = req.headers.range;
       const ext = path.extname(candidatePath).toLowerCase();
-      let contentType = 'audio/mpeg';
-      if (ext === '.m4a') contentType = 'audio/mp4';
-      if (ext === '.wav') contentType = 'audio/wav';
-      if (ext === '.flac') contentType = 'audio/flac';
-      if (ext === '.aac') contentType = 'audio/aac';
+      const contentType = ext === '.m4a' ? 'audio/mp4' : 'audio/mpeg';
 
       const downloadName = preferredFileName || (beatId ? `${beatId}${ext}` : path.basename(candidatePath));
 
@@ -1075,6 +1148,15 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const assetId = `as_aud_${Date.now()}`;
       const originalFilename = file ? file.originalname : (req.headers['x-filename'] as string || `audio-${Date.now()}.mp3`);
       const ext = path.extname(originalFilename).replace('.', '').toLowerCase() || 'mp3';
+      
+      if (ext !== 'm4a' && ext !== 'mp3') {
+        return res.status(400).json({
+          success: false,
+          error: 'UNSUPPORTED_FORMAT',
+          message: 'Only .m4a and .mp3 files are supported. WAV is not supported.'
+        });
+      }
+
       const cleanFileName = `${assetId}.${ext}`;
       const r2Key = `beats/${beatId}/audio/${cleanFileName}`;
       const localFilePath = path.join(MEDIA_DIR, cleanFileName);
@@ -1142,7 +1224,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         console.warn(`[UploadAudio] Watermarking parent exception for ${beatId}:`, err.message);
       }
 
-      const mimeType = (ext === 'm4a' || ext === 'mp4') ? 'audio/mp4' : (ext === 'wav' ? 'audio/wav' : (ext === 'flac' ? 'audio/flac' : (ext === 'aac' ? 'audio/aac' : 'audio/mpeg')));
+      const mimeType = ext === 'm4a' ? 'audio/mp4' : 'audio/mpeg';
 
       let calculatedSize = fileBuffer.length;
       try {

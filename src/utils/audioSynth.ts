@@ -1,7 +1,7 @@
 /**
- * CASHMERE KID$ Real Audio Player Engine
- * Direct HTML5 & Web Audio streaming engine for real master beat audio files (MP3/M4A/WAV).
- * No synthetic audio generation or placeholder track substitution.
+ * CASHMERE KID$ Real Audio Playback Engine
+ * Native HTMLAudioElement streaming engine for real master beat audio files (M4A and MP3 only).
+ * Directly drives system sound output with zero synthetic audio or placeholder track substitution.
  */
 
 export type DiagnosticErrorCode =
@@ -13,13 +13,26 @@ export type DiagnosticErrorCode =
   | 'UNSUPPORTED_CODEC'
   | 'DECODING_ERROR';
 
+export type PlayerState =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'playing'
+  | 'paused'
+  | 'buffering'
+  | 'finished'
+  | 'error'
+  | 'unavailable';
+
+export interface AudioPlayerListener {
+  onTimeUpdate?: (time: number, duration: number) => void;
+  onEnd?: () => void;
+  onError?: (errorMsg: string, code?: DiagnosticErrorCode) => void;
+  onStateChange?: (state: PlayerState) => void;
+}
+
 class RealAudioPlayerEngine {
   private audio: HTMLAudioElement | null = null;
-  private ctx: AudioContext | null = null;
-  private masterGain: GainNode | null = null;
-  private analyser: AnalyserNode | null = null;
-  private sourceNode: MediaElementAudioSourceNode | null = null;
-  private webAudioConnected: boolean = false;
   private isPlaying: boolean = false;
   private currentBeatId: string | null = null;
   private currentAudioUrl: string | null = null;
@@ -29,62 +42,74 @@ class RealAudioPlayerEngine {
   private tempoMultiplier: number = 1.0;
   private pitchShiftSemitones: number = 0;
   private lastDiagnosticCode: DiagnosticErrorCode | null = null;
+  private currentState: PlayerState = 'idle';
 
-  private onTimeUpdateCallback: ((time: number, duration: number) => void) | null = null;
-  private onEndCallback: (() => void) | null = null;
-  private onErrorCallback: ((errorMsg: string, code?: DiagnosticErrorCode) => void) | null = null;
-  private onStateChangeCallback: ((state: 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error' | 'unavailable') => void) | null = null;
+  // Support multiple active listeners simultaneously
+  private listeners: Set<AudioPlayerListener> = new Set();
 
-  private ensureAudioContext(): AudioContext | null {
-    if (!this.ctx) {
+  private notifyTimeUpdate(time: number, duration: number) {
+    this.listeners.forEach((l) => {
       try {
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        if (AudioCtx) {
-          this.ctx = new AudioCtx();
-          this.masterGain = this.ctx.createGain();
-          this.analyser = this.ctx.createAnalyser();
-          this.analyser.fftSize = 64;
-          this.masterGain.gain.value = this.volume;
-
-          this.masterGain.connect(this.analyser);
-          this.analyser.connect(this.ctx.destination);
-        }
-      } catch (err) {
-        console.warn('[RealAudioPlayerEngine] AudioContext init notice:', err);
+        if (l.onTimeUpdate) l.onTimeUpdate(time, duration);
+      } catch (e) {
+        console.warn('[AudioEngine] Listener error (onTimeUpdate):', e);
       }
-    }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
-    return this.ctx;
+    });
   }
 
-  private initAudioElement() {
+  private notifyEnd() {
+    this.listeners.forEach((l) => {
+      try {
+        if (l.onEnd) l.onEnd();
+      } catch (e) {
+        console.warn('[AudioEngine] Listener error (onEnd):', e);
+      }
+    });
+  }
+
+  private notifyError(errorMsg: string, code?: DiagnosticErrorCode) {
+    this.listeners.forEach((l) => {
+      try {
+        if (l.onError) l.onError(errorMsg, code);
+      } catch (e) {
+        console.warn('[AudioEngine] Listener error (onError):', e);
+      }
+    });
+  }
+
+  private notifyStateChange(state: PlayerState) {
+    this.currentState = state;
+    this.listeners.forEach((l) => {
+      try {
+        if (l.onStateChange) l.onStateChange(state);
+      } catch (e) {
+        console.warn('[AudioEngine] Listener error (onStateChange):', e);
+      }
+    });
+  }
+
+  private initAudioElement(): HTMLAudioElement {
     if (!this.audio) {
       this.audio = new Audio();
       this.audio.preload = 'auto';
-      this.audio.crossOrigin = 'anonymous';
+      this.audio.volume = this.volume;
 
       this.audio.addEventListener('loadstart', () => {
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('loading');
-        }
+        this.notifyStateChange('loading');
       });
 
       this.audio.addEventListener('canplay', () => {
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('ready');
+        if (this.currentState === 'loading') {
+          this.notifyStateChange('ready');
         }
       });
 
       this.audio.addEventListener('loadedmetadata', () => {
         if (this.audio) {
           const dur = this.audio.duration || 0;
-          if (this.onTimeUpdateCallback) {
-            this.onTimeUpdateCallback(this.audio.currentTime, dur);
-          }
-          if (this.onStateChangeCallback) {
-            this.onStateChangeCallback('ready');
+          this.notifyTimeUpdate(this.audio.currentTime, dur);
+          if (this.currentState === 'loading') {
+            this.notifyStateChange('ready');
           }
         }
       });
@@ -93,90 +118,49 @@ class RealAudioPlayerEngine {
         if (this.audio) {
           const cur = this.audio.currentTime;
           const dur = this.audio.duration || 0;
-          if (this.onTimeUpdateCallback) {
-            this.onTimeUpdateCallback(cur, dur);
-          }
+          this.notifyTimeUpdate(cur, dur);
         }
       });
 
       this.audio.addEventListener('playing', () => {
         this.isPlaying = true;
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('playing');
-        }
+        this.notifyStateChange('playing');
       });
 
       this.audio.addEventListener('pause', () => {
         this.isPlaying = false;
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('paused');
+        if (this.currentState !== 'unavailable' && this.currentState !== 'error') {
+          this.notifyStateChange('paused');
         }
       });
 
       this.audio.addEventListener('waiting', () => {
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('buffering');
-        }
+        this.notifyStateChange('buffering');
       });
 
       this.audio.addEventListener('ended', () => {
         this.isPlaying = false;
-        if (this.onEndCallback) {
-          this.onEndCallback();
-        }
+        this.notifyStateChange('finished');
+        this.notifyEnd();
       });
 
       this.audio.addEventListener('error', () => {
         this.isPlaying = false;
         const errCode = this.audio?.error?.code;
-        console.warn('[RealAudioPlayerEngine] HTML5 Audio error code:', errCode, 'URL:', this.currentAudioUrl);
+        console.warn('[RealAudioPlayerEngine] HTMLAudioElement error code:', errCode, 'URL:', this.currentAudioUrl);
 
-        if (errCode === 4) {
-          this.lastDiagnosticCode = 'FILE_NOT_FOUND';
-          if (this.onErrorCallback) {
-            this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
-          }
-          if (this.onStateChangeCallback) {
-            this.onStateChangeCallback('unavailable');
-          }
-        } else if (errCode === 3) {
-          this.lastDiagnosticCode = 'DECODING_ERROR';
-          if (this.onErrorCallback) {
-            this.onErrorCallback('Audio decoding error.', 'DECODING_ERROR');
-          }
-          if (this.onStateChangeCallback) {
-            this.onStateChangeCallback('error');
-          }
-        } else {
-          if (this.onStateChangeCallback) {
-            this.onStateChangeCallback('error');
-          }
-        }
+        this.lastDiagnosticCode = 'FILE_NOT_FOUND';
+        this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
+        this.notifyStateChange('unavailable');
       });
     }
-  }
-
-  private initWebAudio() {
-    this.ensureAudioContext();
-    if (this.webAudioConnected || !this.audio || !this.ctx || !this.masterGain) return;
-
-    try {
-      this.sourceNode = this.ctx.createMediaElementSource(this.audio);
-      this.sourceNode.connect(this.masterGain);
-      this.webAudioConnected = true;
-      this.audio.volume = 1.0;
-    } catch {
-      this.webAudioConnected = false;
-    }
+    return this.audio;
   }
 
   public setVolume(val: number) {
     this.volume = Math.max(0, Math.min(1, val));
     if (this.audio) {
-      this.audio.volume = this.webAudioConnected ? 1.0 : this.volume;
-    }
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+      this.audio.volume = this.volume;
     }
   }
 
@@ -209,8 +193,7 @@ class RealAudioPlayerEngine {
   }
 
   public playBeat(beatId: string, bpm: number = 140, key: string = 'C Minor', durationSeconds: number = 165, rawAudioUrl?: string) {
-    this.ensureAudioContext();
-    this.initAudioElement();
+    const audio = this.initAudioElement();
 
     this.baseBpm = bpm || 140;
     this.activeKey = key || 'C Minor';
@@ -219,64 +202,50 @@ class RealAudioPlayerEngine {
 
     if (!audioUrl) {
       this.isPlaying = false;
-      if (this.onErrorCallback) {
-        this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
-      }
-      if (this.onStateChangeCallback) {
-        this.onStateChangeCallback('unavailable');
-      }
+      this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
+      this.notifyStateChange('unavailable');
       return;
     }
 
-    const isSameTrack = (this.currentBeatId === beatId) && (this.currentAudioUrl === audioUrl) && (this.audio && this.audio.src.includes(audioUrl));
+    const isSameTrack = (this.currentBeatId === beatId) && (this.currentAudioUrl === audioUrl);
 
     this.currentBeatId = beatId;
     this.currentAudioUrl = audioUrl;
 
-    if (this.audio) {
-      if (!isSameTrack) {
-        this.audio.pause();
-        this.audio.src = audioUrl;
-        this.audio.load();
-      }
+    if (!isSameTrack) {
+      audio.pause();
+      this.notifyStateChange('loading');
+      audio.src = audioUrl;
+      audio.load();
+    } else if (audio.paused) {
+      this.notifyStateChange('loading');
+    }
 
-      this.audio.playbackRate = Math.max(0.5, Math.min(2.0, this.tempoMultiplier * Math.pow(2, this.pitchShiftSemitones / 12)));
-      this.audio.volume = this.webAudioConnected ? 1.0 : this.volume;
+    audio.volume = this.volume;
+    audio.playbackRate = Math.max(0.5, Math.min(2.0, this.tempoMultiplier * Math.pow(2, this.pitchShiftSemitones / 12)));
 
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().catch(() => {});
-      }
-
-      this.initWebAudio();
-
-      const playPromise = this.audio.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            this.isPlaying = true;
-            this.lastDiagnosticCode = null;
-            if (this.onStateChangeCallback) {
-              this.onStateChangeCallback('playing');
-            }
-          })
-          .catch((err: Error) => {
-            console.warn('[RealAudioPlayerEngine] Playback promise catch:', err.name, err.message);
-            if (err.name === 'NotAllowedError') {
-              this.isPlaying = false;
-              if (this.onStateChangeCallback) {
-                this.onStateChangeCallback('paused');
-              }
-            } else if (this.audio?.error) {
-              this.isPlaying = false;
-              if (this.onStateChangeCallback) {
-                this.onStateChangeCallback('unavailable');
-              }
-              if (this.onErrorCallback) {
-                this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
-              }
-            }
-          });
-      }
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          this.isPlaying = true;
+          this.lastDiagnosticCode = null;
+          this.notifyStateChange('playing');
+        })
+        .catch((err: Error) => {
+          console.warn('[RealAudioPlayerEngine] Playback promise catch:', err.name, err.message);
+          if (err.name === 'AbortError') {
+            // Interrupted by new load or pause - do NOT mark as error
+            return;
+          }
+          this.isPlaying = false;
+          if (err.name === 'NotAllowedError') {
+            this.notifyStateChange('paused');
+          } else {
+            this.notifyStateChange('unavailable');
+            this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
+          }
+        });
     }
   }
 
@@ -285,29 +254,25 @@ class RealAudioPlayerEngine {
       this.audio.pause();
     }
     this.isPlaying = false;
-    if (this.onStateChangeCallback) {
-      this.onStateChangeCallback('paused');
-    }
+    this.notifyStateChange('paused');
   }
 
   public resumeBeat() {
-    this.ensureAudioContext();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
     if (this.audio && this.currentAudioUrl) {
+      this.audio.volume = this.volume;
       this.audio.play().then(() => {
         this.isPlaying = true;
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('playing');
-        }
+        this.notifyStateChange('playing');
       }).catch((err) => {
         console.warn('[RealAudioPlayerEngine] Resume play notice:', err.message);
+        if (err.name === 'AbortError') return;
         if (err.name === 'NotAllowedError') {
           this.isPlaying = false;
-          if (this.onStateChangeCallback) {
-            this.onStateChangeCallback('paused');
-          }
+          this.notifyStateChange('paused');
+        } else {
+          this.isPlaying = false;
+          this.notifyStateChange('unavailable');
+          this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
         }
       });
     }
@@ -321,15 +286,14 @@ class RealAudioPlayerEngine {
     this.isPlaying = false;
     this.currentBeatId = null;
     this.currentAudioUrl = null;
+    this.notifyStateChange('idle');
   }
 
   public seek(seconds: number) {
     if (!isNaN(seconds) && this.audio) {
       const targetSec = Math.max(0, Math.min(seconds, this.audio.duration || seconds));
       this.audio.currentTime = targetSec;
-      if (this.onTimeUpdateCallback) {
-        this.onTimeUpdateCallback(targetSec, this.audio.duration || 0);
-      }
+      this.notifyTimeUpdate(targetSec, this.audio.duration || 0);
     }
   }
 
@@ -343,40 +307,43 @@ class RealAudioPlayerEngine {
       bpm: this.baseBpm,
       key: this.activeKey,
       lastDiagnosticCode: this.lastDiagnosticCode,
+      playerState: this.currentState,
       isSynthActive: false,
     };
   }
 
   public getFrequencyData(): Uint8Array {
-    if (this.analyser) {
-      const data = new Uint8Array(this.analyser.frequencyBinCount);
-      this.analyser.getByteFrequencyData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) sum += data[i];
-      if (sum > 0) return data;
-    }
-
-    const fallback = new Uint8Array(32);
-    if (this.isPlaying && this.volume > 0) {
-      const now = Date.now() / 90;
-      for (let i = 0; i < 32; i++) {
-        const wave = Math.sin(now + i * 0.4) * 55 + Math.cos(now * 0.7 + i * 1.5) * 45 + 130;
-        fallback[i] = Math.floor(Math.max(10, Math.min(255, wave * this.volume)));
-      }
-    }
-    return fallback;
+    return new Uint8Array(32);
   }
 
+  public subscribe(listener: AudioPlayerListener): () => void {
+    this.listeners.add(listener);
+    // Immediately emit current state to new subscriber
+    if (listener.onStateChange) {
+      listener.onStateChange(this.currentState);
+    }
+    if (listener.onTimeUpdate && this.audio) {
+      listener.onTimeUpdate(this.audio.currentTime, this.audio.duration || 0);
+    }
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  // Backward compatibility method
   public setCallbacks(
     onTimeUpdate: (time: number, duration: number) => void,
     onEnd: () => void,
     onError?: (errorMsg: string, code?: DiagnosticErrorCode) => void,
-    onStateChange?: (state: 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error' | 'unavailable') => void
+    onStateChange?: (state: PlayerState) => void
   ) {
-    this.onTimeUpdateCallback = onTimeUpdate;
-    this.onEndCallback = onEnd;
-    if (onError) this.onErrorCallback = onError;
-    if (onStateChange) this.onStateChangeCallback = onStateChange;
+    const listener: AudioPlayerListener = {
+      onTimeUpdate,
+      onEnd,
+      onError,
+      onStateChange,
+    };
+    return this.subscribe(listener);
   }
 }
 

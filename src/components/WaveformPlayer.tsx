@@ -131,49 +131,45 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     sessionStorage.setItem('cashmere_player_volume', volume.toString());
   }, [volume]);
 
-  // Initialize Audio Player Callbacks from real Web Audio engine
+  // Initialize Audio Player Subscription from real Web Audio engine
   useEffect(() => {
-    try {
-      audioSynth.setCallbacks(
-        (time, dur) => {
-          if (!isDraggingSeek.current) {
-            setCurrentTime(time);
-          }
-          if (dur && !isNaN(dur) && dur > 0) {
-            setDuration(dur);
-          }
-
-          if (dur && time >= dur) {
-            setPlayerState('finished');
-          }
-        },
-        () => {
-          onNext();
-        },
-        (errorMsg) => {
-          setErrorMessage(errorMsg || 'Audio not uploaded yet.');
-          setPlayerState('unavailable');
-          setIsPlaying(false);
-        },
-        (state) => {
-          setPlayerState(state);
-          if (state === 'unavailable' || state === 'error') {
-            setErrorMessage('Audio not uploaded yet.');
-            setIsPlaying(false);
-          }
+    const unsubscribe = audioSynth.subscribe({
+      onTimeUpdate: (time, dur) => {
+        if (!isDraggingSeek.current) {
+          setCurrentTime(time);
         }
-      );
-    } catch (err) {
-      console.warn('[WaveformPlayer] Engine setup notice:', err);
-    }
-  }, [onNext]);
+        if (dur && !isNaN(dur) && dur > 0) {
+          setDuration(dur);
+        }
+      },
+      onEnd: () => {
+        onNext();
+      },
+      onError: (errorMsg) => {
+        setErrorMessage(errorMsg || 'Audio file unavailable');
+        setPlayerState('unavailable');
+        setIsPlaying(false);
+      },
+      onStateChange: (state) => {
+        setPlayerState(state);
+        if (state === 'unavailable' || state === 'error') {
+          setErrorMessage('Audio file unavailable');
+          setIsPlaying(false);
+        } else if (state === 'playing' || state === 'ready') {
+          setErrorMessage(null);
+        }
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [onNext, setIsPlaying]);
 
   // Load and play beat when currentBeat changes
   useEffect(() => {
     if (currentBeat) {
       const audioUrl = currentBeat.audioUrl || currentBeat.iaUrl || `/api/beats/${currentBeat.id}/audio`;
-      setErrorMessage(null);
-      setPlayerState('loading');
 
       const timer = setTimeout(() => {
         try {
@@ -192,7 +188,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         } catch (err: any) {
           console.warn('[WaveformPlayer] Playback timer notice:', err);
         }
-      }, 100);
+      }, 50);
       return () => clearTimeout(timer);
     } else {
       setPlayerState('idle');

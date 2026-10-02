@@ -192,16 +192,11 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
     const itemPromises = files.map(async (file) => {
       const fileNameLower = file.name.toLowerCase();
 
-      // Check if file is supported audio or archive (MP3, M4A, WAV, FLAC, AAC, ZIP, RAR)
-      const isAudio = fileNameLower.endsWith('.mp3') || 
-                      fileNameLower.endsWith('.m4a') || 
-                      fileNameLower.endsWith('.wav') || 
-                      fileNameLower.endsWith('.flac') || 
-                      fileNameLower.endsWith('.aac') || 
-                      fileNameLower.endsWith('.zip') || 
-                      fileNameLower.endsWith('.rar');
+      // Check if file is supported audio (MP3 and M4A only)
+      const isAudio = fileNameLower.endsWith('.mp3') || fileNameLower.endsWith('.m4a');
 
       if (!isAudio) {
+        showToast('Unsupported Format', `File "${file.name}" is not supported. Only .m4a and .mp3 files are supported. WAV is not supported.`, 'error');
         return null;
       }
 
@@ -223,12 +218,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
         console.warn('[UploadSystem] Local draft ID active:', persistentBeatId);
       }
 
-      const fileType: 'MP3' | 'M4A' | 'WAV' | 'FLAC' | 'AAC' | 'ZIP' | 'UNKNOWN' = 
-        fileNameLower.endsWith('.wav') ? 'WAV' :
-        fileNameLower.endsWith('.m4a') ? 'M4A' :
-        fileNameLower.endsWith('.flac') ? 'FLAC' :
-        fileNameLower.endsWith('.aac') ? 'AAC' :
-        fileNameLower.endsWith('.zip') ? 'ZIP' : 'MP3';
+      const fileType: 'MP3' | 'M4A' = fileNameLower.endsWith('.m4a') ? 'M4A' : 'MP3';
       const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
       const fileObjectUrl = URL.createObjectURL(file);
 
@@ -673,7 +663,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
           type="file"
           id="batchAudioInput"
           multiple
-          accept=".wav,.mp3,.m4a,.flac,.aac,.zip,.rar,audio/*,application/zip,application/x-zip-compressed"
+          accept=".mp3,.m4a,audio/mp3,audio/mpeg,audio/m4a,audio/mp4,audio/x-m4a"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) handleFilesSelected(e.target.files);
@@ -689,7 +679,7 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
             DRAG & DROP AUDIO MASTERS OR SELECT FILES
           </h3>
           <p className="text-xs text-zinc-400 font-mono">
-            Supported formats: Lossless Studio 24-bit WAV, 320kbps MP3, M4A, FLAC, and Trackout ZIP files.
+            Supported formats: 320kbps MP3 and M4A master files.
           </p>
         </div>
 

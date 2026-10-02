@@ -1,1 +1,52 @@
-{}
+{
+  "as_aud_as_aud_1790611860448": {
+    "id": "as_aud_as_aud_1790611860448",
+    "beat_id": "beat-as_aud_1790611860448",
+    "asset_type": "main_audio",
+    "r2_key": "beats/beat-as_aud_1790611860448/audio/as_aud_1790611860448.mp3",
+    "original_filename": "as_aud_1790611860448.mp3",
+    "mime_type": "audio/mpeg",
+    "file_size": 11,
+    "created_at": "2026-10-02T14:31:58.041Z"
+  },
+  "as_aud_as_aud_1790611891771": {
+    "id": "as_aud_as_aud_1790611891771",
+    "beat_id": "beat-as_aud_1790611891771",
+    "asset_type": "main_audio",
+    "r2_key": "beats/beat-as_aud_1790611891771/audio/as_aud_1790611891771.mp3",
+    "original_filename": "as_aud_1790611891771.mp3",
+    "mime_type": "audio/mpeg",
+    "file_size": 40560,
+    "created_at": "2026-10-02T14:31:58.041Z"
+  },
+  "as_aud_as_aud_1790611914775": {
+    "id": "as_aud_as_aud_1790611914775",
+    "beat_id": "beat-as_aud_1790611914775",
+    "asset_type": "main_audio",
+    "r2_key": "beats/beat-as_aud_1790611914775/audio/as_aud_1790611914775.m4a",
+    "original_filename": "as_aud_1790611914775.m4a",
+    "mime_type": "audio/mp4",
+    "file_size": 47905,
+    "created_at": "2026-10-02T14:31:58.041Z"
+  },
+  "as_aud_as_aud_1790612890896": {
+    "id": "as_aud_as_aud_1790612890896",
+    "beat_id": "beat-as_aud_1790612890896",
+    "asset_type": "main_audio",
+    "r2_key": "beats/beat-as_aud_1790612890896/audio/as_aud_1790612890896.mp3",
+    "original_filename": "as_aud_1790612890896.mp3",
+    "mime_type": "audio/mpeg",
+    "file_size": 40560,
+    "created_at": "2026-10-02T14:31:58.041Z"
+  },
+  "as_aud_1790951538022": {
+    "id": "as_aud_1790951538022",
+    "beat_id": "cc_test_pipeline_1790951537993",
+    "asset_type": "main_audio",
+    "r2_key": "beats/cc_test_pipeline_1790951537993/audio/as_aud_1790951538022.m4a",
+    "original_filename": "my_real_uploaded_beat.m4a",
+    "mime_type": "audio/mp4",
+    "file_size": 47905,
+    "created_at": "2026-10-02T14:32:18.023Z"
+  }
+}

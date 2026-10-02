@@ -204,7 +204,15 @@ export default function App() {
       .then((data) => {
         if (data?.beats && Array.isArray(data.beats)) {
           const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis'];
-          setBeats(data.beats.filter((b: Beat) => !placeholderIds.includes(b.id)));
+          const validBeats = data.beats.filter((b: Beat) => !placeholderIds.includes(b.id));
+          setBeats(validBeats);
+          if (validBeats.length > 0) {
+            setCurrentBeat((prev) => {
+              if (!prev) return validBeats[0];
+              const match = validBeats.find((b: Beat) => b.id === prev.id);
+              return match || validBeats[0];
+            });
+          }
         }
       })
       .catch(() => {});
