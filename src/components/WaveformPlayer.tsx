@@ -22,7 +22,7 @@ import {
   Search
 } from 'lucide-react';
 import { Beat, BeatPack } from '../types';
-import { audioSynth } from '../utils/audioSynth';
+import { audioEngine } from '../utils/audioEngine';
 
 interface WaveformPlayerProps {
   currentBeat: Beat | null;
@@ -137,10 +137,10 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const setIsPlayingRef = useRef(setIsPlaying);
   setIsPlayingRef.current = setIsPlaying;
 
-  // Initialize Audio Player Subscription from real Web Audio engine
+  // Initialize Audio Player Subscription from clean native HTMLAudioElement engine
   useEffect(() => {
-    console.log('[AudioStateTrace] WaveformPlayer subscribing to audioSynth engine');
-    const unsubscribe = audioSynth.subscribe({
+    console.log('[NativeAudioEngine] WaveformPlayer subscribing');
+    const unsubscribe = audioEngine.subscribe({
       onTimeUpdate: (time, dur) => {
         if (!isDraggingSeek.current) {
           setCurrentTime(time);
@@ -150,20 +150,19 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         }
       },
       onEnd: () => {
-        console.log('[AudioStateTrace] audioSynth onEnd listener triggered -> calling onNext');
+        console.log('[NativeAudioEngine] Track end triggered -> calling onNext');
         if (onNextRef.current) onNextRef.current();
       },
       onError: (errorMsg) => {
-        console.warn('[AudioStateTrace] audioSynth onError listener triggered -> setIsPlaying(false)', errorMsg);
+        console.warn('[NativeAudioEngine] onError triggered -> setIsPlaying(false)', errorMsg);
         setErrorMessage(errorMsg || 'Audio file unavailable');
         setPlayerState('unavailable');
         if (setIsPlayingRef.current) setIsPlayingRef.current(false);
       },
       onStateChange: (state) => {
-        console.log('[AudioStateTrace] audioSynth onStateChange listener triggered:', state);
+        console.log('[NativeAudioEngine] onStateChange triggered:', state);
         setPlayerState(state);
         if (state === 'unavailable' || state === 'error') {
-          console.warn('[AudioStateTrace] State became unavailable/error -> setIsPlaying(false)');
           setErrorMessage('Audio file unavailable');
           if (setIsPlayingRef.current) setIsPlayingRef.current(false);
         } else if (state === 'playing' || state === 'ready') {
@@ -173,7 +172,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     });
 
     return () => {
-      console.log('[AudioStateTrace] WaveformPlayer unsubscribing from audioSynth engine');
+      console.log('[NativeAudioEngine] WaveformPlayer unsubscribing');
       unsubscribe();
     };
   }, []);
@@ -182,23 +181,11 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   useEffect(() => {
     if (currentBeat) {
       const audioUrl = currentBeat.audioUrl || currentBeat.iaUrl || `/api/beats/${currentBeat.id}/audio`;
-      try {
-        if (isPlaying) {
-          console.log('[AudioStateTrace] WaveformPlayer effect: isPlaying is true -> calling audioSynth.playBeat for:', currentBeat.id, audioUrl);
-          audioSynth.playBeat(
-            currentBeat.id,
-            currentBeat.bpm,
-            currentBeat.key,
-            currentBeat.durationSeconds || 165,
-            audioUrl
-          );
-        } else {
-          console.log('[AudioStateTrace] WaveformPlayer effect: isPlaying is false -> calling audioSynth.pauseBeat');
-          audioSynth.pauseBeat('WaveformPlayer.useEffect(isPlaying=false)');
-          setPlayerState('paused');
-        }
-      } catch (err: any) {
-        console.warn('[WaveformPlayer] Playback trigger notice:', err);
+      audioEngine.loadBeat(currentBeat.id, audioUrl);
+      if (isPlaying) {
+        audioEngine.play();
+      } else {
+        audioEngine.pause();
       }
     } else {
       setPlayerState('idle');
@@ -208,16 +195,16 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
-    audioSynth.setVolume(val);
+    audioEngine.setVolume(val);
     setIsMuted(val === 0);
   };
 
   const toggleMute = () => {
     if (isMuted) {
-      audioSynth.setVolume(volume || 0.8);
+      audioEngine.setVolume(volume || 0.8);
       setIsMuted(false);
     } else {
-      audioSynth.setVolume(0);
+      audioEngine.setVolume(0);
       setIsMuted(true);
     }
   };
@@ -237,7 +224,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     const gap = (width - barCount * barWidth) / (barCount - 1);
     const progressRatio = duration > 0 ? currentTime / duration : 0;
 
-    const freqData = isPlaying ? audioSynth.getFrequencyData() : new Uint8Array(32);
+    const freqData = new Uint8Array(32);
 
     for (let i = 0; i < barCount; i++) {
       const barRatio = i / barCount;
@@ -301,15 +288,15 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
     const targetSecs = ratio * duration;
     setCurrentTime(targetSecs);
-    audioSynth.seek(targetSecs);
+    audioEngine.seek(targetSecs);
   };
 
   const handleSeekBackward10 = () => {
-    audioSynth.seek(Math.max(0, currentTime - 10));
+    audioEngine.seek(Math.max(0, currentTime - 10));
   };
 
   const handleSeekForward10 = () => {
-    audioSynth.seek(Math.min(duration, currentTime + 10));
+    audioEngine.seek(Math.min(duration, currentTime + 10));
   };
 
   const filteredExpandedBeats = beats.filter(b => 

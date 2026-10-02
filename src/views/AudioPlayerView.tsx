@@ -20,7 +20,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Beat } from '../types';
-import { audioSynth } from '../utils/audioSynth';
+import { audioEngine } from '../utils/audioEngine';
 
 interface AudioPlayerViewProps {
   beats: Beat[];
@@ -99,9 +99,9 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
   // Active playing beat reference (falls back to first beat in store)
   const activeBeat = currentBeat || beats[0] || null;
 
-  // Subscribe to state continuously from the real Web Audio engine
+  // Subscribe to state continuously from the native HTMLAudioElement engine
   useEffect(() => {
-    const unsubscribe = audioSynth.subscribe({
+    const unsubscribe = audioEngine.subscribe({
       onTimeUpdate: (time, dur) => {
         setCurrentTime(time);
         if (dur && !isNaN(dur) && dur > 0) setDuration(dur);
@@ -119,13 +119,13 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
     });
 
     const interval = setInterval(() => {
-      const state = audioSynth.getCurrentState();
+      const state = audioEngine.getCurrentState();
       setCurrentTime(state.currentTime);
       if (state.duration && !isNaN(state.duration) && state.duration > 0) {
         setDuration(state.duration);
       }
-      setVolume(audioSynth.getVolume());
-      setIsMuted(audioSynth.getVolume() === 0);
+      setVolume(audioEngine.getVolume());
+      setIsMuted(audioEngine.getVolume() === 0);
     }, 80);
 
     return () => {
@@ -152,7 +152,7 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
     const progressRatio = duration > 0 ? currentTime / duration : 0;
 
     // Retrieve real frequency data from Web Audio AnalyserNode during real audio playback
-    const freqData = isPlaying ? audioSynth.getFrequencyData() : new Uint8Array(32);
+    const freqData = new Uint8Array(32);
 
     for (let i = 0; i < barCount; i++) {
       const barRatio = i / barCount;
@@ -243,29 +243,29 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
     const clickX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
     const targetSecs = ratio * duration;
-    audioSynth.seek(targetSecs);
+    audioEngine.seek(targetSecs);
   };
 
   const handleSeekBackward10 = () => {
-    audioSynth.seek(Math.max(0, currentTime - 10));
+    audioEngine.seek(Math.max(0, currentTime - 10));
   };
 
   const handleSeekForward10 = () => {
-    audioSynth.seek(Math.min(duration, currentTime + 10));
+    audioEngine.seek(Math.min(duration, currentTime + 10));
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
-    audioSynth.setVolume(val);
+    audioEngine.setVolume(val);
   };
 
   const toggleMute = () => {
     if (isMuted) {
-      audioSynth.setVolume(volume || 0.8);
+      audioEngine.setVolume(volume || 0.8);
       setIsMuted(false);
     } else {
-      audioSynth.setVolume(0);
+      audioEngine.setVolume(0);
       setIsMuted(true);
     }
   };
