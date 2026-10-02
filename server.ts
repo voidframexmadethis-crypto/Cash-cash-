@@ -709,6 +709,14 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
             const ext = path.extname(file).replace('.', '').toLowerCase();
             const mimeType = ext === 'm4a' ? 'audio/mp4' : 'audio/mpeg';
             
+            let statSize = 0;
+            try {
+              statSize = fs.statSync(path.join(MEDIA_DIR, file)).size;
+            } catch {}
+            if (statSize < 512) {
+              return; // Skip empty, corrupted, or non-audio stubs
+            }
+
             // Check if any existing beat points to this file
             let existsInStore = Array.from(beatsStore.values()).some(b => 
               b.audio_filename === file || b.audio_key?.includes(file) || b.id === beatId
@@ -716,10 +724,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
             const assetId = `as_aud_${fileBaseName}`;
             if (!assetsStore.has(assetId)) {
-              let statSize = 0;
-              try {
-                statSize = fs.statSync(path.join(MEDIA_DIR, file)).size;
-              } catch {}
               assetsStore.set(assetId, {
                 id: assetId,
                 beat_id: beatId,
@@ -1252,9 +1256,11 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
       beat.main_audio_asset_id = assetId;
       beat.audio_key = r2Key;
-      beat.audio_filename = originalFilename;
+      beat.audio_filename = cleanFileName;
+      (beat as any).original_filename = originalFilename;
       beat.audio_content_type = mimeType;
       beat.audioUrl = `/api/beats/${beatId}/audio`;
+      beat.iaUrl = `/api/beats/${beatId}/audio`;
       beat.updated_at = new Date().toISOString();
       beatsStore.set(beatId, beat);
       saveToDisk();
@@ -1450,9 +1456,11 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       } else {
         beat.main_audio_asset_id = assetId;
         beat.audio_key = r2Key;
-        beat.audio_filename = originalFilename;
+        beat.audio_filename = cleanFileName;
+        (beat as any).original_filename = originalFilename;
         beat.audio_content_type = mimeType;
         beat.audioUrl = `/api/beats/${beatId}/audio`;
+        beat.iaUrl = `/api/beats/${beatId}/audio`;
       }
 
       beat.updated_at = new Date().toISOString();

@@ -1,14 +1,4 @@
 {
-  "as_aud_as_aud_1790611860448": {
-    "id": "as_aud_as_aud_1790611860448",
-    "beat_id": "beat-as_aud_1790611860448",
-    "asset_type": "main_audio",
-    "r2_key": "beats/beat-as_aud_1790611860448/audio/as_aud_1790611860448.mp3",
-    "original_filename": "as_aud_1790611860448.mp3",
-    "mime_type": "audio/mpeg",
-    "file_size": 11,
-    "created_at": "2026-10-02T14:31:58.041Z"
-  },
   "as_aud_as_aud_1790611891771": {
     "id": "as_aud_as_aud_1790611891771",
     "beat_id": "beat-as_aud_1790611891771",
@@ -39,14 +29,24 @@
     "file_size": 40560,
     "created_at": "2026-10-02T14:31:58.041Z"
   },
-  "as_aud_1790951538022": {
-    "id": "as_aud_1790951538022",
-    "beat_id": "cc_test_pipeline_1790951537993",
+  "as_aud_as_aud_1790951538022": {
+    "id": "as_aud_as_aud_1790951538022",
+    "beat_id": "beat-as_aud_1790951538022",
     "asset_type": "main_audio",
-    "r2_key": "beats/cc_test_pipeline_1790951537993/audio/as_aud_1790951538022.m4a",
-    "original_filename": "my_real_uploaded_beat.m4a",
+    "r2_key": "beats/beat-as_aud_1790951538022/audio/as_aud_1790951538022.m4a",
+    "original_filename": "as_aud_1790951538022.m4a",
     "mime_type": "audio/mp4",
     "file_size": 47905,
-    "created_at": "2026-10-02T14:32:18.023Z"
+    "created_at": "2026-10-02T14:32:47.245Z"
+  },
+  "as_aud_1790952134638": {
+    "id": "as_aud_1790952134638",
+    "beat_id": "real_verified_upload_1790952134629",
+    "asset_type": "main_audio",
+    "r2_key": "beats/real_verified_upload_1790952134629/audio/as_aud_1790952134638.m4a",
+    "original_filename": "Cashmere_Hit_Track.m4a",
+    "mime_type": "audio/mp4",
+    "file_size": 47905,
+    "created_at": "2026-10-02T14:42:14.639Z"
   }
 }

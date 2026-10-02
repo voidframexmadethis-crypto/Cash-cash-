@@ -584,9 +584,9 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
       releaseDate: releaseDateStr,
       description: item.description,
       voiceTag: true,
-      storageProvider: item.storageProvider || 'internet_archive',
-      iaUrl: item.iaUrl || `/api/beats/${targetBeatId}/audio`,
-      audioUrl: item.audioUrl || item.audioObjectUrl || `/api/beats/${targetBeatId}/audio`,
+      storageProvider: item.storageProvider || 'persistent_storage',
+      iaUrl: item.iaUrl && !item.iaUrl.startsWith('blob:') ? item.iaUrl : `/api/beats/${targetBeatId}/audio`,
+      audioUrl: item.audioUrl && !item.audioUrl.startsWith('blob:') ? item.audioUrl : `/api/beats/${targetBeatId}/audio`,
       fileSize: item.fileSizeStr,
     };
 

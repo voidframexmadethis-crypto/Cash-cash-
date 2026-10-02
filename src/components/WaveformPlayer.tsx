@@ -166,34 +166,30 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     };
   }, [onNext, setIsPlaying]);
 
-  // Load and play beat when currentBeat changes
+  // Load and play beat when currentBeat or isPlaying changes
   useEffect(() => {
     if (currentBeat) {
       const audioUrl = currentBeat.audioUrl || currentBeat.iaUrl || `/api/beats/${currentBeat.id}/audio`;
-
-      const timer = setTimeout(() => {
-        try {
-          if (isPlaying) {
-            audioSynth.playBeat(
-              currentBeat.id,
-              currentBeat.bpm,
-              currentBeat.key,
-              currentBeat.durationSeconds || 165,
-              audioUrl
-            );
-          } else {
-            audioSynth.pauseBeat();
-            setPlayerState('paused');
-          }
-        } catch (err: any) {
-          console.warn('[WaveformPlayer] Playback timer notice:', err);
+      try {
+        if (isPlaying) {
+          audioSynth.playBeat(
+            currentBeat.id,
+            currentBeat.bpm,
+            currentBeat.key,
+            currentBeat.durationSeconds || 165,
+            audioUrl
+          );
+        } else {
+          audioSynth.pauseBeat();
+          setPlayerState('paused');
         }
-      }, 50);
-      return () => clearTimeout(timer);
+      } catch (err: any) {
+        console.warn('[WaveformPlayer] Playback trigger notice:', err);
+      }
     } else {
       setPlayerState('idle');
     }
-  }, [currentBeat?.id, isPlaying]);
+  }, [currentBeat?.id, currentBeat?.audioUrl, isPlaying]);
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);

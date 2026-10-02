@@ -88,6 +88,27 @@ class RealAudioPlayerEngine {
     });
   }
 
+  private getMediaReadyStateText(state?: number): string {
+    switch (state) {
+      case 0: return 'HAVE_NOTHING (0)';
+      case 1: return 'HAVE_METADATA (1)';
+      case 2: return 'HAVE_CURRENT_DATA (2)';
+      case 3: return 'HAVE_FUTURE_DATA (3)';
+      case 4: return 'HAVE_ENOUGH_DATA (4)';
+      default: return `UNKNOWN (${state})`;
+    }
+  }
+
+  private getMediaNetworkStateText(state?: number): string {
+    switch (state) {
+      case 0: return 'NETWORK_EMPTY (0)';
+      case 1: return 'NETWORK_IDLE (1)';
+      case 2: return 'NETWORK_LOADING (2)';
+      case 3: return 'NETWORK_NO_SOURCE (3)';
+      default: return `UNKNOWN (${state})`;
+    }
+  }
+
   private initAudioElement(): HTMLAudioElement {
     if (!this.audio) {
       this.audio = new Audio();
@@ -95,10 +116,22 @@ class RealAudioPlayerEngine {
       this.audio.volume = this.volume;
 
       this.audio.addEventListener('loadstart', () => {
+        console.log('[RealAudioEngine Diagnostic] loadstart:', {
+          audioSrc: this.audio?.src,
+          currentAudioUrl: this.currentAudioUrl,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
         this.notifyStateChange('loading');
       });
 
       this.audio.addEventListener('canplay', () => {
+        console.log('[RealAudioEngine Diagnostic] canplay event:', {
+          audioSrc: this.audio?.src,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+          duration: this.audio?.duration,
+        });
         if (this.currentState === 'loading') {
           this.notifyStateChange('ready');
         }
@@ -107,6 +140,12 @@ class RealAudioPlayerEngine {
       this.audio.addEventListener('loadedmetadata', () => {
         if (this.audio) {
           const dur = this.audio.duration || 0;
+          console.log('[RealAudioEngine Diagnostic] loadedmetadata event:', {
+            audioSrc: this.audio.src,
+            duration: dur,
+            readyState: this.getMediaReadyStateText(this.audio.readyState),
+            networkState: this.getMediaNetworkStateText(this.audio.networkState),
+          });
           this.notifyTimeUpdate(this.audio.currentTime, dur);
           if (this.currentState === 'loading') {
             this.notifyStateChange('ready');
@@ -123,6 +162,12 @@ class RealAudioPlayerEngine {
       });
 
       this.audio.addEventListener('playing', () => {
+        console.log('[RealAudioEngine Diagnostic] playing event:', {
+          audioSrc: this.audio?.src,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+        });
         this.isPlaying = true;
         this.notifyStateChange('playing');
       });
@@ -135,6 +180,11 @@ class RealAudioPlayerEngine {
       });
 
       this.audio.addEventListener('waiting', () => {
+        console.log('[RealAudioEngine Diagnostic] waiting/buffering:', {
+          audioSrc: this.audio?.src,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
         this.notifyStateChange('buffering');
       });
 
@@ -144,10 +194,18 @@ class RealAudioPlayerEngine {
         this.notifyEnd();
       });
 
-      this.audio.addEventListener('error', () => {
+      this.audio.addEventListener('error', (e) => {
         this.isPlaying = false;
-        const errCode = this.audio?.error?.code;
-        console.warn('[RealAudioPlayerEngine] HTMLAudioElement error code:', errCode, 'URL:', this.currentAudioUrl);
+        const mediaErr = this.audio?.error;
+        console.error('[RealAudioEngine Diagnostic] HTMLAudioElement error event:', {
+          errorCode: mediaErr?.code,
+          errorMessage: mediaErr?.message,
+          audioSrc: this.audio?.src,
+          currentAudioUrl: this.currentAudioUrl,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+          nativeEvent: e,
+        });
 
         this.lastDiagnosticCode = 'FILE_NOT_FOUND';
         this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
@@ -200,6 +258,17 @@ class RealAudioPlayerEngine {
 
     const audioUrl = rawAudioUrl || (beatId ? `/api/beats/${beatId}/audio` : '');
 
+    console.log('[RealAudioEngine Diagnostic] playBeat invoked:', {
+      beatId,
+      rawAudioUrl,
+      resolvedAudioUrl: audioUrl,
+      currentAudioUrl: this.currentAudioUrl,
+      currentSrc: audio.src,
+      audioPaused: audio.paused,
+      audioReadyState: this.getMediaReadyStateText(audio.readyState),
+      audioNetworkState: this.getMediaNetworkStateText(audio.networkState),
+    });
+
     if (!audioUrl) {
       this.isPlaying = false;
       this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
@@ -207,7 +276,7 @@ class RealAudioPlayerEngine {
       return;
     }
 
-    const isSameTrack = (this.currentBeatId === beatId) && (this.currentAudioUrl === audioUrl);
+    const isSameTrack = (this.currentBeatId === beatId) && (this.currentAudioUrl === audioUrl) && !audio.error;
 
     this.currentBeatId = beatId;
     this.currentAudioUrl = audioUrl;
@@ -224,18 +293,38 @@ class RealAudioPlayerEngine {
     audio.volume = this.volume;
     audio.playbackRate = Math.max(0.5, Math.min(2.0, this.tempoMultiplier * Math.pow(2, this.pitchShiftSemitones / 12)));
 
+    console.log('[RealAudioEngine Diagnostic] calling audio.play():', {
+      audioSrc: audio.src,
+      readyState: this.getMediaReadyStateText(audio.readyState),
+      networkState: this.getMediaNetworkStateText(audio.networkState),
+    });
+
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
+          console.log('[RealAudioEngine Diagnostic] audio.play() Promise RESOLVED (success):', {
+            audioSrc: audio.src,
+            currentTime: audio.currentTime,
+            duration: audio.duration,
+            readyState: this.getMediaReadyStateText(audio.readyState),
+            networkState: this.getMediaNetworkStateText(audio.networkState),
+          });
           this.isPlaying = true;
           this.lastDiagnosticCode = null;
           this.notifyStateChange('playing');
         })
         .catch((err: Error) => {
-          console.warn('[RealAudioPlayerEngine] Playback promise catch:', err.name, err.message);
+          console.error('[RealAudioEngine Diagnostic] audio.play() Promise REJECTED (failure):', {
+            errorName: err.name,
+            errorMessage: err.message,
+            audioSrc: audio.src,
+            audioError: audio.error ? { code: audio.error.code, message: audio.error.message } : null,
+            readyState: this.getMediaReadyStateText(audio.readyState),
+            networkState: this.getMediaNetworkStateText(audio.networkState),
+          });
           if (err.name === 'AbortError') {
-            // Interrupted by new load or pause - do NOT mark as error
+            // User rapidly switched track or interrupted load
             return;
           }
           this.isPlaying = false;

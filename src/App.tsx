@@ -65,7 +65,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis'];
+          const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis', 'beat-as_aud_1790611860448'];
           return parsed.filter((b: Beat) => !placeholderIds.includes(b.id));
         }
       } catch {
@@ -203,12 +203,12 @@ export default function App() {
       .then((r) => r.json())
       .then((data) => {
         if (data?.beats && Array.isArray(data.beats)) {
-          const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis'];
+          const placeholderIds = ['beat-obsidian-runway', 'beat-velvet-vault', 'beat-platinum-runway', 'beat-dark-synthesis', 'beat-as_aud_1790611860448'];
           const validBeats = data.beats.filter((b: Beat) => !placeholderIds.includes(b.id));
           setBeats(validBeats);
           if (validBeats.length > 0) {
             setCurrentBeat((prev) => {
-              if (!prev) return validBeats[0];
+              if (!prev || prev.id === 'beat-as_aud_1790611860448') return validBeats[0];
               const match = validBeats.find((b: Beat) => b.id === prev.id);
               return match || validBeats[0];
             });
@@ -757,6 +757,8 @@ export default function App() {
 
   const handlePublishBeat = (newBeat: Beat) => {
     setBeats((prev) => [newBeat, ...prev]);
+    setCurrentBeat(newBeat);
+    setIsPlaying(true);
 
     // Send visible customer notification if preferences allow
     try {

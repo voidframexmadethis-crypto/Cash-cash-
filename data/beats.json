@@ -1,40 +1,4 @@
 {
-  "beat-as_aud_1790611860448": {
-    "id": "beat-as_aud_1790611860448",
-    "title": "REAL MASTER MP3 BEAT",
-    "slug": "beat-as_aud_1790611860448",
-    "description": "Real uploaded master beat track (MP3).",
-    "bpm": 140,
-    "key": "C Minor",
-    "genre": "Trap",
-    "mood": "Dark",
-    "tags": [
-      "cashmere",
-      "master",
-      "mp3"
-    ],
-    "price": 39.99,
-    "free_download": false,
-    "status": "published",
-    "visibility": "public",
-    "published": true,
-    "main_audio_asset_id": "as_aud_as_aud_1790611860448",
-    "audio_key": "beats/beat-as_aud_1790611860448/audio/as_aud_1790611860448.mp3",
-    "audio_filename": "as_aud_1790611860448.mp3",
-    "audio_content_type": "audio/mpeg",
-    "audioUrl": "/api/beats/beat-as_aud_1790611860448/audio",
-    "iaUrl": "/api/beats/beat-as_aud_1790611860448/audio",
-    "artworkUrl": "/api/beats/beat-as_aud_1790611860448/artwork",
-    "created_at": "2026-10-02T14:31:58.041Z",
-    "updated_at": "2026-10-02T14:31:58.041Z",
-    "published_at": "2026-10-02T14:31:58.041Z",
-    "pricing": {
-      "mp3Lease": 39.99,
-      "premiumLease": 79.99,
-      "unlimited": 249.99,
-      "exclusive": 1200
-    }
-  },
   "beat-as_aud_1790611891771": {
     "id": "beat-as_aud_1790611891771",
     "title": "REAL MASTER MP3 BEAT",
@@ -136,6 +100,42 @@
     "created_at": "2026-10-02T14:31:58.041Z",
     "updated_at": "2026-10-02T14:31:58.041Z",
     "published_at": "2026-10-02T14:31:58.041Z",
+    "pricing": {
+      "mp3Lease": 39.99,
+      "premiumLease": 79.99,
+      "unlimited": 249.99,
+      "exclusive": 1200
+    }
+  },
+  "beat-as_aud_1790951538022": {
+    "id": "beat-as_aud_1790951538022",
+    "title": "REAL MASTER M4A BEAT",
+    "slug": "beat-as_aud_1790951538022",
+    "description": "Real uploaded master beat track (M4A).",
+    "bpm": 140,
+    "key": "C Minor",
+    "genre": "Trap",
+    "mood": "Dark",
+    "tags": [
+      "cashmere",
+      "master",
+      "m4a"
+    ],
+    "price": 39.99,
+    "free_download": false,
+    "status": "published",
+    "visibility": "public",
+    "published": true,
+    "main_audio_asset_id": "as_aud_as_aud_1790951538022",
+    "audio_key": "beats/beat-as_aud_1790951538022/audio/as_aud_1790951538022.m4a",
+    "audio_filename": "as_aud_1790951538022.m4a",
+    "audio_content_type": "audio/mp4",
+    "audioUrl": "/api/beats/beat-as_aud_1790951538022/audio",
+    "iaUrl": "/api/beats/beat-as_aud_1790951538022/audio",
+    "artworkUrl": "/api/beats/beat-as_aud_1790951538022/artwork",
+    "created_at": "2026-10-02T14:32:47.245Z",
+    "updated_at": "2026-10-02T14:32:47.245Z",
+    "published_at": "2026-10-02T14:32:47.245Z",
     "pricing": {
       "mp3Lease": 39.99,
       "premiumLease": 79.99,
