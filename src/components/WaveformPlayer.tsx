@@ -171,7 +171,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   // Load and play beat when currentBeat changes
   useEffect(() => {
     if (currentBeat) {
-      const audioUrl = currentBeat.iaUrl || currentBeat.audioUrl || `/api/beats/${currentBeat.id}/audio`;
+      const audioUrl = currentBeat.audioUrl || currentBeat.iaUrl || `/api/beats/${currentBeat.id}/audio`;
       setErrorMessage(null);
       setPlayerState('loading');
 

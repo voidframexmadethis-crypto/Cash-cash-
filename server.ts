@@ -745,6 +745,8 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
         'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range',
         'Cache-Control': 'public, max-age=31536000, immutable'
       });
       res.end(buffer.slice(start, end + 1));
@@ -753,6 +755,8 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         'Content-Length': totalSize,
         'Content-Type': contentType,
         'Accept-Ranges': 'bytes',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range',
         'Cache-Control': 'public, max-age=31536000, immutable'
       });
       res.end(buffer);
@@ -1070,7 +1074,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
 
       const assetId = `as_aud_${Date.now()}`;
       const originalFilename = file ? file.originalname : (req.headers['x-filename'] as string || `audio-${Date.now()}.mp3`);
-      const ext = path.extname(originalFilename).replace('.', '') || 'mp3';
+      const ext = path.extname(originalFilename).replace('.', '').toLowerCase() || 'mp3';
       const cleanFileName = `${assetId}.${ext}`;
       const r2Key = `beats/${beatId}/audio/${cleanFileName}`;
       const localFilePath = path.join(MEDIA_DIR, cleanFileName);
@@ -1086,9 +1090,13 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         }
       }
 
-      // If no buffer provided, create a dummy 1KB buffer so upload never fails
+      // Reject empty or zero-byte uploads so undecodable audio is never created
       if (!fileBuffer || fileBuffer.length === 0) {
-        fileBuffer = Buffer.alloc(1024);
+        return res.status(400).json({
+          success: false,
+          error: 'NO_AUDIO_FILE',
+          message: 'Audio file is required for upload.'
+        });
       }
 
       // Try saving to local disk, but never fail if filesystem is read-only
@@ -1134,7 +1142,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         console.warn(`[UploadAudio] Watermarking parent exception for ${beatId}:`, err.message);
       }
 
-      const mimeType = ext === 'm4a' ? 'audio/mp4' : (ext === 'wav' ? 'audio/wav' : 'audio/mpeg');
+      const mimeType = (ext === 'm4a' || ext === 'mp4') ? 'audio/mp4' : (ext === 'wav' ? 'audio/wav' : (ext === 'flac' ? 'audio/flac' : (ext === 'aac' ? 'audio/aac' : 'audio/mpeg')));
 
       let calculatedSize = fileBuffer.length;
       try {

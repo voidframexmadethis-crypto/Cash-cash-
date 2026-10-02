@@ -50,7 +50,7 @@ class RealAudioPlayerEngine {
           this.analyser.connect(this.ctx.destination);
         }
       } catch (err) {
-        console.warn('[RealAudioPlayerEngine] AudioContext init error:', err);
+        console.warn('[RealAudioPlayerEngine] AudioContext init notice:', err);
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -63,6 +63,19 @@ class RealAudioPlayerEngine {
     if (!this.audio) {
       this.audio = new Audio();
       this.audio.preload = 'auto';
+      this.audio.crossOrigin = 'anonymous';
+
+      this.audio.addEventListener('loadstart', () => {
+        if (this.onStateChangeCallback) {
+          this.onStateChangeCallback('loading');
+        }
+      });
+
+      this.audio.addEventListener('canplay', () => {
+        if (this.onStateChangeCallback) {
+          this.onStateChangeCallback('ready');
+        }
+      });
 
       this.audio.addEventListener('loadedmetadata', () => {
         if (this.audio) {
@@ -115,13 +128,29 @@ class RealAudioPlayerEngine {
 
       this.audio.addEventListener('error', () => {
         this.isPlaying = false;
-        this.lastDiagnosticCode = 'FILE_NOT_FOUND';
-        console.warn('[RealAudioPlayerEngine] Audio load error for URL:', this.currentAudioUrl);
-        if (this.onErrorCallback) {
-          this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
-        }
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('unavailable');
+        const errCode = this.audio?.error?.code;
+        console.warn('[RealAudioPlayerEngine] HTML5 Audio error code:', errCode, 'URL:', this.currentAudioUrl);
+
+        if (errCode === 4) {
+          this.lastDiagnosticCode = 'FILE_NOT_FOUND';
+          if (this.onErrorCallback) {
+            this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
+          }
+          if (this.onStateChangeCallback) {
+            this.onStateChangeCallback('unavailable');
+          }
+        } else if (errCode === 3) {
+          this.lastDiagnosticCode = 'DECODING_ERROR';
+          if (this.onErrorCallback) {
+            this.onErrorCallback('Audio decoding error.', 'DECODING_ERROR');
+          }
+          if (this.onStateChangeCallback) {
+            this.onStateChangeCallback('error');
+          }
+        } else {
+          if (this.onStateChangeCallback) {
+            this.onStateChangeCallback('error');
+          }
         }
       });
     }
@@ -185,16 +214,8 @@ class RealAudioPlayerEngine {
 
     this.baseBpm = bpm || 140;
     this.activeKey = key || 'C Minor';
-    this.currentBeatId = beatId;
 
     const audioUrl = rawAudioUrl || (beatId ? `/api/beats/${beatId}/audio` : '');
-
-    if (this.audio) {
-      this.audio.pause();
-      this.audio.currentTime = 0;
-    }
-
-    this.currentAudioUrl = audioUrl;
 
     if (!audioUrl) {
       this.isPlaying = false;
@@ -207,13 +228,23 @@ class RealAudioPlayerEngine {
       return;
     }
 
+    const isSameTrack = (this.currentBeatId === beatId) && (this.currentAudioUrl === audioUrl) && (this.audio && this.audio.src.includes(audioUrl));
+
+    this.currentBeatId = beatId;
+    this.currentAudioUrl = audioUrl;
+
     if (this.audio) {
-      this.audio.src = audioUrl;
+      if (!isSameTrack) {
+        this.audio.pause();
+        this.audio.src = audioUrl;
+        this.audio.load();
+      }
+
       this.audio.playbackRate = Math.max(0.5, Math.min(2.0, this.tempoMultiplier * Math.pow(2, this.pitchShiftSemitones / 12)));
       this.audio.volume = this.webAudioConnected ? 1.0 : this.volume;
 
-      if (this.onStateChangeCallback) {
-        this.onStateChangeCallback('loading');
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
       }
 
       this.initWebAudio();
@@ -229,13 +260,20 @@ class RealAudioPlayerEngine {
             }
           })
           .catch((err: Error) => {
-            console.warn('[RealAudioPlayerEngine] Playback notice:', err.message);
-            this.isPlaying = false;
-            if (this.onStateChangeCallback) {
-              this.onStateChangeCallback('unavailable');
-            }
-            if (this.onErrorCallback) {
-              this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
+            console.warn('[RealAudioPlayerEngine] Playback promise catch:', err.name, err.message);
+            if (err.name === 'NotAllowedError') {
+              this.isPlaying = false;
+              if (this.onStateChangeCallback) {
+                this.onStateChangeCallback('paused');
+              }
+            } else if (this.audio?.error) {
+              this.isPlaying = false;
+              if (this.onStateChangeCallback) {
+                this.onStateChangeCallback('unavailable');
+              }
+              if (this.onErrorCallback) {
+                this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
+              }
             }
           });
       }
@@ -254,6 +292,9 @@ class RealAudioPlayerEngine {
 
   public resumeBeat() {
     this.ensureAudioContext();
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
     if (this.audio && this.currentAudioUrl) {
       this.audio.play().then(() => {
         this.isPlaying = true;
@@ -262,12 +303,11 @@ class RealAudioPlayerEngine {
         }
       }).catch((err) => {
         console.warn('[RealAudioPlayerEngine] Resume play notice:', err.message);
-        this.isPlaying = false;
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback('unavailable');
-        }
-        if (this.onErrorCallback) {
-          this.onErrorCallback('Audio not uploaded yet.', 'FILE_NOT_FOUND');
+        if (err.name === 'NotAllowedError') {
+          this.isPlaying = false;
+          if (this.onStateChangeCallback) {
+            this.onStateChangeCallback('paused');
+          }
         }
       });
     }
