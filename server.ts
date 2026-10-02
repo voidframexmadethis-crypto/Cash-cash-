@@ -724,98 +724,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
   // MEDIA SERVING SYSTEM (Zero-Fail Streaming & Range Support)
   // ====================================================
 
-  // High-fidelity synthetic fallback audio cache (valid 44.1kHz 16-bit stereo PCM WAV)
-  let cachedFallbackAudioBuffer: Buffer | null = null;
-
-  function getFallbackAudioBuffer(): Buffer {
-    if (cachedFallbackAudioBuffer) return cachedFallbackAudioBuffer;
-
-    const sampleRate = 44100;
-    const durationSeconds = 30;
-    const numChannels = 2;
-    const bitsPerSample = 16;
-    const numSamples = sampleRate * durationSeconds;
-    const blockAlign = (numChannels * bitsPerSample) / 8;
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = numSamples * blockAlign;
-    const buffer = Buffer.alloc(44 + dataSize);
-
-    // RIFF WAV Header
-    buffer.write('RIFF', 0);
-    buffer.writeUInt32LE(36 + dataSize, 4);
-    buffer.write('WAVE', 8);
-    buffer.write('fmt ', 12);
-    buffer.writeUInt32LE(16, 16); // PCM Chunk size
-    buffer.writeUInt16LE(1, 20); // AudioFormat 1 = PCM
-    buffer.writeUInt16LE(numChannels, 22);
-    buffer.writeUInt32LE(sampleRate, 24);
-    buffer.writeUInt32LE(byteRate, 28);
-    buffer.writeUInt16LE(blockAlign, 32);
-    buffer.writeUInt16LE(bitsPerSample, 34);
-    buffer.write('data', 36);
-    buffer.writeUInt32LE(dataSize, 40);
-
-    // Generate smooth luxury analog trap instrumental loop in F# Minor with punchy audible bass & bell melody
-    const bpm = 140;
-    const beatSec = 60 / bpm;
-    const barSec = beatSec * 4;
-
-    const chords = [
-      [370.00, 440.00, 554.37], // F#m (F#4, A4, C#5) - shifted up an octave for clear audibility
-      [293.66, 370.00, 440.00], // D (D4, F#4, A4)
-      [329.63, 392.00, 493.88], // E (E4, G4, B4)
-      [277.18, 349.23, 415.30], // C#m (C#4, F4, G#4)
-    ];
-    const bassNotes = [92.50, 73.42, 82.41, 69.30]; // F#2, D2, E2, C#2 - shifted up an octave to be punchy and audible
-
-    let offset = 44;
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate;
-      const barIndex = Math.floor((t % (barSec * 4)) / barSec) % chords.length;
-      const chord = chords[barIndex];
-      const bass = bassNotes[barIndex];
-      const beatPos = (t % beatSec) / beatSec;
-
-      // 808 sub-bass/kick with punchy exponential decay
-      const subDecay = Math.exp(-beatPos * 4.5);
-      const subSample = Math.sin(2 * Math.PI * bass * t) * 0.45 * subDecay;
-
-      // Rich warm analog synth pad chords - boosted scale from 0.10 to 0.35
-      let chordSample = 0;
-      for (const freq of chord) {
-        chordSample += Math.sin(2 * Math.PI * freq * t) * 0.28;
-        chordSample += Math.sin(2 * Math.PI * (freq * 2) * t) * 0.08;
-      }
-
-      // Add a nice soft analog synth melody / bell arpeggiator to make it feel expensive, rich, and clearly audible
-      const step = Math.floor(t / (beatSec / 4)) % 16;
-      const melodyFreqs = [740.00, 880.00, 1108.73, 1318.51, 1479.98, 0, 1108.73, 880.00];
-      const melodyNote = melodyFreqs[step % melodyFreqs.length];
-      let melodySample = 0;
-      if (melodyNote > 0) {
-        const stepPos = (t % (beatSec / 4)) / (beatSec / 4);
-        const melodyDecay = Math.exp(-stepPos * 8.0);
-        melodySample = Math.sin(2 * Math.PI * melodyNote * t) * 0.15 * melodyDecay;
-      }
-
-      // Soft trap hi-hat tick on 8th notes
-      const eighth = (t % (beatSec / 2)) / (beatSec / 2);
-      const hatDecay = Math.exp(-eighth * 35);
-      const hatSample = (Math.random() * 2 - 1) * 0.08 * hatDecay;
-
-      let sampleVal = subSample + chordSample + hatSample + melodySample;
-      sampleVal = Math.max(-1, Math.min(1, sampleVal));
-      const intSample = Math.floor(sampleVal * 32767);
-
-      buffer.writeInt16LE(intSample, offset);
-      buffer.writeInt16LE(intSample, offset + 2);
-      offset += 4;
-    }
-
-    cachedFallbackAudioBuffer = buffer;
-    return buffer;
-  }
-
   // Serve binary buffer with full HTTP Range Request (206/200) support
   function serveBufferWithRange(req: express.Request, res: express.Response, buffer: Buffer, contentType: string) {
     const totalSize = buffer.length;
@@ -851,9 +759,8 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     }
   }
 
-  // Unified audio stream server (disk file or zero-fail synthetic stream)
+  // Unified audio stream server for uploaded beat files
   function serveAudioStream(req: express.Request, res: express.Response, beatId?: string, preferredFileName?: string) {
-    // 0. Handle download attachment header
     const isDownload = req.query.download === '1' || req.query.download === 'true';
 
     // 1. Check in-memory cache first (preferred file name)
@@ -875,18 +782,40 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       return serveBufferWithRange(req, res, cached.buffer, cached.mimeType);
     }
 
-    // 2. Check if beat has an uploaded audio file
+    // 2. Locate exact uploaded disk file for THIS beat
     let candidatePath: string | null = null;
 
     if (beatId) {
       const beat = beatsStore.get(beatId);
-      if (beat?.main_audio_asset_id) {
-        const asset = assetsStore.get(beat.main_audio_asset_id);
-        if (asset?.r2_key) {
-          const fn = path.basename(asset.r2_key);
+      if (beat) {
+        if (beat.main_audio_asset_id) {
+          const asset = assetsStore.get(beat.main_audio_asset_id);
+          if (asset?.r2_key) {
+            const fn = path.basename(asset.r2_key);
+            const p = path.join(MEDIA_DIR, fn);
+            if (fs.existsSync(p)) candidatePath = p;
+          }
+        }
+        if (!candidatePath && beat.audio_key) {
+          const fn = path.basename(beat.audio_key);
           const p = path.join(MEDIA_DIR, fn);
           if (fs.existsSync(p)) candidatePath = p;
         }
+        if (!candidatePath && beat.audio_filename) {
+          const p = path.join(MEDIA_DIR, beat.audio_filename);
+          if (fs.existsSync(p)) candidatePath = p;
+        }
+      }
+
+      if (!candidatePath) {
+        try {
+          const mediaFiles = fs.readdirSync(MEDIA_DIR);
+          const matched = mediaFiles.find(f => f.startsWith(`${beatId}_`) || f.startsWith(`beat-audio-${beatId}`) || f.includes(beatId));
+          if (matched) {
+            const p = path.join(MEDIA_DIR, matched);
+            if (fs.existsSync(p)) candidatePath = p;
+          }
+        } catch {}
       }
     }
 
@@ -896,40 +825,7 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       if (fs.existsSync(p)) candidatePath = p;
     }
 
-    // Fallback: check if any real recorded audio file is available in MEDIA_DIR
-    if (!candidatePath) {
-      try {
-        const mediaFiles = fs.readdirSync(MEDIA_DIR).filter(f => f.endsWith('.mp3') || f.endsWith('.m4a') || f.endsWith('.wav'));
-        if (mediaFiles.length > 0) {
-          let hash = 0;
-          const str = beatId || 'cashmere';
-          for (let i = 0; i < str.length; i++) hash = (hash + str.charCodeAt(i)) % mediaFiles.length;
-          const chosen = path.join(MEDIA_DIR, mediaFiles[hash]);
-          if (fs.existsSync(chosen)) candidatePath = chosen;
-        }
-      } catch {}
-    }
-
-    // 3. If valid file exists on disk, stream with Range support
-    if (candidatePath && fs.existsSync(candidatePath)) {
-      let stat = fs.statSync(candidatePath);
-      if (stat.size < 1024) {
-        try {
-          const validFiles = fs.readdirSync(MEDIA_DIR)
-            .map(f => path.join(MEDIA_DIR, f))
-            .filter(p => fs.existsSync(p) && fs.statSync(p).size > 1024);
-          if (validFiles.length > 0) {
-            candidatePath = validFiles[0];
-            stat = fs.statSync(candidatePath);
-          } else {
-            candidatePath = null;
-          }
-        } catch {
-          candidatePath = null;
-        }
-      }
-    }
-
+    // 3. Stream real file with Range Request support
     if (candidatePath && fs.existsSync(candidatePath)) {
       const stat = fs.statSync(candidatePath);
       const fileSize = stat.size;
@@ -942,8 +838,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       if (ext === '.aac') contentType = 'audio/aac';
 
       const downloadName = preferredFileName || (beatId ? `${beatId}${ext}` : path.basename(candidatePath));
-      
-      console.log(`[PayPal/Audio Diagnostic] Serving audio request: beatId=${beatId}, candidatePath=${candidatePath}, FileSize=${fileSize}, Range=${range}, Content-Type=${contentType}`);
 
       if (range) {
         const parts = range.replace(/bytes=/, "").split("-");
@@ -951,7 +845,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
         if (start >= fileSize) {
-          console.error(`[Diagnostic] Range not satisfiable: start=${start}, size=${fileSize}`);
           res.status(416).send(`Requested range not satisfiable\n${start} >= ${fileSize}`);
           return;
         }
@@ -988,12 +881,12 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       return;
     }
 
-    // 4. Fallback: Stream high-fidelity synthetic master audio so playback NEVER fails
-    const fallbackBuffer = getFallbackAudioBuffer();
-    if (isDownload) {
-      res.setHeader('Content-Disposition', `attachment; filename="${beatId || 'cashmere_master'}.wav"`);
-    }
-    serveBufferWithRange(req, res, fallbackBuffer, 'audio/wav');
+    // 4. Return 404 if no real file uploaded for this beat
+    res.status(404).json({
+      success: false,
+      error: 'AUDIO_NOT_UPLOADED',
+      message: 'Audio not uploaded yet.'
+    });
   }
 
   // Unified artwork server (disk file or luxury bundled cover)
@@ -1177,9 +1070,13 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const r2Key = `beats/${beatId}/audio/${cleanFileName}`;
       const localFilePath = path.join(MEDIA_DIR, cleanFileName);
 
-      let fileBuffer = file ? file.buffer : (req.body && Buffer.isBuffer(req.body) ? req.body : getFallbackAudioBuffer());
+      let fileBuffer = file ? file.buffer : (req.body && Buffer.isBuffer(req.body) ? req.body : null);
       if (!fileBuffer || fileBuffer.length === 0) {
-        fileBuffer = getFallbackAudioBuffer();
+        return res.status(400).json({
+          success: false,
+          error: 'NO_AUDIO_FILE',
+          message: 'Audio file is required for upload.'
+        });
       }
 
       // Try saving to local disk, but never fail if filesystem is read-only
@@ -1597,20 +1494,6 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         updated_at: timestamp,
         ...beatUrls(beatId)
       };
-    }
-
-    // Ensure assets are referenced so publish never fails
-    if (!beat.main_audio_asset_id) {
-      beat.main_audio_asset_id = `as_aud_default_${beatId}`;
-      beat.audio_key = `beats/${beatId}/audio/default.mp3`;
-      beat.audio_filename = 'master_track.mp3';
-      beat.audio_content_type = 'audio/mpeg';
-    }
-    if (!beat.artwork_asset_id) {
-      beat.artwork_asset_id = `as_art_default_${beatId}`;
-      beat.artwork_key = `beats/${beatId}/artwork/cover.jpg`;
-      beat.artwork_filename = 'cover.jpg';
-      beat.artwork_content_type = 'image/jpeg';
     }
 
     const publishedAt = new Date().toISOString();
@@ -2210,42 +2093,27 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
         updatedAt: new Date().toISOString()
       });
     } catch (err: any) {
-      console.error('[InternetArchiveStorageAdapter] Upload failure (recovering to memory mode for zero-fail UX):', err);
-      // Auto-recover for zero-fail UX: return a valid success response with synthetic/memory assets so saving a beat never fails
-      const itemId = 'cashmerekids_vault_master_item';
-      const fallbackName = `recovered_${Date.now()}.mp3`;
-      const fallbackBuffer = getFallbackAudioBuffer();
-      const checksum = `sha256-recovered-${Date.now()}`;
-      
-      fileCache.set(fallbackName, { buffer: fallbackBuffer, mimeType: 'audio/mpeg' });
-      
-      res.json({
-        success: true,
-        storageProvider: 'internet_archive',
-        iaItemIdentifier: itemId,
-        fileName: fallbackName,
-        mediaType: 'audio/mpeg',
-        fileSize: '5.20 MB',
-        uploadStatus: 'uploaded',
-        iaUrl: `https://archive.org/download/${itemId}/${fallbackName}`,
-        playbackUrl: `/api/media/stream?file=${fallbackName}`,
-        checksum: checksum,
-        isZip: false,
-        playableFiles: [],
-        updatedAt: new Date().toISOString()
+      console.error('[StorageUpload] Upload error:', err);
+      res.status(500).json({
+        success: false,
+        error: 'STORAGE_UPLOAD_FAILED',
+        message: err.message || 'Storage upload failed.'
       });
     }
   });
 
-  // Dedicated Browser Media Streaming Endpoints with Full HTTP 206 Range Requests Support (Zero-Fail)
+  // Dedicated Browser Media Streaming Endpoints
   const handleMediaStream = async (req: any, res: any) => {
     try {
       const fileName = req.params.productId || req.query.file || req.query.fileName;
       serveAudioStream(req, res, req.params.productId, fileName ? String(fileName) : undefined);
     } catch (err: any) {
       console.error('[MediaStreamEndpoint] Exception:', err);
-      const fallbackBuffer = getFallbackAudioBuffer();
-      serveBufferWithRange(req, res, fallbackBuffer, 'audio/wav');
+      res.status(404).json({
+        success: false,
+        error: 'AUDIO_NOT_UPLOADED',
+        message: 'Audio not uploaded yet.'
+      });
     }
   };
 

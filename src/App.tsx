@@ -77,7 +77,18 @@ export default function App() {
 
   const [collections] = useState<Collection[]>(() => {
     const saved = localStorage.getItem('voodoo_collections');
-    return saved ? JSON.parse(saved) : INITIAL_COLLECTIONS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const placeholderIds = ['col-runway', 'col-obsidian'];
+          return parsed.filter((c: Collection) => !placeholderIds.includes(c.id));
+        }
+      } catch {
+        return [];
+      }
+    }
+    return INITIAL_COLLECTIONS;
   });
 
   const [profile, setProfile] = useState<ProducerProfile>(() => {
@@ -102,7 +113,18 @@ export default function App() {
 
   const [promotions, setPromotions] = useState<Promotion[]>(() => {
     const saved = localStorage.getItem('voodoo_promotions');
-    return saved ? JSON.parse(saved) : INITIAL_PROMOTIONS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const placeholderIds = ['promo-1'];
+          return parsed.filter((p: Promotion) => !placeholderIds.includes(p.id));
+        }
+      } catch {
+        return [];
+      }
+    }
+    return INITIAL_PROMOTIONS;
   });
 
   const [settings, setSettings] = useState<StoreSettings>(() => {
@@ -122,7 +144,18 @@ export default function App() {
 
   const [beatPacks, setBeatPacks] = useState<BeatPack[]>(() => {
     const saved = localStorage.getItem('voodoo_beat_packs');
-    return saved ? JSON.parse(saved) : INITIAL_BEAT_PACKS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const placeholderIds = ['pack-platinum-vault'];
+          return parsed.filter((bp: BeatPack) => !placeholderIds.includes(bp.id));
+        }
+      } catch {
+        return [];
+      }
+    }
+    return INITIAL_BEAT_PACKS;
   });
 
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {

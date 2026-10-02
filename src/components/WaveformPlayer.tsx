@@ -151,11 +151,15 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
           onNext();
         },
         (errorMsg) => {
-          console.warn('[WaveformPlayer] Playback notice (auto-recovered):', errorMsg);
+          setErrorMessage(errorMsg || 'Audio not uploaded yet.');
+          setPlayerState('unavailable');
+          setIsPlaying(false);
         },
         (state) => {
-          if (state !== 'error') {
-            setPlayerState(state);
+          setPlayerState(state);
+          if (state === 'unavailable' || state === 'error') {
+            setErrorMessage('Audio not uploaded yet.');
+            setIsPlaying(false);
           }
         }
       );
@@ -389,6 +393,9 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
                   <div className="flex justify-between items-center text-xs font-mono font-bold text-zinc-500">
                     <span className="text-[#00FF66]">{formatTime(currentTime)}</span>
+                    {errorMessage ? (
+                      <span className="text-amber-400 font-extrabold uppercase tracking-wider">{errorMessage}</span>
+                    ) : null}
                     <span>{formatTime(duration)}</span>
                   </div>
                 </div>

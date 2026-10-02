@@ -87,6 +87,7 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
   const [duration, setDuration] = useState(165);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,6 +101,24 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
 
   // Poll state continuously from the real Web Audio engine
   useEffect(() => {
+    audioSynth.setCallbacks(
+      (time, dur) => {
+        setCurrentTime(time);
+        if (dur && !isNaN(dur) && dur > 0) setDuration(dur);
+      },
+      () => {},
+      (err) => {
+        setAudioError(err || 'Audio not uploaded yet.');
+      },
+      (state) => {
+        if (state === 'unavailable' || state === 'error') {
+          setAudioError('Audio not uploaded yet.');
+        } else if (state === 'playing' || state === 'ready') {
+          setAudioError(null);
+        }
+      }
+    );
+
     const interval = setInterval(() => {
       const state = audioSynth.getCurrentState();
       setCurrentTime(state.currentTime);
@@ -486,6 +505,9 @@ export const AudioPlayerView: React.FC<AudioPlayerViewProps> = ({
 
             <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
               <span className="text-[#00FF66]">{formatTime(currentTime)}</span>
+              {audioError ? (
+                <span className="text-amber-400 font-extrabold uppercase tracking-wider">{audioError}</span>
+              ) : null}
               <span>{formatTime(duration)}</span>
             </div>
           </div>

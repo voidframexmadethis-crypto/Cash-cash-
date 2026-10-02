@@ -411,10 +411,12 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
 
       clearInterval(progressInterval);
 
-      let result: any = {};
-      if (res.ok) {
-        result = await res.json();
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Upload server error');
       }
+
+      const result = await res.json();
 
       setQueue((prev) =>
         prev.map((item) =>
@@ -424,9 +426,9 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
                 beatId: result.beatId || targetBeatId,
                 status: 'completed',
                 progress: 100,
-                storageProvider: 'R2 / D1 Distributed Cloud',
+                storageProvider: 'Cloud Storage',
                 iaUrl: result.iaUrl || `/api/beats/${targetBeatId}/audio`,
-                audioUrl: result.audioUrl || result.playbackUrl || item.audioObjectUrl || `/api/beats/${targetBeatId}/audio`,
+                audioUrl: result.audioUrl || result.playbackUrl || `/api/beats/${targetBeatId}/audio`,
                 checksum: result.checksum || 'sha256-verified',
               }
             : item
@@ -435,23 +437,21 @@ export const BeatUploadingSystem: React.FC<BeatUploadingSystemProps> = ({
       showToast('Upload Successful', `File "${queueItem?.fileName}" uploaded successfully.`, 'success');
     } catch (err: any) {
       clearInterval(progressInterval);
-      console.warn('[UploadSystem] Network upload deferred, activating local master track buffer:', err);
+      console.error('[UploadSystem] Upload error:', err);
       const queueItem = queue.find((q) => q.id === itemId);
-      const targetBeatId = queueItem?.beatId || `cc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       setQueue((prev) =>
         prev.map((item) =>
           item.id === itemId
             ? {
                 ...item,
-                beatId: targetBeatId,
-                status: 'completed',
-                progress: 100,
-                audioUrl: item.audioObjectUrl || `/api/beats/${targetBeatId}/audio`
+                status: 'failed',
+                progress: 0,
+                errorMessage: err.message || 'Upload failed'
               }
             : item
         )
       );
-      showToast('Master Audio Ready', `File "${queueItem?.fileName}" loaded and ready to publish.`, 'success');
+      showToast('Upload Failed', `Could not upload "${queueItem?.fileName}". ${err.message || ''}`, 'error');
     }
   };
 

@@ -472,22 +472,32 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">CURATED COLLECTIONS</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 w-full">
-            {collections.slice(0, 4).map((col) => (
-              <div
-                key={col.id}
-                className="group cursor-pointer bg-zinc-950/80 backdrop-blur-xl p-5 rounded-3xl border border-zinc-850 hover:border-purple-500/50 hover:shadow-2xl hover:shadow-purple-950/40 transition-all duration-300"
-                onClick={() => onNavigate('collections')}
-              >
-                <div className="aspect-square rounded-2xl overflow-hidden mb-4 border border-zinc-800 relative">
-                  <img src={col.artworkUrl} alt={col.name} className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+          {collections.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 w-full">
+              {collections.slice(0, 4).map((col) => (
+                <div
+                  key={col.id}
+                  className="group cursor-pointer bg-zinc-950/80 backdrop-blur-xl p-5 rounded-3xl border border-zinc-850 hover:border-purple-500/50 hover:shadow-2xl hover:shadow-purple-950/40 transition-all duration-300"
+                  onClick={() => onNavigate('collections')}
+                >
+                  <div className="aspect-square rounded-2xl overflow-hidden mb-4 border border-zinc-800 relative">
+                    <img src={col.artworkUrl} alt={col.name} className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                  </div>
+                  <h3 className="font-extrabold text-white text-lg group-hover:text-purple-300 transition-colors">{col.name}</h3>
+                  <p className="text-xs text-zinc-400 font-mono mt-1">Explore Collection →</p>
                 </div>
-                <h3 className="font-extrabold text-white text-lg group-hover:text-purple-300 transition-colors">{col.name}</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Explore Collection →</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-10 text-center bg-zinc-950/60 border border-zinc-900 rounded-3xl space-y-3">
+              <Folder className="w-10 h-10 text-purple-400 mx-auto" />
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider font-brand">STORE VAULT COLLECTIONS READY</h3>
+              <p className="text-xs text-zinc-400 font-mono max-w-md mx-auto">
+                No custom collections created yet. Build thematic beat packs and sound suites in your Producer Studio Portal.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Beat Picker Section */}
