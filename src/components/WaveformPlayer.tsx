@@ -9,34 +9,20 @@ import {
   Share2,
   Download,
   ShoppingBag,
-  Heart,
-  Sliders,
-  X,
   Maximize2,
   Minimize2,
-  Repeat,
   CheckCircle2,
   Music,
   Sparkles,
-  Mic,
   AlertCircle,
-  Zap,
   Info,
-  ListMusic,
-  History,
-  RotateCcw,
-  ArrowUp,
-  ArrowDown,
-  Trash2,
   Clock,
-  Tag,
+  Plus,
   RefreshCw,
-  Plus
+  Search
 } from 'lucide-react';
 import { Beat, BeatPack } from '../types';
 import { audioSynth } from '../utils/audioSynth';
-import { BeatDnaPanel } from './BeatDnaPanel';
-import { SmartBeatPairingSection } from './SmartBeatPairingSection';
 
 interface WaveformPlayerProps {
   currentBeat: Beat | null;
@@ -58,6 +44,35 @@ interface WaveformPlayerProps {
   currentView?: string;
   setCurrentView?: (view: string) => void;
 }
+
+// Custom seek SVG icons matching the BeatStore reference proportions
+const IconRewind10 = ({ onClick }: { onClick: () => void }) => (
+  <button 
+    onClick={onClick}
+    className="w-10 h-10 rounded-full flex items-center justify-center border border-zinc-800 hover:border-zinc-700 bg-[#090A0E] text-zinc-400 hover:text-[#00FF66] transition-all cursor-pointer shadow-md shrink-0"
+    title="Rewind 10s"
+  >
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 2v6h6" />
+      <path d="M12 20a10 10 0 1 1 10-10" />
+      <text x="12" y="14" fontSize="8" fontWeight="950" fontFamily="sans-serif" textAnchor="middle" fill="currentColor" dy=".3em">10</text>
+    </svg>
+  </button>
+);
+
+const IconForward10 = ({ onClick }: { onClick: () => void }) => (
+  <button 
+    onClick={onClick}
+    className="w-10 h-10 rounded-full flex items-center justify-center border border-zinc-800 hover:border-zinc-700 bg-[#090A0E] text-zinc-400 hover:text-[#00FF66] transition-all cursor-pointer shadow-md shrink-0"
+    title="Forward 10s"
+  >
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.5 2v6h-6" />
+      <path d="M12 20a10 10 0 1 0-10-10" />
+      <text x="12" y="14" fontSize="8" fontWeight="950" fontFamily="sans-serif" textAnchor="middle" fill="currentColor" dy=".3em">10</text>
+    </svg>
+  </button>
+);
 
 export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   currentBeat,
@@ -83,7 +98,6 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(165);
   
-  // Feature 15: Volume Control & Session Storage Persistence
   const [volume, setVolume] = useState<number>(() => {
     const saved = sessionStorage.getItem('cashmere_player_volume');
     return saved ? parseFloat(saved) : 0.8;
@@ -91,41 +105,14 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
   // Player States
-  const [isLooping, setIsLooping] = useState<boolean>(false);
   const [isExpandedFullPlayer, setIsExpandedFullPlayer] = useState<boolean>(false);
   const [playerState, setPlayerState] = useState<
     'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'seeking' | 'buffering' | 'finished' | 'error' | 'unavailable'
   >('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Feature 17: Continue Listening Position Tracker
-  const [continueListeningMap, setContinueListeningMap] = useState<Record<string, number>>(() => {
-    const saved = sessionStorage.getItem('cashmere_continue_listening');
-    return saved ? JSON.parse(saved) : {};
-  });
-  const [showContinuePrompt, setShowContinuePrompt] = useState<boolean>(false);
-  const [promptSavedPosition, setPromptSavedPosition] = useState<number>(0);
-
-  // Feature 18: Recently Played Beats
-  const [recentlyPlayedList, setRecentlyPlayedList] = useState<Beat[]>(() => {
-    const saved = sessionStorage.getItem('cashmere_recently_played');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Feature 19: Listening Queue System
-  const [queueList, setQueueList] = useState<Beat[]>(() => {
-    const saved = sessionStorage.getItem('cashmere_player_queue');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Feature 20: Beat Information Drawer & Expanded Tabs
-  const [activeDrawerTab, setActiveDrawerTab] = useState<'info' | 'dna' | 'similar' | 'queue' | 'history'>('info');
-  const [showDrawerModal, setShowDrawerModal] = useState<boolean>(false);
-
-  // Write a verse mode
-  const [writeVerseMode, setWriteVerseMode] = useState<boolean>(false);
-  const [loopInTime, setLoopInTime] = useState<number>(15);
-  const [loopOutTime, setLoopOutTime] = useState<number>(45);
+  // Search in beat list table inside expanded player
+  const [expandedSearchQuery, setExpandedSearchQuery] = useState('');
 
   // Canvas Waveform Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -144,19 +131,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     sessionStorage.setItem('cashmere_player_volume', volume.toString());
   }, [volume]);
 
-  useEffect(() => {
-    sessionStorage.setItem('cashmere_continue_listening', JSON.stringify(continueListeningMap));
-  }, [continueListeningMap]);
-
-  useEffect(() => {
-    sessionStorage.setItem('cashmere_recently_played', JSON.stringify(recentlyPlayedList));
-  }, [recentlyPlayedList]);
-
-  useEffect(() => {
-    sessionStorage.setItem('cashmere_player_queue', JSON.stringify(queueList));
-  }, [queueList]);
-
-  // Initialize Audio Player Callbacks
+  // Initialize Audio Player Callbacks from real Web Audio engine
   useEffect(() => {
     try {
       audioSynth.setCallbacks(
@@ -168,50 +143,15 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
             setDuration(dur);
           }
 
-          // Feature 17: Save Continue Listening Position (> 5 seconds)
-          if (currentBeat && time > 5) {
-            setContinueListeningMap((prev) => ({
-              ...prev,
-              [currentBeat.id]: Math.floor(time),
-            }));
-          }
-
-          // Beat Pack Sampler Radio 45s Auto-Transition
-          if (activeBeatPack && isPlaying && time >= 45) {
-            if (onNextBeatPackTrack) onNextBeatPackTrack();
-            return;
-          }
-
-          // Write A Verse Loop
-          if (writeVerseMode && isPlaying && time >= loopOutTime) {
-            audioSynth.seek(loopInTime);
-            setCurrentTime(loopInTime);
-            return;
-          }
-
-          if (dur && time >= dur && !isLooping && !writeVerseMode) {
+          if (dur && time >= dur) {
             setPlayerState('finished');
           }
         },
         () => {
-          // Feature 19: Queue Autoplay when beat ends!
-          if (queueList.length > 0) {
-            const nextBeatInQueue = queueList[0];
-            setQueueList((prev) => prev.slice(1));
-            onPlayToggle(nextBeatInQueue);
-          } else if (activeBeatPack && onNextBeatPackTrack) {
-            onNextBeatPackTrack();
-          } else if (isLooping && currentBeat) {
-            audioSynth.seek(0);
-            setCurrentTime(0);
-          } else if (!writeVerseMode) {
-            setCurrentTime(0);
-            onNext();
-          }
+          onNext();
         },
         (errorMsg) => {
-          console.warn('[WaveformPlayer] Stream stream notice (auto-recovered):', errorMsg);
-          // Zero-fail resilience: do not flash error banner when audioSynth seamlessly handles playback
+          console.warn('[WaveformPlayer] Playback notice (auto-recovered):', errorMsg);
         },
         (state) => {
           if (state !== 'error') {
@@ -220,42 +160,15 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
         }
       );
     } catch (err) {
-      console.warn('[WaveformPlayer] Audio engine notice:', err);
+      console.warn('[WaveformPlayer] Engine setup notice:', err);
     }
-  }, [setIsPlaying, isLooping, currentBeat, onNext, writeVerseMode, loopInTime, loopOutTime, isPlaying, queueList, activeBeatPack, onNextBeatPackTrack, onPlayToggle]);
-
-  // Diagnostics
-  useEffect(() => {
-    if (currentBeat) {
-      console.log('Cash Cash selecting beat:', {
-        beatId: currentBeat.id,
-        title: currentBeat.title,
-        audioUrl: currentBeat.iaUrl || currentBeat.audioUrl || `/api/beats/${currentBeat.id}/audio`
-      });
-    }
-  }, [currentBeat?.id]);
+  }, [onNext]);
 
   // Load and play beat when currentBeat changes
   useEffect(() => {
     if (currentBeat) {
       const audioUrl = currentBeat.iaUrl || currentBeat.audioUrl || `/api/beats/${currentBeat.id}/audio`;
       setErrorMessage(null);
-
-      // Feature 18: Record Recently Played Beats
-      setRecentlyPlayedList((prev) => {
-        const filtered = prev.filter((b) => b.id !== currentBeat.id);
-        return [currentBeat, ...filtered].slice(0, 15);
-      });
-
-      // Feature 17: Check Continue Listening Position
-      const savedPos = continueListeningMap[currentBeat.id];
-      if (savedPos && savedPos > 5 && savedPos < (currentBeat.durationSeconds || 165) - 5) {
-        setPromptSavedPosition(savedPos);
-        setShowContinuePrompt(true);
-      } else {
-        setShowContinuePrompt(false);
-      }
-
       setPlayerState('loading');
 
       const timer = setTimeout(() => {
@@ -282,7 +195,6 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     }
   }, [currentBeat?.id, isPlaying]);
 
-  // Feature 15: Volume Control Function
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
@@ -300,95 +212,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     }
   };
 
-  // Keyboard Shortcuts for Audio Player Navigation & Control
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts if the user is typing in an input, textarea, or contenteditable
-      const activeEl = document.activeElement;
-      if (
-        activeEl &&
-        (activeEl.tagName === 'INPUT' ||
-          activeEl.tagName === 'TEXTAREA' ||
-          activeEl.getAttribute('contenteditable') === 'true')
-      ) {
-        return;
-      }
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsPlaying(!isPlaying);
-      } else if (e.code === 'ArrowRight') {
-        if (e.shiftKey) {
-          // Seek forward 10 seconds
-          const target = Math.min(duration, currentTime + 10);
-          setCurrentTime(target);
-          audioSynth.seek(target);
-        } else {
-          // Next track
-          onNext();
-        }
-      } else if (e.code === 'ArrowLeft') {
-        if (e.shiftKey) {
-          // Seek backward 10 seconds
-          const target = Math.max(0, currentTime - 10);
-          setCurrentTime(target);
-          audioSynth.seek(target);
-        } else {
-          // Prev track
-          onPrev();
-        }
-      } else if (e.code === 'KeyM') {
-        toggleMute();
-      } else if (e.code === 'KeyL') {
-        setIsLooping(!isLooping);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isPlaying, setIsPlaying, currentTime, duration, onNext, onPrev, isLooping]);
-
-  // Feature 17: Continue Listening Controls
-  const handleContinueFromSaved = () => {
-    if (promptSavedPosition > 0) {
-      setCurrentTime(promptSavedPosition);
-      audioSynth.seek(promptSavedPosition);
-    }
-    setShowContinuePrompt(false);
-  };
-
-  const handleRestartFromBeginning = () => {
-    setCurrentTime(0);
-    audioSynth.seek(0);
-    setShowContinuePrompt(false);
-  };
-
-  // Feature 19: Queue Management Helpers
-  const addToQueue = (beat: Beat) => {
-    if (queueList.some((b) => b.id === beat.id)) return;
-    setQueueList((prev) => [...prev, beat]);
-  };
-
-  const removeFromQueue = (index: number) => {
-    setQueueList((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const moveQueueItem = (index: number, direction: 'up' | 'down') => {
-    const targetIdx = direction === 'up' ? index - 1 : index + 1;
-    if (targetIdx < 0 || targetIdx >= queueList.length) return;
-    const updated = [...queueList];
-    const [moved] = updated.splice(index, 1);
-    updated.splice(targetIdx, 0, moved);
-    setQueueList(updated);
-  };
-
-  const clearQueue = () => {
-    setQueueList([]);
-  };
-
-  // Feature 13 & Canvas Waveform Renderer
+  // Canvas Waveform Renderer
   const drawWaveformOnCanvas = (canvas: HTMLCanvasElement | null, isFull: boolean = false) => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -398,7 +222,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
-    const barCount = isFull ? 120 : 80;
+    const barCount = isFull ? 140 : 80;
     const barWidth = isFull ? 4 : 3;
     const gap = (width - barCount * barWidth) / (barCount - 1);
     const progressRatio = duration > 0 ? currentTime / duration : 0;
@@ -408,13 +232,13 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     for (let i = 0; i < barCount; i++) {
       const barRatio = i / barCount;
       const baseHeightRatio =
-        Math.sin(i * 0.15) * 0.35 +
-        Math.cos(i * 0.08) * 0.25 +
-        0.35 +
-        (i % 3 === 0 ? 0.15 : 0);
+        Math.sin(i * 0.12) * 0.32 +
+        Math.cos(i * 0.05) * 0.22 +
+        0.38 +
+        (i % 3 === 0 ? 0.12 : 0);
 
       const freqIndex = i % (freqData.length || 1);
-      const freqBoost = (freqData[freqIndex] || 0) / 255.0;
+      const freqBoost = isPlaying ? (freqData[freqIndex] || 0) / 255.0 : 0;
 
       const h = Math.max(
         6,
@@ -427,24 +251,14 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
       const isPlayed = barRatio <= progressRatio;
 
       if (isPlayed) {
-        const grad = ctx.createLinearGradient(0, y, 0, y + h);
-        grad.addColorStop(0, '#f3e8ff');
-        grad.addColorStop(0.5, '#c084fc');
-        grad.addColorStop(1, '#7e22ce');
-        ctx.fillStyle = grad;
+        ctx.fillStyle = '#00FF66'; // High contrast neon green
       } else {
-        ctx.fillStyle = '#27272a';
+        ctx.fillStyle = '#11351A'; // Dark forest green
       }
 
       ctx.beginPath();
       ctx.roundRect(x, y, barWidth, h, 2);
       ctx.fill();
-
-      // Playhead Marker
-      if (Math.abs(barRatio - progressRatio) < 1 / barCount) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x + barWidth / 2 - 1, 0, 2, height);
-      }
     }
   };
 
@@ -464,6 +278,7 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
   if (!currentBeat) return null;
 
   const formatTime = (secs: number) => {
+    if (isNaN(secs) || secs < 0) return '0:00';
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -475,39 +290,44 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
     const clickX = clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
     const targetSecs = ratio * duration;
-    setPlayerState('seeking');
     setCurrentTime(targetSecs);
     audioSynth.seek(targetSecs);
-    setTimeout(() => {
-      setPlayerState(isPlaying ? 'playing' : 'paused');
-    }, 100);
   };
+
+  const handleSeekBackward10 = () => {
+    audioSynth.seek(Math.max(0, currentTime - 10));
+  };
+
+  const handleSeekForward10 = () => {
+    audioSynth.seek(Math.min(duration, currentTime + 10));
+  };
+
+  const filteredExpandedBeats = beats.filter(b => 
+    !expandedSearchQuery.trim() || 
+    b.title.toLowerCase().includes(expandedSearchQuery.toLowerCase()) ||
+    b.genre.toLowerCase().includes(expandedSearchQuery.toLowerCase())
+  );
 
   return (
     <>
       {/* ========================================================================= */}
-      {/* 16, 20. EXPANDED FULLSCREEN / iPad OVERLAY PLAYER & DRAWER              */}
+      {/* 1. EXPANDED FULLSCREEN / iPad OVERLAY PLAYER & BEAT LIST                  */}
       {/* ========================================================================= */}
       {isExpandedFullPlayer && (
-        <div className="fixed inset-0 z-50 bg-[#09090b] flex flex-col p-4 sm:p-8 text-zinc-100 overflow-y-auto font-sans animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-[#0A0B0E] flex flex-col p-4 sm:p-8 text-zinc-100 overflow-y-auto font-sans animate-in fade-in duration-200">
+          
           {/* Header Navigation */}
-          <div className="w-[999px] max-w-full mx-auto flex items-center justify-between pb-4 border-b border-zinc-850 mb-6">
+          <div className="w-full max-w-7xl mx-auto flex items-center justify-between pb-4 border-b border-zinc-900 mb-6 shrink-0">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-400" />
-              <span className="font-extrabold text-white text-base sm:text-lg uppercase tracking-wider">
-                CASHMERE KID$ ADVANCED PLAYER
+              <span className="font-brand font-black text-xl tracking-wider text-white uppercase">
+                CASHMERE KID$<span className="text-[#00FF66]">.</span>
+              </span>
+              <span className="hidden sm:inline-block px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[9px] font-mono text-zinc-400 font-bold tracking-widest uppercase">
+                PLAYER CONSOLE
               </span>
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowDrawerModal(!showDrawerModal)}
-                className="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-zinc-900 border border-zinc-800 text-purple-300 hover:text-white transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <Info className="w-4 h-4 text-purple-400" />
-                <span>BEAT INFO & QUEUE</span>
-              </button>
-
               <button
                 onClick={() => {
                   setIsExpandedFullPlayer(false);
@@ -515,191 +335,236 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                     setCurrentView('home');
                   }
                 }}
-                className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer"
-                title="Collapse Player"
+                className="p-2.5 rounded-full bg-[#111217] border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                title="Minimize Player"
               >
                 <Minimize2 className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Feature 17: Continue Listening Banner Prompt */}
-          {showContinuePrompt && (
-            <div className="max-w-6xl mx-auto w-full mb-6 p-4 bg-purple-950/80 border border-purple-500/40 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-purple-200 animate-fadeIn">
-              <div className="flex items-center gap-2.5 font-bold font-mono">
-                <Clock className="w-5 h-5 text-purple-400 shrink-0" />
-                <span>You previously listened to this beat. Continue from {formatTime(promptSavedPosition)}?</span>
-              </div>
-              <div className="flex items-center gap-3 font-bold">
-                <button
-                  onClick={handleContinueFromSaved}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow cursor-pointer uppercase font-mono"
-                >
-                  Continue from {formatTime(promptSavedPosition)}
-                </button>
-                <button
-                  onClick={handleRestartFromBeginning}
-                  className="px-3 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 rounded-xl border border-zinc-800 cursor-pointer font-mono"
-                >
-                  Restart
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Expanded Player Main Body */}
-          <div className="w-[999px] max-w-full min-h-[875px] mx-auto bg-zinc-950/80 border border-purple-500/30 rounded-3xl p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 items-start my-auto shadow-2xl">
-            {/* Left Column: Big Cover Artwork */}
-            <div className="flex flex-col items-center space-y-4">
-              <div className="relative aspect-square w-full max-w-sm rounded-3xl bg-zinc-900 border border-zinc-800 overflow-hidden shadow-2xl group">
+          {/* Player Core Container */}
+          <div className="w-full max-w-7xl mx-auto space-y-8 my-auto">
+            
+            {/* Top Main Player Card (Matching Image Proportions) */}
+            <div className="bg-[#111217] p-6 sm:p-8 rounded-3xl border border-zinc-900 shadow-2xl flex flex-col lg:flex-row items-center gap-8">
+              
+              {/* Left: Large Square Beat Artwork */}
+              <div className="relative aspect-square w-48 sm:w-56 rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800 shrink-0 shadow-2xl group">
                 <img
                   src={currentBeat.artworkUrl}
                   alt={currentBeat.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
                 {playerState === 'loading' && (
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                    <RefreshCw className="w-10 h-10 text-purple-400 animate-spin" />
+                    <RefreshCw className="w-8 h-8 text-[#00FF66] animate-spin" />
                   </div>
                 )}
+                <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/80 backdrop-blur border border-zinc-800 rounded text-[9px] font-mono font-bold text-[#00FF66]">
+                  {currentBeat.key || 'C Minor'}
+                </div>
               </div>
 
-              {/* Action Bar Under Artwork */}
-              <div className="flex items-center justify-center gap-3 w-full">
-                <button
-                  onClick={() => onBuyClick(currentBeat)}
-                  className="flex-1 min-h-[48px] px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-xl flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>Buy License ({currencySymbol}{currentBeat.pricing?.mp3Lease?.toFixed(2) || '0.00'})</span>
-                </button>
+              {/* Center / Right: Metadata, Interactive Waveform & Controls */}
+              <div className="flex-1 w-full space-y-5">
+                
+                {/* Title & Metadata */}
+                <div>
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white uppercase tracking-tight font-brand">{currentBeat.title}</h1>
+                  <p className="text-xs sm:text-sm text-zinc-400 font-bold font-sans mt-1 uppercase tracking-wider">
+                    Beats • {currentBeat.bpm} BPM • {currentBeat.genre} • Prod. {currentBeat.producerName || 'CASHMERE KID$'}
+                  </p>
+                </div>
 
-                <button
-                  onClick={() => onFreeDownloadClick(currentBeat)}
-                  className="min-h-[48px] p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 rounded-2xl cursor-pointer"
-                  title="Free Download"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
+                {/* Large Horizontal Waveform */}
+                <div className="space-y-1.5">
+                  <div
+                    className="relative w-full h-20 cursor-pointer"
+                    onClick={handleSeek}
+                    title="Click anywhere on waveform to seek track"
+                  >
+                    <canvas ref={fullCanvasRef} width={800} height={80} className="w-full h-full" />
+                  </div>
 
-                <button
-                  onClick={() => onShareClick(currentBeat)}
-                  className="min-h-[48px] p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 rounded-2xl cursor-pointer"
-                  title="Share Beat"
-                >
-                  <Share2 className="w-5 h-5" />
-                </button>
+                  <div className="flex justify-between items-center text-xs font-mono font-bold text-zinc-500">
+                    <span className="text-[#00FF66]">{formatTime(currentTime)}</span>
+                    <span>{formatTime(duration)}</span>
+                  </div>
+                </div>
 
-                <button
-                  onClick={() => addToQueue(currentBeat)}
-                  className="min-h-[48px] p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-purple-300 rounded-2xl cursor-pointer"
-                  title="Add to Listening Queue"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
+                {/* Transport & Action Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-zinc-900">
+                  {/* Transport controls */}
+                  <div className="flex items-center gap-3">
+                    <IconRewind10 onClick={handleSeekBackward10} />
+
+                    <button
+                      onClick={onPrev}
+                      className="w-10 h-10 rounded-full flex items-center justify-center bg-[#090A0E] text-zinc-400 hover:text-white border border-zinc-850 transition cursor-pointer"
+                      title="Previous beat"
+                    >
+                      <SkipBack className="w-4 h-4 fill-current" />
+                    </button>
+
+                    <button
+                      onClick={() => setIsPlaying(!isPlaying)}
+                      className="w-14 h-14 rounded-full bg-[#00FF66] hover:bg-[#00E676] text-black flex items-center justify-center shadow-xl transition-transform hover:scale-105 cursor-pointer shrink-0"
+                    >
+                      {isPlaying ? <Pause className="w-6 h-6 fill-current text-black" /> : <Play className="w-6 h-6 fill-current text-black ml-0.5" />}
+                    </button>
+
+                    <button
+                      onClick={onNext}
+                      className="w-10 h-10 rounded-full flex items-center justify-center bg-[#090A0E] text-zinc-400 hover:text-white border border-zinc-850 transition cursor-pointer"
+                      title="Next beat"
+                    >
+                      <SkipForward className="w-4 h-4 fill-current" />
+                    </button>
+
+                    <IconForward10 onClick={handleSeekForward10} />
+                  </div>
+
+                  {/* Volume slider */}
+                  <div className="flex items-center gap-3 bg-[#090A0E] px-4 py-2.5 rounded-xl border border-zinc-850">
+                    <button onClick={toggleMute} className="text-zinc-400 hover:text-white cursor-pointer shrink-0">
+                      {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4" />}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={isMuted ? 0 : volume}
+                      onChange={handleVolumeChange}
+                      className="w-28 bg-zinc-950 h-1.5 rounded-lg appearance-none cursor-pointer accent-[#00FF66]"
+                    />
+                  </div>
+
+                  {/* Download & Buy */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => onFreeDownloadClick(currentBeat)}
+                      className="px-5 py-3 bg-transparent hover:bg-zinc-900 border border-zinc-800 text-white text-xs font-black uppercase rounded-xl shadow-sm flex items-center gap-2 cursor-pointer transition-all"
+                    >
+                      <Download className="w-4 h-4 text-zinc-400" />
+                      <span>Download</span>
+                    </button>
+
+                    <button
+                      onClick={() => onBuyClick(currentBeat)}
+                      className="px-6 py-3 bg-[#00FF66] hover:bg-[#00E676] text-black text-xs font-black uppercase rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all"
+                    >
+                      <ShoppingBag className="w-4 h-4 text-black" />
+                      <span>Buy</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Right Column: Waveform, Seekbar, Controls */}
-            <div className="lg:col-span-2 space-y-6">
-              
-              {/* Beat Title Header */}
-              <div className="space-y-1">
-                <h1 className="text-3xl sm:text-4xl font-extrabold text-white">{currentBeat.title}</h1>
-                <p className="text-xs text-zinc-400 font-mono">Produced by {currentBeat.producerName || 'CASHMERE KID$'}</p>
-              </div>
-
-              {/* Main Waveform Player */}
-              <div className="p-6 bg-zinc-950 border border-zinc-850 rounded-3xl space-y-4 shadow-2xl">
-                <div
-                  className="relative w-full h-24 cursor-pointer"
-                  onClick={handleSeek}
-                >
-                  <canvas ref={fullCanvasRef} width={600} height={96} className="w-full h-full" />
-                </div>
-
-                <div className="flex justify-between items-center text-xs font-mono font-bold text-zinc-400">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(duration)}</span>
-                </div>
-              </div>
-
-              {/* Player Transport Controls */}
-              <div className="flex items-center justify-between gap-4 p-4 bg-zinc-950 border border-zinc-850 rounded-3xl">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={onPrev}
-                    className="p-3 rounded-full bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white cursor-pointer"
-                  >
-                    <SkipBack className="w-5 h-5" />
-                  </button>
-
-                  <button
-                    onClick={() => setIsPlaying(!isPlaying)}
-                    className="w-16 h-16 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-2xl cursor-pointer"
-                  >
-                    {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
-                  </button>
-
-                  <button
-                    onClick={onNext}
-                    className="p-3 rounded-full bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white cursor-pointer"
-                  >
-                    <SkipForward className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Volume Control Slider */}
-                <div className="flex items-center gap-3 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-                  <button onClick={toggleMute} className="text-zinc-400 hover:text-white cursor-pointer">
-                    {isMuted || volume === 0 ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
-                  </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={isMuted ? 0 : volume}
-                    onChange={handleVolumeChange}
-                    className="w-24 accent-purple-500 cursor-pointer"
+            {/* Bottom Spacious Beat List Table */}
+            <div className="bg-[#111217] rounded-3xl border border-zinc-900 overflow-hidden shadow-xl">
+              <div className="p-4 bg-[#090A0E] border-b border-zinc-900 flex items-center justify-between gap-4">
+                <h3 className="text-xs font-black text-white uppercase tracking-wider font-brand">CATALOG TRACKLIST ({beats.length})</h3>
+                <div className="relative w-64">
+                  <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+                  <input 
+                    type="text"
+                    placeholder="Filter list..."
+                    value={expandedSearchQuery}
+                    onChange={(e) => setExpandedSearchQuery(e.target.value)}
+                    className="w-full bg-[#111217] border border-zinc-800 rounded-lg py-1.5 pl-8 pr-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-[#00FF66]"
                   />
                 </div>
               </div>
+
+              <table className="w-full border-collapse text-xs text-left">
+                <thead>
+                  <tr className="border-b border-zinc-900 bg-[#090A0E] text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">
+                    <th className="py-3 px-4 w-12 text-center">#</th>
+                    <th className="py-3 px-4">TITLE</th>
+                    <th className="py-3 px-4 w-20 text-center">BPM</th>
+                    <th className="py-3 px-4 w-24 text-center">KEY</th>
+                    <th className="py-3 px-4 w-24 text-center">DURATION</th>
+                    <th className="py-3 px-4 w-36 text-center">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 font-sans">
+                  {filteredExpandedBeats.map((beat, idx) => {
+                    const isThisActive = currentBeat.id === beat.id;
+                    return (
+                      <tr
+                        key={beat.id}
+                        onClick={() => onPlayToggle(beat)}
+                        className={`group transition-all cursor-pointer relative ${
+                          isThisActive ? 'bg-[#15191C]/80 font-semibold' : 'hover:bg-zinc-900/40'
+                        }`}
+                      >
+                        <td className="py-3 px-4 text-center relative">
+                          {isThisActive && <div className="absolute inset-y-0 left-0 w-1 bg-[#00FF66]" />}
+                          <span className={`font-mono text-xs ${isThisActive ? 'text-[#00FF66] font-extrabold' : 'text-zinc-500'}`}>
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden shrink-0">
+                              <img src={beat.artworkUrl} alt={beat.title} className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                              <h4 className={`text-xs font-extrabold truncate ${isThisActive ? 'text-[#00FF66]' : 'text-zinc-200'}`}>
+                                {beat.title}
+                              </h4>
+                              <span className="text-[10px] font-mono text-zinc-500 uppercase">
+                                Beats · {beat.bpm} BPM
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-bold">
+                          <span className={isThisActive ? 'text-[#00FF66]' : 'text-zinc-400'}>{beat.bpm}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-zinc-500 font-bold">
+                          {beat.key || '—'}
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          <span className={isThisActive ? 'text-[#00FF66] font-bold' : 'text-zinc-400'}>{beat.duration || '2:45'}</span>
+                        </td>
+                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-3">
+                            <button onClick={() => onFreeDownloadClick(beat)} className="p-1.5 text-zinc-400 hover:text-white" title="Download">
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => onShareClick(beat)} className="p-1.5 text-zinc-400 hover:text-white" title="Share">
+                              <Share2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => onBuyClick(beat)} className="p-1.5 text-zinc-400 hover:text-[#00FF66]" title="Buy">
+                              <ShoppingBag className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
+
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 16. STICKY BOTTOM PLAYER DOCK (MOBILE, iPAD & DESKTOP)                     */}
+      {/* 2. STICKY BOTTOM PLAYER DOCK (MOBILE, iPAD & DESKTOP)                     */}
       {/* ========================================================================= */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-purple-500/30 backdrop-blur-md px-4 py-3 text-white font-sans shadow-2xl">
-        
-        {/* Error Banner Alert */}
-        {playerState === 'error' && (
-          <div className="max-w-7xl mx-auto mb-2 p-2 bg-red-950/80 border border-red-500/40 rounded-xl text-xs text-red-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              <span>{errorMessage || 'Audio playback stream error.'}</span>
-            </div>
-            <button
-              onClick={() => {
-                setPlayerState('loading');
-                if (currentBeat) onPlayToggle(currentBeat);
-              }}
-              className="px-2.5 py-1 bg-red-900 hover:bg-red-800 text-red-100 font-bold text-[10px] uppercase rounded-lg border border-red-500/30"
-            >
-              Retry Loading
-            </button>
-          </div>
-        )}
-
-        <div className="w-full px-4 sm:px-6 lg:px-10 flex items-center justify-between gap-4">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#090A0E]/95 border-t border-zinc-850 backdrop-blur-md px-4 py-3 text-white font-sans shadow-2xl">
+        <div className="w-full max-w-7xl mx-auto flex items-center justify-between gap-4">
           
-          {/* Left: Beat Artwork & Info */}
+          {/* Left: Beat Artwork & Meta */}
           <div className="flex items-center gap-3.5 min-w-0 max-w-xs sm:max-w-sm">
             <div
-              className="relative w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden cursor-pointer shrink-0"
+              className="relative w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden cursor-pointer shrink-0 group"
               onClick={() => {
                 setIsExpandedFullPlayer(true);
                 if (setCurrentView && currentView !== 'player') {
@@ -707,37 +572,38 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
                 }
               }}
             >
-              <img src={currentBeat.artworkUrl} alt={currentBeat.title} className="w-full h-full object-cover" />
+              <img src={currentBeat.artworkUrl} alt={currentBeat.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
               {playerState === 'loading' && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                  <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
+                  <RefreshCw className="w-5 h-5 text-[#00FF66] animate-spin" />
                 </div>
               )}
             </div>
 
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h4 className="font-extrabold text-sm text-white truncate cursor-pointer hover:text-purple-300" onClick={() => {
+              <h4 
+                className="font-extrabold text-sm text-white truncate cursor-pointer hover:text-[#00FF66] transition-colors" 
+                onClick={() => {
                   setIsExpandedFullPlayer(true);
                   if (setCurrentView && currentView !== 'player') {
                     setCurrentView('player');
                   }
-                }}>
-                  {currentBeat.title}
-                </h4>
-              </div>
+                }}
+              >
+                {currentBeat.title}
+              </h4>
               <p className="text-[11px] text-zinc-400 font-mono truncate">
                 {currentBeat.bpm} BPM · {currentBeat.key}
               </p>
             </div>
           </div>
 
-          {/* Middle: Feature 13 Visual Waveform Canvas & Transport Controls */}
+          {/* Middle: Canvas Waveform & Playback Controls */}
           <div className="hidden md:flex flex-1 items-center gap-4 max-w-xl">
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={onPrev}
-                className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                className="p-2 rounded-full bg-[#111217] hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
                 title="Previous Beat"
               >
                 <SkipBack className="w-4 h-4" />
@@ -745,14 +611,14 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg cursor-pointer transition-transform hover:scale-105 shrink-0"
+                className="w-12 h-12 rounded-full bg-[#00FF66] hover:bg-[#00E676] text-black flex items-center justify-center shadow-lg cursor-pointer shrink-0 transition-transform hover:scale-105"
               >
-                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+                {isPlaying ? <Pause className="w-5 h-5 fill-current text-black" /> : <Play className="w-5 h-5 fill-current text-black ml-0.5" />}
               </button>
 
               <button
                 onClick={onNext}
-                className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                className="p-2 rounded-full bg-[#111217] hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
                 title="Next Beat"
               >
                 <SkipForward className="w-4 h-4" />
@@ -763,8 +629,8 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
               <div className="relative w-full h-8 cursor-pointer" onClick={handleSeek}>
                 <canvas ref={canvasRef} width={400} height={32} className="w-full h-full" />
               </div>
-              <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                <span>{formatTime(currentTime)}</span>
+              <div className="flex justify-between text-[10px] font-mono font-bold text-zinc-400">
+                <span className="text-[#00FF66]">{formatTime(currentTime)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
             </div>
@@ -775,21 +641,19 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
             <div className="flex md:hidden items-center gap-2 shrink-0">
               <button
                 onClick={onPrev}
-                className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
-                title="Previous Beat"
+                className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white cursor-pointer"
               >
                 <SkipBack className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="w-12 h-12 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer shrink-0"
+                className="w-11 h-11 rounded-full bg-[#00FF66] text-black flex items-center justify-center shadow-lg cursor-pointer shrink-0"
               >
-                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+                {isPlaying ? <Pause className="w-5 h-5 fill-current text-black" /> : <Play className="w-5 h-5 fill-current text-black ml-0.5" />}
               </button>
               <button
                 onClick={onNext}
-                className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
-                title="Next Beat"
+                className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white cursor-pointer"
               >
                 <SkipForward className="w-4 h-4" />
               </button>
@@ -797,25 +661,21 @@ export const WaveformPlayer: React.FC<WaveformPlayerProps> = ({
 
             <button
               onClick={() => onBuyClick(currentBeat)}
-              className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs uppercase rounded-xl shadow cursor-pointer hidden sm:flex items-center gap-1.5"
+              className="px-4 py-2.5 bg-[#00FF66] hover:bg-[#00E676] text-black font-extrabold text-xs uppercase rounded-xl shadow cursor-pointer hidden sm:flex items-center gap-1.5 transition-all"
             >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>{currencySymbol}{currentBeat.pricing?.mp3Lease?.toFixed(2) || '0.00'}</span>
+              <ShoppingBag className="w-4 h-4 text-black" />
+              <span>Buy</span>
             </button>
 
             <button
-              onClick={() => {
-                setIsExpandedFullPlayer(true);
-                if (setCurrentView && currentView !== 'player') {
-                  setCurrentView('player');
-                }
-              }}
-              className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 cursor-pointer"
-              title="Expand Full Player"
+              onClick={() => setIsExpandedFullPlayer(!isExpandedFullPlayer)}
+              className="p-2.5 rounded-xl bg-[#111217] border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors"
+              title="Expand Full Console"
             >
-              <Maximize2 className="w-5 h-5" />
+              <Maximize2 className="w-4 h-4" />
             </button>
           </div>
+
         </div>
       </div>
     </>

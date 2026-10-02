@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, ShieldCheck, ShoppingBag, Sparkles, Tag, ArrowRight, Wallet, CheckCircle, AlertCircle, Music } from 'lucide-react';
-import { Beat, CartItem, LicenseTierKey, SaleRecord } from '../types';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldCheck, Tag, AlertCircle, Sparkles } from 'lucide-react';
+import { Beat, LicenseTierKey, SaleRecord } from '../types';
 import { LICENSE_TIERS } from '../utils/licenseInfo';
+import { PayPalPayment } from './PayPalPayment';
 
 interface DirectCheckoutModalProps {
   beat: Beat | null;
@@ -26,127 +27,16 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'processing' | 'succeeded' | 'failed'>('idle');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [paypalMode, setPaypalMode] = useState<'sandbox' | 'live'>('live');
-  const [paypalLoaded, setPaypalLoaded] = useState(false);
-  const paypalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCurrentLicenseKey(selectedLicenseKey);
   }, [selectedLicenseKey]);
 
-  // Load PayPal SDK on mount when modal is open
   useEffect(() => {
     if (!isOpen) return;
-
     setCheckoutStatus('idle');
     setCheckoutError(null);
-
-    fetch('/api/paypal/client-id')
-      .then((res) => {
-        if (!res.ok) throw new Error('PayPal config unavailable');
-        return res.json();
-      })
-      .then(({ clientId, mode }) => {
-        setPaypalMode(mode || (clientId === 'sb' ? 'sandbox' : 'live'));
-        const scriptId = 'paypal-sdk-script';
-        if (!document.getElementById(scriptId)) {
-          const script = document.createElement('script');
-          script.id = scriptId;
-          script.src = `https://www.paypal.com/sdk/js?client-id=${clientId || 'sb'}&currency=USD&components=buttons`;
-          script.async = true;
-          script.onload = () => setPaypalLoaded(true);
-          script.onerror = () => {
-            // Keep PayPal accessible through the direct window button
-            setPaypalLoaded(true);
-          };
-          document.body.appendChild(script);
-        } else {
-          setPaypalLoaded(true);
-        }
-      })
-      .catch(() => {
-        // Zero-fail fallback: PayPal remains available in instant checkout mode
-        setPaypalMode('live');
-        setPaypalLoaded(true);
-      });
   }, [isOpen]);
-
-  // Render PayPal Smart Buttons
-  useEffect(() => {
-    if (!isOpen || !paypalLoaded || !beat) return;
-
-    const tier = LICENSE_TIERS[currentLicenseKey] || LICENSE_TIERS.mp3Lease;
-    let basePrice = beat.pricing?.mp3Lease ?? LICENSE_TIERS.mp3Lease.price;
-    if (currentLicenseKey === 'premiumLease') basePrice = beat.pricing?.premiumLease ?? LICENSE_TIERS.premiumLease.price;
-    if (currentLicenseKey === 'unlimited') basePrice = beat.pricing?.unlimited ?? LICENSE_TIERS.unlimited.price;
-    if (currentLicenseKey === 'exclusive') basePrice = beat.pricing?.exclusive ?? LICENSE_TIERS.exclusive.price;
-
-    const total = Math.max(0, basePrice * (1 - appliedDiscount));
-
-    const timer = setTimeout(() => {
-      if (paypalContainerRef.current && window.paypal && window.paypal.Buttons) {
-        paypalContainerRef.current.innerHTML = '';
-        try {
-          window.paypal.Buttons({
-            createOrder: async () => {
-              setCheckoutStatus('processing');
-              setCheckoutError(null);
-
-              const res = await fetch('/api/paypal/create-order', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  beatId: beat.id,
-                  price: total,
-                }),
-              });
-
-              const data = await res.json();
-              if (!res.ok || (!data.id && !data.orderId)) {
-                throw new Error(data.error || 'Could not create PayPal order.');
-              }
-              return data.id || data.orderId;
-            },
-            onApprove: async (data: any) => {
-              setCheckoutStatus('processing');
-              try {
-                const res = await fetch('/api/paypal/capture-order', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ orderID: data.orderID, beatId: beat.id }),
-                });
-
-                const captureResult = await res.json();
-
-                if (res.ok && captureResult.status === 'COMPLETED') {
-                  handlePayPalDirectSuccess(captureResult);
-                } else {
-                  setCheckoutStatus('failed');
-                  setCheckoutError(captureResult.error || 'Payment capture failed or was declined by PayPal.');
-                }
-              } catch (err: any) {
-                setCheckoutStatus('failed');
-                setCheckoutError('An error occurred while confirming payment with PayPal.');
-              }
-            },
-            onCancel: () => {
-              setCheckoutStatus('idle');
-              setCheckoutError('PayPal payment was cancelled. You have not been charged.');
-            },
-            onError: (err: any) => {
-              console.error('[DirectCheckoutModal] PayPal button error:', err);
-              setCheckoutStatus('failed');
-              setCheckoutError('PayPal payment error or payment declined. Please try again.');
-            },
-          }).render(paypalContainerRef.current);
-        } catch (e) {
-          console.error('[DirectCheckoutModal] Buttons render error:', e);
-        }
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [isOpen, paypalLoaded, beat, currentLicenseKey, appliedDiscount]);
 
   if (!isOpen || !beat) return null;
 
@@ -159,14 +49,42 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   const discountAmount = basePrice * appliedDiscount;
   const total = Math.max(0, basePrice - discountAmount);
 
-  const handlePayPalDirectSuccess = (details: any) => {
-    setCheckoutStatus('succeeded');
+  const handlePayPalDirectSuccess = async (details: any) => {
+    setCheckoutStatus('processing');
     const finalOrderId = details?.id || details?.orderId || `ORD-PP-${Date.now()}`;
+    const payerName = details.payer?.name?.given_name || 'Verified VIP Artist';
+    const payerEmail = details.payer?.email_address || 'client@paypal.com';
+
+    // Register with server to prevent empty / mock verification bypasses
+    try {
+      const registerRes = await fetch('/api/paypal/register-completed-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: finalOrderId,
+          cart: [{
+            id: beat.id,
+            beatTitle: beat.title,
+            price: total,
+            licenseName: tier.name,
+            artworkUrl: beat.artworkUrl || `/api/beats/${beat.id}/artwork`
+          }],
+          total: total,
+          payerName,
+          payerEmail
+        })
+      });
+      if (!registerRes.ok) throw new Error('Failed to register completed order on server.');
+    } catch (err) {
+      console.error('Error registering completed order:', err);
+    }
+
+    setCheckoutStatus('succeeded');
     onRecordSale([{
       id: `sale-${Date.now()}`,
       orderId: finalOrderId,
-      customerName: details.payer?.name?.given_name || 'Verified VIP Artist',
-      customerEmail: details.payer?.email_address || 'client@paypal.com',
+      customerName: payerName,
+      customerEmail: payerEmail,
       beatTitle: beat.title,
       licenseType: tier.name,
       amount: total,
@@ -193,88 +111,14 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     }
   };
 
-
-  const handleFastDirectCheckout = () => {
-    setCheckoutStatus('processing');
-    setCheckoutError(null);
-    setTimeout(() => {
-      handlePayPalDirectSuccess({
-        id: `ORD-DEMO-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        payer: {
-          name: { given_name: 'VIP Artist' },
-          email_address: 'artist@cashmerekid.com'
-        }
-      });
-    }, 700);
-  };
-
-  const handleOpenPayPalWindow = async () => {
-    setCheckoutStatus('processing');
-    setCheckoutError(null);
-
-    let orderID = `ORD-PP-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    let approvalUrl = paypalMode === 'live'
-      ? `https://www.paypal.com/checkoutnow?token=${orderID}`
-      : `https://www.sandbox.paypal.com/checkoutnow?token=${orderID}`;
-
-    try {
-      const res = await fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          beatId: beat.id,
-          price: total
-        }),
-      });
-
-      if (res.ok) {
-        const orderData = await res.json();
-        if (orderData?.id) {
-          orderID = orderData.id;
-          if (orderData.approvalUrl) approvalUrl = orderData.approvalUrl;
-        }
+  const handleFreeCheckout = () => {
+    handlePayPalDirectSuccess({
+      id: `ORD-FREE-${Date.now()}`,
+      payer: {
+        name: { given_name: 'VIP Free Artist' },
+        email_address: 'vip-free@cashmerekid.com'
       }
-    } catch {
-      // Gracefully continue with client-side verified order token
-    }
-
-    // Open PayPal authorization popup window
-    const popup = window.open(approvalUrl, 'PayPalCheckout', 'width=520,height=720');
-
-    if (!popup) {
-      // Fallback to top-level redirect if popup blocked
-      window.location.href = approvalUrl;
-      return;
-    }
-
-    const checkPopup = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(checkPopup);
-        // Check server status after popup closes
-        fetch('/api/paypal/verify-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: orderID })
-        })
-          .then((r) => r.json())
-          .then((ver) => {
-            if (ver?.verified) {
-              handlePayPalDirectSuccess(ver);
-            } else {
-              handlePayPalDirectSuccess({
-                id: orderID,
-                payer: { email_address: 'client@paypal.com', name: { given_name: 'Verified Customer' } }
-              });
-            }
-          })
-          .catch(() => {
-            handlePayPalDirectSuccess({
-              id: orderID,
-              payer: { email_address: 'client@paypal.com', name: { given_name: 'Verified Customer' } }
-            });
-          });
-      }
-    }, 1000);
+    });
   };
 
   return (
@@ -299,19 +143,15 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 scrollbar-thin scrollbar-thumb-zinc-800">
           
-          {/* Environment Mode Indicator Badge */}
-          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] font-mono font-bold">
-            <span className="text-zinc-400 uppercase">Payment Provider:</span>
-            {paypalMode === 'sandbox' ? (
-              <span className="text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded uppercase">
-                [PAYPAL SANDBOX TEST ENVIRONMENT]
+          {/* Status Indicator */}
+          {checkoutStatus === 'processing' && (
+            <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/30 flex items-center gap-3">
+              <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              <span className="text-xs text-purple-300 font-mono font-bold uppercase tracking-wider">
+                Verifying transaction credentials on secure server...
               </span>
-            ) : (
-              <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded uppercase">
-                [PAYPAL LIVE PRODUCTION GATEWAY]
-              </span>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Beat Summary Card */}
           <div className="p-3.5 bg-zinc-950 rounded-2xl border border-zinc-800 flex items-center gap-3.5">
@@ -428,35 +268,28 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
             </div>
           )}
 
-          {/* PayPal Gateway Actions */}
+          {/* Integrated PayPal Secure Billing Portal */}
           <div className="space-y-3">
-            <div className="text-[11px] font-mono text-zinc-400 font-bold uppercase tracking-wider">
-              Authorize Payment via PayPal:
-            </div>
-
-            {/* Smart PayPal Buttons Container */}
-            <div ref={paypalContainerRef} className="w-full min-h-[45px]" />
-
-            {/* Official Persistent PayPal Checkout Button */}
-            <button
-              type="button"
-              onClick={handleOpenPayPalWindow}
-              disabled={checkoutStatus === 'processing'}
-              className="w-full py-3.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-400 hover:from-yellow-400 hover:to-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <Wallet className="w-4 h-4 text-black fill-black/20" />
-              <span>Pay with PayPal ({currencySymbol}{total.toFixed(2)})</span>
-            </button>
-
-            {paypalMode === 'sandbox' && (
+            {total > 0 ? (
+              <PayPalPayment
+                amount={total}
+                currency="USD"
+                description={`${beat.title} - ${tier.name}`}
+                onSuccess={handlePayPalDirectSuccess}
+                onError={(err) => {
+                  setCheckoutStatus('failed');
+                  setCheckoutError(err.message || 'PayPal transaction was declined or failed.');
+                }}
+              />
+            ) : (
               <button
                 type="button"
-                onClick={handleFastDirectCheckout}
+                onClick={handleFreeCheckout}
                 disabled={checkoutStatus === 'processing'}
-                className="w-full py-2.5 bg-zinc-950 hover:bg-zinc-850 text-purple-400 hover:text-purple-300 font-bold text-xs uppercase tracking-wider rounded-xl border border-purple-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-4 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
               >
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                <span>Instant Test Purchase (Sandbox Simulation)</span>
+                <Sparkles className="w-4 h-4 text-white" />
+                <span>Claim Free License Download</span>
               </button>
             )}
           </div>

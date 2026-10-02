@@ -1,13 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, ShoppingBag, ShieldCheck, Sparkles, CheckCircle, Tag, ArrowRight, Wallet, ChevronDown, RotateCcw, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Trash2, ShoppingBag, ShieldCheck, Sparkles, CheckCircle, Tag, ArrowRight, AlertCircle } from 'lucide-react';
 import { Beat, CartItem, LicenseTierKey, SaleRecord } from '../types';
 import { LICENSE_TIERS } from '../utils/licenseInfo';
-
-declare global {
-  interface Window {
-    paypal?: any;
-  }
-}
+import { PayPalPayment } from './PayPalPayment';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -40,11 +35,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'processing' | 'succeeded' | 'failed'>('idle');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  // PayPal Payment Connection States
+  // PayPal Connection State
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'payment'>('cart');
-  const [paypalMode, setPaypalMode] = useState<'sandbox' | 'live'>('sandbox');
-  const [paypalLoaded, setPaypalLoaded] = useState(false);
-  const cartPaypalContainerRef = useRef<HTMLDivElement>(null);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price, 0);
   const discountAmount = subtotal * appliedDiscount;
@@ -73,114 +65,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   };
 
-  // Fetch PayPal Client Config when entering payment step
-  useEffect(() => {
-    if (!isOpen || checkoutStep !== 'payment') return;
-
-    fetch('/api/paypal/client-id')
-      .then((res) => {
-        if (!res.ok) throw new Error('PayPal config unavailable');
-        return res.json();
-      })
-      .then(({ clientId, mode }) => {
-        setPaypalMode(mode || (clientId === 'sb' ? 'sandbox' : 'live'));
-        const scriptId = 'paypal-sdk-script';
-        if (!document.getElementById(scriptId)) {
-          const script = document.createElement('script');
-          script.id = scriptId;
-          script.src = `https://www.paypal.com/sdk/js?client-id=${clientId || 'sb'}&currency=USD&components=buttons`;
-          script.async = true;
-          script.onload = () => setPaypalLoaded(true);
-          script.onerror = () => {
-            // Keep PayPal enabled through the direct window button
-            setPaypalLoaded(true);
-          };
-          document.body.appendChild(script);
-        } else {
-          setPaypalLoaded(true);
-        }
-      })
-      .catch(() => {
-        // Zero-fail fallback: PayPal remains available in instant checkout mode
-        setPaypalMode('live');
-        setPaypalLoaded(true);
-      });
-  }, [isOpen, checkoutStep]);
-
-  // Render PayPal Smart Payment Buttons
-  useEffect(() => {
-    if (!isOpen || checkoutStep !== 'payment' || !paypalLoaded || total <= 0) return;
-
-    const timer = setTimeout(() => {
-      if (cartPaypalContainerRef.current && window.paypal && window.paypal.Buttons) {
-        cartPaypalContainerRef.current.innerHTML = '';
-        try {
-          window.paypal.Buttons({
-            createOrder: async () => {
-              setCheckoutStatus('processing');
-              setCheckoutError(null);
-
-              const res = await fetch('/api/paypal/create-order', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  cart,
-                  discount: appliedDiscount,
-                  promoCode,
-                }),
-              });
-
-              const data = await res.json();
-              if (!res.ok || (!data.id && !data.orderId)) {
-                throw new Error(data.error || 'Failed to create PayPal order.');
-              }
-              return data.id || data.orderId;
-            },
-            onApprove: async (data: any) => {
-              setCheckoutStatus('processing');
-              try {
-                const captureRes = await fetch('/api/paypal/capture-order', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ orderID: data.orderID, cart }),
-                });
-
-                const captureData = await captureRes.json();
-
-                if (captureRes.ok && captureData.status === 'COMPLETED') {
-                  handlePayPalSuccess(captureData);
-                } else {
-                  setCheckoutStatus('failed');
-                  setCheckoutError(captureData.error || 'Payment capture failed or was declined by PayPal.');
-                }
-              } catch (err: any) {
-                setCheckoutStatus('failed');
-                setCheckoutError('An error occurred while confirming payment with PayPal.');
-              }
-            },
-            onCancel: () => {
-              setCheckoutStatus('idle');
-              setCheckoutError('PayPal payment was cancelled. You have not been charged.');
-            },
-            onError: (err: any) => {
-              console.error('[CartDrawer] PayPal button error:', err);
-              setCheckoutStatus('failed');
-              setCheckoutError('PayPal transaction error or payment declined. Please try again.');
-            },
-          }).render(cartPaypalContainerRef.current);
-        } catch (e) {
-          console.error('[CartDrawer] Buttons render error:', e);
-        }
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [isOpen, checkoutStep, paypalLoaded, total, cart, appliedDiscount, promoCode]);
-
-  const handlePayPalSuccess = (details: any) => {
+  const handlePayPalSuccess = async (details: any) => {
+    setCheckoutStatus('processing');
     const generatedId = details.id || details.orderId || `CK-${Math.floor(10000 + Math.random() * 90000)}`;
     const payerName = details.payer?.name?.given_name || 'VIP Artist';
     const payerEmail = details.payer?.email_address || 'client@paypal.com';
+
+    // Register verified transaction with server
+    try {
+      const registerRes = await fetch('/api/paypal/register-completed-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: generatedId,
+          cart: cart.map(item => ({
+            id: item.beatId,
+            beatTitle: item.beatTitle,
+            price: item.price * (1 - appliedDiscount),
+            licenseName: item.licenseName,
+            artworkUrl: item.artworkUrl
+          })),
+          total: total,
+          payerName,
+          payerEmail
+        })
+      });
+      if (!registerRes.ok) throw new Error('Failed to register completed order on server.');
+    } catch (err) {
+      console.error('Error registering completed order:', err);
+    }
 
     // Record verified sales into state
     const newRecords: SaleRecord[] = cart.map((item) => ({
@@ -201,86 +114,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsCheckoutCompleted(true);
   };
 
-  const handleSimulateSandboxCheckout = () => {
-    setCheckoutStatus('processing');
-    setCheckoutError(null);
-    setTimeout(() => {
-      handlePayPalSuccess({
-        id: `ORD-DEMO-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-        payer: {
-          name: { given_name: 'Demo VIP Artist' },
-          email_address: 'demo-buyer@cashmerekid.com'
-        }
-      });
-    }, 1000);
-  };
-
-  const handleOpenPayPalWindow = async () => {
-    setCheckoutStatus('processing');
-    setCheckoutError(null);
-
-    let generatedOrderId = `ORD-PP-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    let approvalUrl = paypalMode === 'live'
-      ? `https://www.paypal.com/checkoutnow?token=${generatedOrderId}`
-      : `https://www.sandbox.paypal.com/checkoutnow?token=${generatedOrderId}`;
-
-    try {
-      const res = await fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cart,
-          discount: appliedDiscount,
-          promoCode,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.id || data?.orderId) {
-          generatedOrderId = data.id || data.orderId;
-          if (data.approvalUrl) approvalUrl = data.approvalUrl;
-        }
+  const handleFreeCheckout = () => {
+    handlePayPalSuccess({
+      id: `ORD-FREE-${Date.now()}`,
+      payer: {
+        name: { given_name: 'VIP Free Artist' },
+        email_address: 'vip-free@cashmerekid.com'
       }
-    } catch {
-      // Continue with verified client token
-    }
-
-    // Open official PayPal checkout window
-    const popup = window.open(approvalUrl, 'PayPalCheckout', 'width=520,height=720');
-
-    if (!popup) {
-      window.location.href = approvalUrl;
-      return;
-    }
-
-    const checkPopup = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(checkPopup);
-        fetch('/api/paypal/verify-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: generatedOrderId })
-        })
-          .then((r) => r.json())
-          .then((ver) => {
-            if (ver?.verified) {
-              handlePayPalSuccess(ver);
-            } else {
-              handlePayPalSuccess({
-                id: generatedOrderId,
-                payer: { name: { given_name: 'Verified Customer' }, email_address: 'client@paypal.com' }
-              });
-            }
-          })
-          .catch(() => {
-            handlePayPalSuccess({
-              id: generatedOrderId,
-              payer: { name: { given_name: 'Verified Customer' }, email_address: 'client@paypal.com' }
-            });
-          });
-      }
-    }, 1000);
+    });
   };
 
   // Helper to change license tier directly inside cart
@@ -491,20 +332,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </button>
                     </div>
 
-                    {/* Environment Indicator Badge */}
-                    <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-mono font-bold">
-                      <span className="text-zinc-400 uppercase">Environment:</span>
-                      {paypalMode === 'sandbox' ? (
-                        <span className="text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded uppercase">
-                          [PAYPAL SANDBOX TEST MODE]
-                        </span>
-                      ) : (
-                        <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded uppercase">
-                          [PAYPAL LIVE PRODUCTION GATEWAY]
-                        </span>
-                      )}
-                    </div>
-
                     {/* Error Banner */}
                     {checkoutError && (
                       <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl text-xs text-red-300 flex items-start gap-2">
@@ -513,35 +340,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
                     )}
 
-                    {/* PayPal Commerce Gateway */}
-                    <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-zinc-200">Pay with PayPal</span>
-                        <Wallet className="w-4 h-4 text-yellow-500 fill-yellow-500/20" />
-                      </div>
-                      <p className="text-[11px] text-zinc-400 leading-relaxed font-medium">
-                        Clicking below opens the official PayPal authorization window for real payment confirmation.
-                      </p>
-
-                      {/* Rendered PayPal Smart Buttons Container */}
-                      <div ref={cartPaypalContainerRef} className="w-full min-h-[45px]" />
-
-                      <button
-                        onClick={handleOpenPayPalWindow}
-                        className="w-full py-3.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-400 hover:from-yellow-400 hover:to-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <span>Open PayPal Checkout Window ({currencySymbol}{total.toFixed(2)})</span>
-                      </button>
-
-                      {paypalMode === 'sandbox' && (
+                    {/* Integrated PayPal Secure Billing Portal */}
+                    <div className="space-y-3">
+                      {total > 0 ? (
+                        <PayPalPayment
+                          amount={total}
+                          currency="USD"
+                          description={`License Bundle - ${cart.length} Beats`}
+                          onSuccess={handlePayPalSuccess}
+                          onError={(err) => {
+                            setCheckoutStatus('failed');
+                            setCheckoutError(err.message || 'PayPal transaction was declined or failed.');
+                          }}
+                        />
+                      ) : (
                         <button
                           type="button"
-                          onClick={handleSimulateSandboxCheckout}
-                          disabled={checkoutStatus !== 'idle'}
-                          className="w-full py-3 bg-zinc-950 hover:bg-zinc-900 text-purple-400 hover:text-purple-300 font-extrabold text-xs uppercase tracking-widest rounded-xl border border-purple-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                          onClick={handleFreeCheckout}
+                          className="w-full py-4 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all"
                         >
-                          <Sparkles className="w-4 h-4 text-purple-400" />
-                          <span>Direct Sandbox Fast Checkout (Simulate Purchase)</span>
+                          <Sparkles className="w-4 h-4 text-white" />
+                          <span>Claim Free License Download</span>
                         </button>
                       )}
                     </div>
