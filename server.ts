@@ -81,8 +81,9 @@ interface ServerOrder {
 
 const serverOrdersStore = new Map<string, ServerOrder>();
 
+export const app = express();
+
 async function startServer() {
-  const app = express();
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
@@ -2537,10 +2538,14 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     });
   }
 
-  const port = parseInt(process.env.PORT || '3000', 10);
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`Server listening on http://0.0.0.0:${port}`);
-  });
+  if (!process.env.VERCEL) {
+    const port = parseInt(process.env.PORT || '3000', 10);
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`Server listening on http://0.0.0.0:${port}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
