@@ -208,14 +208,16 @@ export default function App() {
           setBeats(validBeats);
           if (validBeats.length > 0) {
             setCurrentBeat((prev) => {
+              console.log('[AudioStateTrace] setCurrentBeat called from fetch(/api/beats) callback:', { prevId: prev?.id });
               if (!prev || prev.id === 'beat-as_aud_1790611860448') return validBeats[0];
               const match = validBeats.find((b: Beat) => b.id === prev.id);
-              return match || validBeats[0];
+              // Preserve currently selected/playing beat and avoid resetting to validBeats[0]
+              return match || prev;
             });
           }
         }
       })
-      .catch(() => {});
+      .catch((err) => console.warn('[App] Fetch beats notice:', err));
   }, []);
 
   useEffect(() => {
@@ -337,9 +339,12 @@ export default function App() {
       setActiveBeatPack(null);
     }
     if (currentBeat?.id === beat.id) {
+      console.log('[AudioStateTrace] setIsPlaying called from handlePlayToggle (same track toggle):', !isPlaying);
       setIsPlaying(!isPlaying);
     } else {
+      console.log('[AudioStateTrace] setCurrentBeat called from handlePlayToggle (track switch):', beat.id, beat.title);
       setCurrentBeat(beat);
+      console.log('[AudioStateTrace] setIsPlaying(true) called from handlePlayToggle');
       setIsPlaying(true);
       // Log real audience play event
       logAudienceEvent({
@@ -421,7 +426,9 @@ export default function App() {
       ? 0 
       : (currentIndex - 1 + listToNavigate.length) % listToNavigate.length;
       
+    console.log('[AudioStateTrace] handlePrevBeat: switching track to index', prevIndex, listToNavigate[prevIndex]?.title);
     setCurrentBeat(listToNavigate[prevIndex]);
+    console.log('[AudioStateTrace] setIsPlaying(true) called from handlePrevBeat');
     setIsPlaying(true);
   };
 
@@ -446,7 +453,9 @@ export default function App() {
       ? 0 
       : (currentIndex + 1) % listToNavigate.length;
       
+    console.log('[AudioStateTrace] handleNextBeat: switching track to index', nextIndex, listToNavigate[nextIndex]?.title);
     setCurrentBeat(listToNavigate[nextIndex]);
+    console.log('[AudioStateTrace] setIsPlaying(true) called from handleNextBeat');
     setIsPlaying(true);
   };
 

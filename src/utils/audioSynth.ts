@@ -116,11 +116,14 @@ class RealAudioPlayerEngine {
       this.audio.volume = this.volume;
 
       this.audio.addEventListener('loadstart', () => {
-        console.log('[RealAudioEngine Diagnostic] loadstart:', {
+        console.log('[RealAudioEngine Diagnostic] 1. loadstart event:', {
           audioSrc: this.audio?.src,
           currentAudioUrl: this.currentAudioUrl,
+          audioPaused: this.audio?.paused,
           readyState: this.getMediaReadyStateText(this.audio?.readyState),
           networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
         });
         this.notifyStateChange('loading');
       });
@@ -128,8 +131,10 @@ class RealAudioPlayerEngine {
       this.audio.addEventListener('canplay', () => {
         console.log('[RealAudioEngine Diagnostic] canplay event:', {
           audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
           readyState: this.getMediaReadyStateText(this.audio?.readyState),
           networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+          currentTime: this.audio?.currentTime,
           duration: this.audio?.duration,
         });
         if (this.currentState === 'loading') {
@@ -142,7 +147,9 @@ class RealAudioPlayerEngine {
           const dur = this.audio.duration || 0;
           console.log('[RealAudioEngine Diagnostic] loadedmetadata event:', {
             audioSrc: this.audio.src,
+            audioPaused: this.audio.paused,
             duration: dur,
+            currentTime: this.audio.currentTime,
             readyState: this.getMediaReadyStateText(this.audio.readyState),
             networkState: this.getMediaNetworkStateText(this.audio.networkState),
           });
@@ -153,42 +160,109 @@ class RealAudioPlayerEngine {
         }
       });
 
-      this.audio.addEventListener('timeupdate', () => {
-        if (this.audio) {
-          const cur = this.audio.currentTime;
-          const dur = this.audio.duration || 0;
-          this.notifyTimeUpdate(cur, dur);
-        }
-      });
-
-      this.audio.addEventListener('playing', () => {
-        console.log('[RealAudioEngine Diagnostic] playing event:', {
+      this.audio.addEventListener('play', () => {
+        console.log('[RealAudioEngine Diagnostic] play event:', {
           audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
           currentTime: this.audio?.currentTime,
           duration: this.audio?.duration,
           readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
+      });
+
+      this.audio.addEventListener('playing', () => {
+        console.log('[RealAudioEngine Diagnostic] 4. playing event:', {
+          audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
         });
         this.isPlaying = true;
         this.notifyStateChange('playing');
       });
 
-      this.audio.addEventListener('pause', () => {
-        this.isPlaying = false;
-        if (this.currentState !== 'unavailable' && this.currentState !== 'error') {
-          this.notifyStateChange('paused');
+      let lastLoggedSec = -1;
+      this.audio.addEventListener('timeupdate', () => {
+        if (this.audio) {
+          const cur = this.audio.currentTime;
+          const dur = this.audio.duration || 0;
+          const curSecFloor = Math.floor(cur);
+          if (curSecFloor !== lastLoggedSec) {
+            lastLoggedSec = curSecFloor;
+            console.log('[RealAudioEngine Diagnostic] 5. timeupdate event (second tick):', {
+              currentTime: cur,
+              duration: dur,
+              audioSrc: this.audio.src,
+              audioPaused: this.audio.paused,
+              readyState: this.getMediaReadyStateText(this.audio.readyState),
+              networkState: this.getMediaNetworkStateText(this.audio.networkState),
+            });
+          }
+          this.notifyTimeUpdate(cur, dur);
         }
       });
 
       this.audio.addEventListener('waiting', () => {
-        console.log('[RealAudioEngine Diagnostic] waiting/buffering:', {
+        console.log('[RealAudioEngine Diagnostic] 6. waiting event (buffering):', {
           audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
           readyState: this.getMediaReadyStateText(this.audio?.readyState),
           networkState: this.getMediaNetworkStateText(this.audio?.networkState),
         });
         this.notifyStateChange('buffering');
       });
 
+      this.audio.addEventListener('stalled', () => {
+        console.warn('[RealAudioEngine Diagnostic] 7. stalled event:', {
+          audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
+      });
+
+      this.audio.addEventListener('suspend', () => {
+        console.log('[RealAudioEngine Diagnostic] 8. suspend event:', {
+          audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
+      });
+
+      this.audio.addEventListener('pause', () => {
+        console.log('[RealAudioEngine Diagnostic] 9. pause event:', {
+          audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
+        this.isPlaying = false;
+        if (this.currentState !== 'unavailable' && this.currentState !== 'error') {
+          this.notifyStateChange('paused');
+        }
+      });
+
       this.audio.addEventListener('ended', () => {
+        console.log('[RealAudioEngine Diagnostic] 10. ended event:', {
+          audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
+          readyState: this.getMediaReadyStateText(this.audio?.readyState),
+          networkState: this.getMediaNetworkStateText(this.audio?.networkState),
+        });
         this.isPlaying = false;
         this.notifyStateChange('finished');
         this.notifyEnd();
@@ -197,10 +271,13 @@ class RealAudioPlayerEngine {
       this.audio.addEventListener('error', (e) => {
         this.isPlaying = false;
         const mediaErr = this.audio?.error;
-        console.error('[RealAudioEngine Diagnostic] HTMLAudioElement error event:', {
+        console.error('[RealAudioEngine Diagnostic] 11. error event:', {
           errorCode: mediaErr?.code,
           errorMessage: mediaErr?.message,
           audioSrc: this.audio?.src,
+          audioPaused: this.audio?.paused,
+          currentTime: this.audio?.currentTime,
+          duration: this.audio?.duration,
           currentAudioUrl: this.currentAudioUrl,
           readyState: this.getMediaReadyStateText(this.audio?.readyState),
           networkState: this.getMediaNetworkStateText(this.audio?.networkState),
@@ -258,73 +335,106 @@ class RealAudioPlayerEngine {
 
     const audioUrl = rawAudioUrl || (beatId ? `/api/beats/${beatId}/audio` : '');
 
+    // Normalize URLs to pathname to prevent relative vs absolute mismatch reload loops
+    let currentPath = '';
+    let targetPath = '';
+    try {
+      currentPath = audio.src ? new URL(audio.src, window.location.origin).pathname : '';
+      targetPath = audioUrl ? new URL(audioUrl, window.location.origin).pathname : '';
+    } catch {
+      currentPath = audio.src || '';
+      targetPath = audioUrl || '';
+    }
+
     console.log('[RealAudioEngine Diagnostic] playBeat invoked:', {
       beatId,
       rawAudioUrl,
       resolvedAudioUrl: audioUrl,
       currentAudioUrl: this.currentAudioUrl,
-      currentSrc: audio.src,
-      audioPaused: audio.paused,
-      audioReadyState: this.getMediaReadyStateText(audio.readyState),
-      audioNetworkState: this.getMediaNetworkStateText(audio.networkState),
+      '1. audio.src': audio.src,
+      '2. audio.paused before play()': audio.paused,
+      '14. audio.readyState': this.getMediaReadyStateText(audio.readyState),
+      '15. audio.networkState': this.getMediaNetworkStateText(audio.networkState),
+      '16. audio.currentTime': audio.currentTime,
+      '17. audio.duration': audio.duration,
     });
 
     if (!audioUrl) {
+      console.warn('[AudioStateTrace] playBeat: audioUrl is empty, marking unavailable');
       this.isPlaying = false;
       this.notifyError('Audio file unavailable', 'FILE_NOT_FOUND');
       this.notifyStateChange('unavailable');
       return;
     }
 
-    const isSameTrack = (this.currentBeatId === beatId) && (this.currentAudioUrl === audioUrl) && !audio.error;
+    const isSameTrack = (this.currentBeatId === beatId) && (currentPath === targetPath) && !audio.error;
 
     this.currentBeatId = beatId;
     this.currentAudioUrl = audioUrl;
 
     if (!isSameTrack) {
+      console.log('[AudioStateTrace] audio.pause() called from playBeat (track switch):', {
+        previousBeatId: this.currentBeatId,
+        newBeatId: beatId,
+        previousSrc: audio.src,
+        newSrc: audioUrl,
+      });
       audio.pause();
       this.notifyStateChange('loading');
+
+      console.log('[AudioStateTrace] audio.src = … assigned in playBeat:', audioUrl);
       audio.src = audioUrl;
+
+      console.log('[AudioStateTrace] audio.load() called in playBeat');
       audio.load();
     } else if (audio.paused) {
+      console.log('[AudioStateTrace] playBeat: Resuming same track (audio was paused)');
       this.notifyStateChange('loading');
+    } else {
+      console.log('[AudioStateTrace] playBeat: Track already playing and active, preserving stream');
     }
 
     audio.volume = this.volume;
     audio.playbackRate = Math.max(0.5, Math.min(2.0, this.tempoMultiplier * Math.pow(2, this.pitchShiftSemitones / 12)));
 
     console.log('[RealAudioEngine Diagnostic] calling audio.play():', {
-      audioSrc: audio.src,
-      readyState: this.getMediaReadyStateText(audio.readyState),
-      networkState: this.getMediaNetworkStateText(audio.networkState),
+      '1. audio.src': audio.src,
+      '2. audio.paused before play()': audio.paused,
+      '14. audio.readyState': this.getMediaReadyStateText(audio.readyState),
+      '15. audio.networkState': this.getMediaNetworkStateText(audio.networkState),
+      '16. audio.currentTime': audio.currentTime,
+      '17. audio.duration': audio.duration,
     });
 
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
-          console.log('[RealAudioEngine Diagnostic] audio.play() Promise RESOLVED (success):', {
-            audioSrc: audio.src,
-            currentTime: audio.currentTime,
-            duration: audio.duration,
-            readyState: this.getMediaReadyStateText(audio.readyState),
-            networkState: this.getMediaNetworkStateText(audio.networkState),
+          console.log('[RealAudioEngine Diagnostic] 3. audio.play() promise RESOLVED (success):', {
+            '1. audio.src': audio.src,
+            '2. audio.paused': audio.paused,
+            '14. audio.readyState': this.getMediaReadyStateText(audio.readyState),
+            '15. audio.networkState': this.getMediaNetworkStateText(audio.networkState),
+            '16. audio.currentTime': audio.currentTime,
+            '17. audio.duration': audio.duration,
           });
           this.isPlaying = true;
           this.lastDiagnosticCode = null;
           this.notifyStateChange('playing');
         })
         .catch((err: Error) => {
-          console.error('[RealAudioEngine Diagnostic] audio.play() Promise REJECTED (failure):', {
+          console.error('[RealAudioEngine Diagnostic] 3. audio.play() promise REJECTED (failure):', {
             errorName: err.name,
             errorMessage: err.message,
-            audioSrc: audio.src,
+            '1. audio.src': audio.src,
             audioError: audio.error ? { code: audio.error.code, message: audio.error.message } : null,
-            readyState: this.getMediaReadyStateText(audio.readyState),
-            networkState: this.getMediaNetworkStateText(audio.networkState),
+            '14. audio.readyState': this.getMediaReadyStateText(audio.readyState),
+            '15. audio.networkState': this.getMediaNetworkStateText(audio.networkState),
+            '16. audio.currentTime': audio.currentTime,
+            '17. audio.duration': audio.duration,
           });
           if (err.name === 'AbortError') {
-            // User rapidly switched track or interrupted load
+            console.warn('[AudioStateTrace] playPromise AbortError: play request was superseded by another operation');
             return;
           }
           this.isPlaying = false;
@@ -338,7 +448,13 @@ class RealAudioPlayerEngine {
     }
   }
 
-  public pauseBeat() {
+  public pauseBeat(caller: string = 'unknown') {
+    console.log(`[AudioStateTrace] audio.pause() called from pauseBeat (caller: ${caller})`, {
+      audioSrc: this.audio?.src,
+      audioPaused: this.audio?.paused,
+      currentTime: this.audio?.currentTime,
+      duration: this.audio?.duration,
+    });
     if (this.audio) {
       this.audio.pause();
     }
@@ -346,7 +462,11 @@ class RealAudioPlayerEngine {
     this.notifyStateChange('paused');
   }
 
-  public resumeBeat() {
+  public resumeBeat(caller: string = 'unknown') {
+    console.log(`[AudioStateTrace] resumeBeat called (caller: ${caller})`, {
+      audioSrc: this.audio?.src,
+      audioPaused: this.audio?.paused,
+    });
     if (this.audio && this.currentAudioUrl) {
       this.audio.volume = this.volume;
       this.audio.play().then(() => {
@@ -367,7 +487,8 @@ class RealAudioPlayerEngine {
     }
   }
 
-  public stopBeat() {
+  public stopBeat(caller: string = 'unknown') {
+    console.log(`[AudioStateTrace] audio.pause() called from stopBeat (caller: ${caller})`);
     if (this.audio) {
       this.audio.pause();
       this.audio.currentTime = 0;

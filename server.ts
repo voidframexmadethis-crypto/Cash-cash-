@@ -800,15 +800,26 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
     const range = req.headers.range;
 
     if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+      let start: number;
+      let end: number;
 
-      if (start >= totalSize) {
+      const rawRange = range.replace(/bytes=/, "").trim();
+      if (rawRange.startsWith("-")) {
+        const suffixLength = parseInt(rawRange.substring(1), 10);
+        start = Math.max(0, totalSize - (isNaN(suffixLength) ? 0 : suffixLength));
+        end = totalSize - 1;
+      } else {
+        const parts = rawRange.split("-");
+        start = parseInt(parts[0], 10);
+        end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+      }
+
+      if (isNaN(start) || isNaN(end) || start > end || start >= totalSize) {
         res.status(416).send(`Requested range not satisfiable\n${start} >= ${totalSize}`);
         return;
       }
 
+      end = Math.min(end, totalSize - 1);
       const chunksize = (end - start) + 1;
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${totalSize}`,
@@ -921,15 +932,27 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
       const downloadName = preferredFileName || (beatId ? `${beatId}${ext}` : path.basename(candidatePath));
 
       if (range) {
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        let start: number;
+        let end: number;
 
-        if (start >= fileSize) {
+        const rawRange = range.replace(/bytes=/, "").trim();
+        if (rawRange.startsWith("-")) {
+          // Suffix byte range: bytes=-N (e.g. bytes=-1631 -> last 1631 bytes for moov atom)
+          const suffixLength = parseInt(rawRange.substring(1), 10);
+          start = Math.max(0, fileSize - (isNaN(suffixLength) ? 0 : suffixLength));
+          end = fileSize - 1;
+        } else {
+          const parts = rawRange.split("-");
+          start = parseInt(parts[0], 10);
+          end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        }
+
+        if (isNaN(start) || isNaN(end) || start > end || start >= fileSize) {
           res.status(416).send(`Requested range not satisfiable\n${start} >= ${fileSize}`);
           return;
         }
 
+        end = Math.min(end, fileSize - 1);
         const chunksize = (end - start) + 1;
         const fileStream = fs.createReadStream(candidatePath, { start, end });
         const headers: Record<string, string | number> = {
@@ -944,6 +967,10 @@ Provide a concise, professional, engaging paragraph (max 3 sentences) highlighti
           headers['Content-Disposition'] = `attachment; filename="${downloadName}"`;
         }
         res.writeHead(206, headers);
+        fileStream.on('error', (streamErr) => {
+          console.error('[AudioStream] File read error:', streamErr);
+          if (!res.headersSent) res.status(500).end();
+        });
         fileStream.pipe(res);
       } else {
         const headers: Record<string, string | number> = {
